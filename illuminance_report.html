@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>💡 조도 보고서 결재 v0.1.1</title>
+<title>💡 조도 보고서 결재 v0.1.2</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root {
@@ -187,7 +187,7 @@
 <div class="hdr">
   <h1>💡 조도 보고서 결재</h1>
   <p>조도 측정 월별 결재 시스템 · 4단계 (작성·검토·확인·승인)</p>
-  <div class="v">v0.1.1 · 본인 Supabase 연결</div>
+  <div class="v">v0.1.2 · 본인 Supabase 연결</div>
   <div id="hdrUserBadge" class="user-badge" style="display:none">👤 -</div>
 </div>
 
@@ -1092,22 +1092,21 @@ function initYearSelects(){
 function loadAllSettings(){
   const c = getCfg();
 
-  // 1순위: 조도 입력 페이지와 PIN 캐시 공유 (같은 도메인 GitHub Pages)
-  if(!c.my_pin){
-    try{
-      const pinAuth = JSON.parse(localStorage.getItem('ILLUM_PIN_AUTH')||'null');
-      if(pinAuth && pinAuth.exp > Date.now() && pinAuth.name && pinAuth.pin_plain){
-        c.my_pin  = pinAuth.pin_plain;
-        c.my_name = pinAuth.name;
-        saveCfg(c);
-      }
-    }catch(e){}
-  }
+  // ILLUM_PIN_AUTH가 유효하면 항상 최우선 업데이트
+  // (다른 사람이 PIN 로그인했을 경우에도 즉시 반영)
+  try{
+    const pinAuth = JSON.parse(localStorage.getItem('ILLUM_PIN_AUTH')||'null');
+    if(pinAuth && pinAuth.exp > Date.now() && pinAuth.name && pinAuth.pin_plain){
+      c.my_pin  = pinAuth.pin_plain;
+      c.my_name = pinAuth.name;
+      saveCfg(c);
+    }
+  }catch(e){}
 
   document.getElementById('cfgMyPin').value = c.my_pin||'';
   document.getElementById('cfgMyName').value = c.my_name||'';
 
-  // 2순위: ESG 메인페이지 PIN 자동 인식 (같은 도메인 회사 ESG 환경)
+  // ILLUM_PIN_AUTH도 없고 저장된 PIN도 없을 때만 ESG 세션 확인
   if(!c.my_pin){
     try{
       const sess = JSON.parse(sessionStorage.getItem('ESG_USER')||'null');
