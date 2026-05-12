@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>💡 조도 측정 체크시트 v0.2.1</title>
+  <title>💡 조도 측정 체크시트 v0.3</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     :root{
@@ -145,6 +145,39 @@
     .pin-k.fn{background:transparent;border:none;font-size:18px;color:var(--text2)}
     .pin-extra{margin-top:24px;color:var(--text2);font-size:11px;text-decoration:underline;background:none;border:none;cursor:pointer;font-family:inherit}
     .pin-extra:hover{color:var(--accent)}
+
+    /* ===== 측정값 입력 키패드 ===== */
+    .lux-kp-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:900;display:none;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(3px)}
+    .lux-kp-ov.on{display:flex}
+    .lux-kp-box{width:100%;max-width:520px;background:var(--surface);border-radius:18px 18px 0 0;padding:14px 14px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 32px rgba(0,0,0,.5);animation:slideUp .2s ease-out}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .lux-kp-info{text-align:center;padding:2px 0 4px}
+    .lux-kp-info .a{display:inline-block;background:rgba(251,191,36,.14);color:#fcd34d;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700}
+    .lux-kp-info .n{font-size:18px;font-weight:800;color:var(--text);margin:4px 0 2px;line-height:1.2}
+    .lux-kp-info .s{font-size:11px;color:#7dd3fc;font-weight:600}
+    .lux-kp-info .s .cur{margin-left:8px;color:var(--text3)}
+    .lux-kp-disp{background:var(--bg);border:2px solid var(--accent);border-radius:10px;padding:14px 18px;display:flex;align-items:baseline;justify-content:flex-end;gap:8px;min-height:60px}
+    .lux-kp-disp.ok-pre{border-color:var(--ok)}
+    .lux-kp-disp.ng-pre{border-color:var(--ng)}
+    .lux-kp-disp .v{font-size:34px;font-weight:800;color:var(--accent);font-family:'Consolas','Monaco',monospace;letter-spacing:1px}
+    .lux-kp-disp.ok-pre .v{color:var(--ok)}
+    .lux-kp-disp.ng-pre .v{color:var(--ng)}
+    .lux-kp-disp .u{font-size:13px;color:var(--text2);font-weight:700}
+    .lux-kp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .lux-kp-b{height:58px;background:var(--surface2);border:none;border-radius:10px;color:var(--text);font-size:24px;font-weight:600;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:background .1s,transform .05s}
+    .lux-kp-b:active{background:var(--border);transform:scale(.95)}
+    .lux-kp-b.fn{font-size:18px;color:var(--text2)}
+    .lux-kp-b.clr{color:#fca5a5}
+    .lux-kp-act{display:grid;grid-template-columns:1fr 2fr;gap:6px;margin-top:4px}
+    .lux-kp-ok{height:54px;background:linear-gradient(135deg,#16a34a,#22c55e);border:none;border-radius:10px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;letter-spacing:.3px}
+    .lux-kp-ok:active{transform:scale(.97)}
+    .lux-kp-ok:disabled{opacity:.5;background:var(--surface2);color:var(--text3)}
+    .lux-kp-cn{height:54px;background:transparent;border:1.5px solid var(--border);border-radius:10px;color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent}
+    .point-item.kp-active{outline:2px solid var(--accent);outline-offset:2px}
+
+    /* lux-input을 readonly로 만들면서 클릭 가능하게 */
+    .lux-input{cursor:pointer;caret-color:transparent}
+    .lux-input:focus{outline:none}
   </style>
 </head>
 <body>
@@ -162,12 +195,48 @@
   <button type="button" class="pin-extra" onclick="pinManualOverride()">✏ PIN 없이 이름 직접 입력 (긴급)</button>
 </div>
 
+<!-- 측정값 입력 키패드 -->
+<div class="lux-kp-ov" id="luxKp">
+  <div class="lux-kp-box">
+    <div class="lux-kp-info">
+      <span class="a" id="kpArea"></span>
+      <div class="n" id="kpName"></div>
+      <div class="s">
+        <span id="kpStd"></span>
+        <span class="cur" id="kpProgress"></span>
+      </div>
+    </div>
+    <div class="lux-kp-disp" id="kpDisp">
+      <span class="v" id="kpValue">0</span>
+      <span class="u">lux</span>
+    </div>
+    <div class="lux-kp-grid">
+      <button type="button" class="lux-kp-b" onclick="kpPress('1')">1</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('2')">2</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('3')">3</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('4')">4</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('5')">5</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('6')">6</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('7')">7</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('8')">8</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('9')">9</button>
+      <button type="button" class="lux-kp-b" onclick="kpPress('0')">0</button>
+      <button type="button" class="lux-kp-b fn" onclick="kpBack()">⌫</button>
+      <button type="button" class="lux-kp-b fn clr" onclick="kpClear()">CLR</button>
+    </div>
+    <div class="lux-kp-act">
+      <button type="button" class="lux-kp-cn" onclick="kpCancel()">취소</button>
+      <button type="button" class="lux-kp-ok" id="kpOkBtn" onclick="kpOk()">✓ 확인 (다음 →)</button>
+    </div>
+  </div>
+</div>
+
 <div class="hdr">
   <h1>💡 조도 측정 체크시트</h1>
   <p>측정점 자동 순회 · 기준값 자동 판정
     <span id="hdrUserBadge" style="display:none;background:rgba(74,222,128,.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px"></span>
   </p>
-  <div class="v">v0.2.1</div>
+  <div class="v">v0.3</div>
 </div>
 
 <div class="tabs">
@@ -713,10 +782,10 @@ function renderPointInputs(){
         </div>
       </div>
       <div class="lux-input-wrap">
-        <input type="number" class="lux-input" id="lux_${p.id}"
-               step="1" min="0" inputmode="numeric"
+        <input type="text" class="lux-input" id="lux_${p.id}"
+               readonly
                placeholder="-"
-               oninput="onLuxInput(${p.id})">
+               onclick="openLuxKp(${p.id})">
         <span class="lux-unit">lux</span>
       </div>
       <span class="result-badge empty" id="rb_${p.id}">—</span>
@@ -748,6 +817,108 @@ function onLuxInput(pointId){
     badge.textContent = 'NG';
   }
   updateProgress();
+}
+
+/* ===== 측정값 키패드 ===== */
+let _kpPointId = null;
+let _kpBuf = '';
+let _kpStd = 0;
+
+function openLuxKp(pointId){
+  _kpPointId = pointId;
+  const active = _masterCache.filter(p=>p.is_active);
+  const p = active.find(x=>x.id===pointId);
+  if(!p) return;
+
+  // 기존 입력값이 있으면 불러옴
+  const inp = document.getElementById(`lux_${pointId}`);
+  _kpBuf = inp.value ? String(inp.value) : '';
+  _kpStd = p.standard_lux;
+
+  // 정보 채우기
+  document.getElementById('kpArea').textContent = p.area;
+  document.getElementById('kpName').textContent = p.point_name;
+  document.getElementById('kpStd').textContent = `기준 ${p.standard_lux} lux`;
+  // 진행률
+  const idx = active.findIndex(x=>x.id===pointId);
+  document.getElementById('kpProgress').textContent = `· ${idx+1} / ${active.length}`;
+
+  // 현재 측정점 행을 화면 중앙으로 스크롤 (배경에서 보이도록)
+  const item = document.getElementById(`pi_${pointId}`);
+  document.querySelectorAll('.point-item.kp-active').forEach(el=>el.classList.remove('kp-active'));
+  if(item){
+    item.classList.add('kp-active');
+    setTimeout(()=>item.scrollIntoView({behavior:'smooth', block:'center'}), 50);
+  }
+
+  updateKpDisplay();
+  document.getElementById('luxKp').classList.add('on');
+}
+
+function updateKpDisplay(){
+  const v = _kpBuf === '' ? '0' : _kpBuf;
+  document.getElementById('kpValue').textContent = v;
+  const disp = document.getElementById('kpDisp');
+  disp.classList.remove('ok-pre','ng-pre');
+  if(_kpBuf !== ''){
+    const n = parseFloat(_kpBuf);
+    if(!isNaN(n)){
+      disp.classList.add(n >= _kpStd ? 'ok-pre' : 'ng-pre');
+    }
+  }
+}
+
+function kpPress(d){
+  if(_kpBuf.length >= 6) return;
+  if(_kpBuf === '0') _kpBuf = '';
+  _kpBuf += d;
+  updateKpDisplay();
+}
+function kpBack(){
+  _kpBuf = _kpBuf.slice(0,-1);
+  updateKpDisplay();
+}
+function kpClear(){
+  _kpBuf = '';
+  updateKpDisplay();
+}
+
+function kpOk(){
+  if(_kpPointId == null) return;
+  // 값 저장
+  const inp = document.getElementById(`lux_${_kpPointId}`);
+  if(inp){
+    inp.value = _kpBuf;
+    onLuxInput(_kpPointId);
+  }
+  // 다음 측정점으로 자동 이동
+  const active = _masterCache.filter(p=>p.is_active);
+  const idx = active.findIndex(p=>p.id===_kpPointId);
+  if(idx >= 0 && idx < active.length - 1){
+    const nextId = active[idx+1].id;
+    closeLuxKp(false); // 활성 표시는 다음 openLuxKp에서 갱신
+    setTimeout(()=>openLuxKp(nextId), 150);
+  } else {
+    // 마지막 측정점
+    closeLuxKp(true);
+    setTimeout(()=>{
+      const btn = document.getElementById('submitBtn');
+      if(btn) btn.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 200);
+  }
+}
+
+function kpCancel(){
+  closeLuxKp(true);
+}
+
+function closeLuxKp(clearHighlight){
+  document.getElementById('luxKp').classList.remove('on');
+  if(clearHighlight){
+    document.querySelectorAll('.point-item.kp-active').forEach(el=>el.classList.remove('kp-active'));
+  }
+  _kpPointId = null;
+  _kpBuf = '';
 }
 
 function updateProgress(){
@@ -841,7 +1012,7 @@ function resetForm(){
       inp.value = '';
       const item = document.getElementById(`pi_${p.id}`);
       const badge = document.getElementById(`rb_${p.id}`);
-      item.classList.remove('is-ok','is-ng');
+      item.classList.remove('is-ok','is-ng','kp-active');
       badge.classList.remove('ok','ng');
       badge.classList.add('empty');
       badge.textContent = '—';
