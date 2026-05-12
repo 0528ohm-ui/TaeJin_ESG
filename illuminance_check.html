@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>💡 조도 측정 체크시트 v0.3</title>
+  <title>💡 조도 측정 체크시트 v0.3.1</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     :root{
@@ -147,9 +147,9 @@
     .pin-extra:hover{color:var(--accent)}
 
     /* ===== 측정값 입력 키패드 ===== */
-    .lux-kp-ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:900;display:none;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(3px)}
+    .lux-kp-ov{position:fixed;inset:0;z-index:900;display:none;align-items:flex-end;justify-content:center;padding:0;pointer-events:none}
     .lux-kp-ov.on{display:flex}
-    .lux-kp-box{width:100%;max-width:520px;background:var(--surface);border-radius:18px 18px 0 0;padding:14px 14px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 32px rgba(0,0,0,.5);animation:slideUp .2s ease-out}
+    .lux-kp-box{width:100%;max-width:520px;background:var(--surface);border-radius:18px 18px 0 0;padding:14px 14px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 32px rgba(0,0,0,.5);animation:slideUp .2s ease-out;pointer-events:auto;border-top:2px solid var(--accent)}
     @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
     .lux-kp-info{text-align:center;padding:2px 0 4px}
     .lux-kp-info .a{display:inline-block;background:rgba(251,191,36,.14);color:#fcd34d;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700}
@@ -236,7 +236,7 @@
   <p>측정점 자동 순회 · 기준값 자동 판정
     <span id="hdrUserBadge" style="display:none;background:rgba(74,222,128,.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-left:6px"></span>
   </p>
-  <div class="v">v0.3</div>
+  <div class="v">v0.3.1</div>
 </div>
 
 <div class="tabs">
@@ -843,16 +843,28 @@ function openLuxKp(pointId){
   const idx = active.findIndex(x=>x.id===pointId);
   document.getElementById('kpProgress').textContent = `· ${idx+1} / ${active.length}`;
 
-  // 현재 측정점 행을 화면 중앙으로 스크롤 (배경에서 보이도록)
+  // 현재 측정점 행을 키패드 위쪽 영역의 중앙으로 스크롤
   const item = document.getElementById(`pi_${pointId}`);
   document.querySelectorAll('.point-item.kp-active').forEach(el=>el.classList.remove('kp-active'));
   if(item){
     item.classList.add('kp-active');
-    setTimeout(()=>item.scrollIntoView({behavior:'smooth', block:'center'}), 50);
+    // 키패드를 먼저 표시해야 높이 측정 가능
+    document.getElementById('luxKp').classList.add('on');
+    setTimeout(()=>{
+      const kpBox = document.querySelector('.lux-kp-box');
+      const kpH = kpBox ? kpBox.offsetHeight : Math.min(window.innerHeight*0.7, 560);
+      const visibleH = window.innerHeight - kpH;  // 키패드 위 보이는 영역 높이
+      const rect = item.getBoundingClientRect();
+      const itemAbsTop = rect.top + window.scrollY;
+      // 측정점 행이 보이는 영역의 중앙(살짝 위쪽)에 오도록
+      const targetY = itemAbsTop - (visibleH/2) + (rect.height/2);
+      window.scrollTo({top: Math.max(0, targetY), behavior: 'smooth'});
+    }, 60);
+  } else {
+    document.getElementById('luxKp').classList.add('on');
   }
 
   updateKpDisplay();
-  document.getElementById('luxKp').classList.add('on');
 }
 
 function updateKpDisplay(){
