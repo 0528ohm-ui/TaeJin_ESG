@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>💡 조도 보고서 결재 v0.1.2</title>
+<title>💡 조도 보고서 결재 v0.2</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root {
@@ -186,8 +186,8 @@
 
 <div class="hdr">
   <h1>💡 조도 보고서 결재</h1>
-  <p>조도 측정 월별 결재 시스템 · 4단계 (작성·검토·확인·승인)</p>
-  <div class="v">v0.1.2 · 본인 Supabase 연결</div>
+  <p>조도 측정 연간 결재 시스템 · 4단계 (작성·검토·확인·승인)</p>
+  <div class="v">v0.2 · 본인 Supabase 연결</div>
   <div id="hdrUserBadge" class="user-badge" style="display:none">👤 -</div>
 </div>
 
@@ -233,29 +233,24 @@
 <div class="form-wrap">
 
   <div class="card">
-    <div class="card-title">✏ 새 월보고서 작성</div>
+    <div class="card-title">✏ 새 연간보고서 작성</div>
     <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.6">
-      점검표를 선택하고 년/월을 정하면 해당 점검 데이터가 자동 집계됩니다.<br>
+      점검표를 선택하고 연도를 정하면 해당 연도의 점검 데이터가 자동 집계됩니다.<br>
+      <span style="color:var(--accent)">데이터가 추가될 때마다 보고서를 다시 열면 최신 통계로 갱신됩니다.</span><br>
       결재선은 <b style="color:var(--accent)">⚙ 설정</b> 탭에서 점검표별로 미리 등록한 4명이 자동 적용됩니다.
     </div>
 
     <label class="lbl">📋 점검표 선택</label>
     <div class="tpl-grid" id="tplGrid"></div>
 
-    <div style="margin-top:14px" class="fg-row">
+    <div style="margin-top:14px">
       <div class="fg">
-        <label class="lbl">년</label>
+        <label class="lbl">연도</label>
         <select id="newYear"></select>
       </div>
-      <div class="fg">
-        <label class="lbl">월</label>
-        <select id="newMonth">
-          <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
-          <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
-          <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
-          <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
-        </select>
-      </div>
+      <select id="newMonth" style="display:none">
+        <option value="12" selected>12</option>
+      </select>
     </div>
 
     <button class="btn btn-pri btn-block" onclick="createOrOpenReport()">📂 보고서 생성/열기</button>
@@ -308,14 +303,10 @@
         <label class="lbl">연도</label>
         <select id="searchYear"></select>
       </div>
-      <div class="fg">
+      <div class="fg" style="display:none">
         <label class="lbl">월</label>
         <select id="searchMonth">
-          <option value="">전체</option>
-          <option value="1">1월</option><option value="2">2월</option><option value="3">3월</option>
-          <option value="4">4월</option><option value="5">5월</option><option value="6">6월</option>
-          <option value="7">7월</option><option value="8">8월</option><option value="9">9월</option>
-          <option value="10">10월</option><option value="11">11월</option><option value="12">12월</option>
+          <option value="" selected>전체</option>
         </select>
       </div>
     </div>
@@ -1086,7 +1077,7 @@ function initYearSelects(){
     el.innerHTML = opts.join('');
     el.value = y;
   });
-  document.getElementById('newMonth').value = new Date().getMonth()+1;
+  document.getElementById('newMonth').value = 12;  // 연간 보고서: 항상 12월(연말 기준)로 고정
 }
 
 function loadAllSettings(){
@@ -1486,7 +1477,7 @@ function renderInbox(rows){
         <span class="badge ${STATUS_BADGE_CLS[r.status]}">${STATUS_NAMES[r.status]}</span>
       </div>
       <div class="inbox-meta">
-        <span><span class="tpl-tag">${r.target_year}.${String(r.target_month).padStart(2,'0')}</span></span>
+        <span><span class="tpl-tag">${r.target_year}년</span></span>
         <span>요청자: <b>${r.step1_name||'-'}</b></span>
         <span>현재: <b style="color:var(--accent)">${STEP_NAMES[r.current_step]}</b></span>
         <span class="ng">NG <b>${r.ng_count||0}</b>건</span>
@@ -1514,7 +1505,7 @@ function renderMyUploads(rows){
       : '';
     return `<div class="inbox-item" onclick="openReport(${r.id})">
       <div class="inbox-hdr">
-        <div class="inbox-title" style="font-size:13px">${ico} ${r.template_name||r.template_code} · ${r.target_year}.${String(r.target_month).padStart(2,'0')}</div>
+        <div class="inbox-title" style="font-size:13px">${ico} ${r.template_name||r.template_code} · ${r.target_year}년</div>
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
           <span class="badge ${STATUS_BADGE_CLS[r.status]}">${STATUS_NAMES[r.status]}</span>
           ${delBtn}
@@ -1597,7 +1588,7 @@ async function loadDraftList(){
         : '';
       return `<div class="inbox-item" onclick="openReport(${r.id})">
         <div class="inbox-hdr">
-          <div class="inbox-title">${ico} ${r.template_name||r.template_code} · ${r.target_year}.${String(r.target_month).padStart(2,'0')}</div>
+          <div class="inbox-title">${ico} ${r.template_name||r.template_code} · ${r.target_year}년</div>
           <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
             <span class="badge ${STATUS_BADGE_CLS[r.status]}">${STATUS_NAMES[r.status]}</span>
             ${delBtn}
@@ -1666,40 +1657,20 @@ async function openReport(id){
   }catch(e){ alert('열기 실패: '+e.message); }
 }
 
-// 점검 원본 데이터 로딩 (RPC 우선, 실패 시 직접 테이블 조회)
+// 점검 원본 데이터 로딩 (연간 - 직접 테이블 조회)
 async function loadCheckData(report, tpl){
-  const y = report.target_year, m = report.target_month;
-  const d1 = `${y}-${String(m).padStart(2,'0')}-01`;
-  const nm = m==12 ? 1 : m+1, ny = m==12 ? y+1 : y;
-  const d2 = `${ny}-${String(nm).padStart(2,'0')}-01`;
+  const y = report.target_year;
+  const d1 = `${y}-01-01`;
+  const d2 = `${y+1}-01-01`;
 
-  // 1차: RPC 시도
-  try{
-    const rows = await sbRpc('get_monthly_check_data',{
-      p_template_code: report.template_code,
-      p_year: y, p_month: m
-    });
-    if(Array.isArray(rows) && rows.length>0){
-      // 호기 정보가 비어있으면 raw_row에서 자동 탐지
-      const fixed = rows.map(r => ({...r, machine: pickMachine(r.machine, r.raw_row)}));
-      const okMachineCount = fixed.filter(r => r.machine && r.machine !== '-').length;
-      console.log(`[loadCheckData] RPC 성공: ${rows.length}건 (호기 식별: ${okMachineCount}건)`);
-      return fixed;
-    }
-    console.warn('[loadCheckData] RPC 빈 결과 → 직접 SELECT 폴백');
-  }catch(e){
-    console.warn('[loadCheckData] RPC 실패 → 폴백:', e.message);
-  }
-
-  // 2차: 폴백 - 원본 테이블 직접 조회
+  // 연간 보고서이므로 월별 RPC 대신 직접 조회
   const srcTable = tpl.source_table || 'p_machine_check';
   const dateCol  = tpl.date_col || 'check_date';
   try{
     const rows = await sbSelect(srcTable,
-      `select=*&${dateCol}=gte.${d1}&${dateCol}=lt.${d2}&order=${dateCol}.asc&limit=5000`);
-    if(!Array.isArray(rows)){ console.warn('[loadCheckData] 폴백 응답 비배열'); return []; }
-    console.log('[loadCheckData] 폴백 성공:', rows.length+'건');
-    // RPC 결과와 동일 형태로 변환 + 호기/결과 자동 탐지
+      `select=*&${dateCol}=gte.${d1}&${dateCol}=lt.${d2}&order=${dateCol}.asc&limit=10000`);
+    if(!Array.isArray(rows)){ console.warn('[loadCheckData] 응답 비배열'); return []; }
+    console.log('[loadCheckData] 연간 조회 성공:', rows.length+'건 ('+y+'년)');
     return rows.map(r=>({
       check_date: r[dateCol],
       machine:    pickMachine(r[tpl.machine_col || 'machine'], r),
@@ -1710,7 +1681,7 @@ async function loadCheckData(report, tpl){
       raw_row:    r
     }));
   }catch(e){
-    console.error('[loadCheckData] 폴백도 실패:', e.message);
+    console.error('[loadCheckData] 조회 실패:', e.message);
     return [];
   }
 }
@@ -1763,10 +1734,23 @@ function renderPaperReport(){
   const myPin = getMyPin();
   const tpl = currentTemplate||{};
 
-  // 매트릭스
-  const daysInMonth = new Date(r.target_year, r.target_month, 0).getDate();
-  const machineSet = new Set(currentChecks.map(c=>c.machine).filter(Boolean));
-  const machines = Array.from(machineSet).sort((a,b)=>{
+  // ===== 연간 통계 클라이언트 계산 (실시간) =====
+  const uniqueMonths = new Set(
+    currentChecks.map(c => String(c.check_date||'').substring(0,7)).filter(s=>s.length===7)
+  ).size;
+  const machineSet0 = new Set(currentChecks.map(c=>c.machine).filter(Boolean));
+  const totalMachinesY = machineSet0.size;
+  const totalPerformedY = currentChecks.length;
+  const okCountY = currentChecks.filter(c => (c.result||'').toUpperCase() === 'OK').length;
+  const ngCountY = currentChecks.filter(c => (c.result||'').toUpperCase() === 'NG').length;
+  const ngRateY = totalPerformedY > 0 ? (ngCountY / totalPerformedY * 100) : 0;
+  const okRate = totalPerformedY > 0 ? (okCountY / totalPerformedY * 100).toFixed(1) : '0.0';
+  const avgChecks = (totalMachinesY > 0 && uniqueMonths > 0)
+    ? (totalPerformedY / (totalMachinesY * uniqueMonths)).toFixed(2)
+    : '-';
+
+  // ===== 매트릭스: 12개월 =====
+  const machines = Array.from(machineSet0).sort((a,b)=>{
     const na = parseInt((String(a).match(/\d+/)||[0])[0]);
     const nb = parseInt((String(b).match(/\d+/)||[0])[0]);
     return na-nb;
@@ -1775,34 +1759,33 @@ function renderPaperReport(){
   currentChecks.forEach(c=>{
     const ds = c.check_date||'';
     const dStr = (typeof ds==='string') ? ds : (ds.toISOString?ds.toISOString():String(ds));
-    const d = parseInt((dStr||'').substring(8,10));
-    if(!c.machine || !d) return;
+    const mo = parseInt((dStr||'').substring(5,7));  // YYYY-MM-DD → MM
+    if(!c.machine || !mo) return;
     if(!map[c.machine]) map[c.machine]={};
-    if(c.result==='NG' || !map[c.machine][d]) map[c.machine][d] = c.result;
+    if(c.result==='NG' || !map[c.machine][mo]) map[c.machine][mo] = c.result;
   });
 
-  let mtxHead = '<tr><th>호기/설비</th>';
-  for(let d=1; d<=daysInMonth; d++) mtxHead += `<th>${d}</th>`;
+  let mtxHead = '<tr><th>측정 구분</th>';
+  for(let mo=1; mo<=12; mo++) mtxHead += `<th>${mo}월</th>`;
   mtxHead += '<th style="background:#15803d">OK</th><th style="background:#b91c1c">NG</th></tr>';
 
   let mtxBody = '';
   if(machines.length===0){
-    // 진단 메시지: 데이터가 0건인지 / 데이터는 있는데 machine 컬럼이 비었는지 구분
     const totalRows = currentChecks.length;
     const noMachine = currentChecks.filter(c=>!c.machine || c.machine==='-').length;
-    let diag = '해당 월 점검 데이터가 없습니다';
+    let diag = '해당 연도 점검 데이터가 없습니다';
     if(totalRows>0){
-      diag = `점검 데이터는 ${totalRows}건 있지만 호기(설비) 정보가 없어 매트릭스에 표시할 수 없습니다.<br>
+      diag = `점검 데이터는 ${totalRows}건 있지만 측정 구분 정보가 없어 매트릭스에 표시할 수 없습니다.<br>
         <span style="font-size:10px">(machine 컬럼 누락: ${noMachine}/${totalRows})<br>
-        ⚙ 설정 탭에서 점검표의 'machine_col' 설정을 확인하거나 원본 테이블에 호기 데이터가 있는지 확인하세요.</span>`;
+        ⚙ 설정 탭에서 점검표의 'machine_col' 설정을 확인하거나 원본 테이블에 구분 데이터가 있는지 확인하세요.</span>`;
     }
-    mtxBody = `<tr><td colspan="${daysInMonth+3}" style="padding:18px;color:#94a3b8;text-align:center;line-height:1.6">${diag}</td></tr>`;
+    mtxBody = `<tr><td colspan="15" style="padding:18px;color:#94a3b8;text-align:center;line-height:1.6">${diag}</td></tr>`;
   }else{
-    machines.forEach(m=>{
-      let row = `<tr><td class="mc">${m}</td>`;
+    machines.forEach(mch=>{
+      let row = `<tr><td class="mc">${mch}</td>`;
       let ok=0, ng=0;
-      for(let d=1; d<=daysInMonth; d++){
-        const v = (map[m]||{})[d];
+      for(let mo=1; mo<=12; mo++){
+        const v = (map[mch]||{})[mo];
         if(v==='OK'){ row+='<td class="ok">●</td>'; ok++; }
         else if(v==='NG'){ row+='<td class="ng">✕</td>'; ng++; }
         else row+='<td class="na">-</td>';
@@ -1837,7 +1820,7 @@ function renderPaperReport(){
       </tr>`;
     });
     ngHtml = `<table class="ng-tbl">
-      <thead><tr><th style="width:90px">일자</th><th style="width:120px">호기/설비</th><th style="width:80px">점검자</th><th>NG 항목</th><th style="width:200px">비고</th></tr></thead>
+      <thead><tr><th style="width:90px">일자</th><th style="width:120px">측정 구분</th><th style="width:80px">점검자</th><th>NG 항목</th><th style="width:200px">비고</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;
   }
@@ -1845,7 +1828,7 @@ function renderPaperReport(){
   // 종합의견 / 개선조치
   const editable = (r.status === 'DRAFT' || r.status === 'REJECTED');
   const commentHtml = editable
-    ? `<textarea id="paperSummary" class="paper-comment editable" style="width:100%;font-family:inherit" rows="3" placeholder="이번 달 점검 종합 의견">${r.summary_comment||''}</textarea>`
+    ? `<textarea id="paperSummary" class="paper-comment editable" style="width:100%;font-family:inherit" rows="3" placeholder="연간 점검 종합 의견">${r.summary_comment||''}</textarea>`
     : `<div class="paper-comment">${(r.summary_comment||'(작성 없음)').replace(/\n/g,'<br>')}</div>`;
   const improveHtml = editable
     ? `<textarea id="paperImprove" class="paper-comment editable" style="width:100%;font-family:inherit" rows="3" placeholder="개선조치 사항">${r.improvement_action||''}</textarea>`
@@ -1864,7 +1847,6 @@ function renderPaperReport(){
     </div>`;
   }
 
-  const okRate = r.total_performed>0 ? ((r.ok_count*100/r.total_performed).toFixed(1)) : '0.0';
   const ico = TPL_ICONS[r.template_code]||'📋';
   const sourceUrl = (tpl && tpl.source_url) ? tpl.source_url : '';
 
@@ -1879,14 +1861,14 @@ function renderPaperReport(){
 
   const html = `
     <div class="paper-wrap" id="paperContent">
-      <div class="paper-title">${ico} ${r.template_name || r.template_code} 월간 결과 보고서${sourceBtn}</div>
-      <div class="paper-sub">${r.target_year}년 ${r.target_month}월</div>
+      <div class="paper-title">${ico} ${r.template_name || r.template_code} 연간 결과 보고서${sourceBtn}</div>
+      <div class="paper-sub">${r.target_year}년</div>
       ${rejectedHtml}
 
       <div class="paper-info">
         <div class="l">보고서 번호</div><div class="v">PMR-${String(r.id).padStart(5,'0')}</div>
         <div class="l">점검표 코드</div><div class="v">${r.template_code}</div>
-        <div class="l">대상기간</div><div class="v">${r.target_year}.${String(r.target_month).padStart(2,'0')}.01 ~ ${String(daysInMonth).padStart(2,'0')}</div>
+        <div class="l">대상기간</div><div class="v">${r.target_year}.01.01 ~ ${r.target_year}.12.31</div>
         <div class="l">작성일자</div><div class="v">${(r.created_at||'').substring(0,10)}</div>
         <div class="l">작성자</div><div class="v">${r.step1_name||'(미사인)'}</div>
         <div class="l">진행상태</div><div class="v">${STATUS_NAMES[r.status]||r.status}</div>
@@ -1894,21 +1876,21 @@ function renderPaperReport(){
         <div class="l">다음 결재자</div><div class="v">${r.next_approver_name||'-'}</div>
       </div>
 
-      <div class="paper-section-title">1. 월간 점검 통계</div>
+      <div class="paper-section-title">1. 연간 점검 통계</div>
       <div class="paper-kpi">
-        <div class="l">대상 설비</div><div class="l">점검 일수</div><div class="l">총 점검</div><div class="l">정상</div>
-        <div class="v">${r.total_machines||0}대</div>
-        <div class="v">${r.total_workdays||0}일</div>
-        <div class="v">${r.total_performed||0}건</div>
-        <div class="v ok">${r.ok_count||0}건</div>
+        <div class="l">대상 구분</div><div class="l">점검 월수</div><div class="l">총 점검</div><div class="l">정상</div>
+        <div class="v">${totalMachinesY}건</div>
+        <div class="v">${uniqueMonths}개월</div>
+        <div class="v">${totalPerformedY}건</div>
+        <div class="v ok">${okCountY}건</div>
         <div class="l">NG 건수</div><div class="l">NG율</div><div class="l">양호율</div><div class="l">평균 점검</div>
-        <div class="v ng">${r.ng_count||0}건</div>
-        <div class="v ng">${(r.ng_rate||0).toFixed(1)}%</div>
+        <div class="v ng">${ngCountY}건</div>
+        <div class="v ng">${ngRateY.toFixed(1)}%</div>
         <div class="v ok">${okRate}%</div>
-        <div class="v">${(r.total_machines>0&&r.total_workdays>0)?(r.total_performed/(r.total_machines*r.total_workdays)).toFixed(2):'-'}</div>
+        <div class="v">${avgChecks}</div>
       </div>
 
-      <div class="paper-section-title">2. 호기별·일자별 점검 매트릭스</div>
+      <div class="paper-section-title">2. 구분별·월별 점검 매트릭스</div>
       <div style="font-size:10px;color:#475569;margin-bottom:4px">
         <span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:2px">●</span> 정상
         &nbsp;&nbsp;<span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:2px">✕</span> NG
@@ -1924,7 +1906,7 @@ function renderPaperReport(){
       <div class="paper-section-title">3. NG 발생 상세 (${ngList.length}건)</div>
       ${ngHtml}
 
-      <div class="paper-section-title">4. 월간 종합 의견</div>
+      <div class="paper-section-title">4. 연간 종합 의견</div>
       ${commentHtml}
 
       <div class="paper-section-title">5. 개선조치 사항</div>
@@ -2217,7 +2199,7 @@ async function downloadPDF(){
         if(remaining > 0) pdf.addPage();
       }
     }
-    pdf.save(`보고서_${currentReport.template_code}_${currentReport.target_year}-${String(currentReport.target_month).padStart(2,'0')}.pdf`);
+    pdf.save(`보고서_${currentReport.template_code}_${currentReport.target_year}.pdf`);
   }catch(e){ alert('PDF 생성 실패: '+e.message); console.error(e); }
 }
 
@@ -2264,7 +2246,7 @@ function renderSearchResults(rows){
       .filter(Boolean).join(' › ');
     return `<div class="inbox-item" onclick="openReport(${r.id})">
       <div class="inbox-hdr">
-        <div class="inbox-title">${ico} ${r.template_name||r.template_code} · ${r.target_year}.${String(r.target_month).padStart(2,'0')}</div>
+        <div class="inbox-title">${ico} ${r.template_name||r.template_code} · ${r.target_year}년</div>
         <span class="badge ${STATUS_BADGE_CLS[r.status]}">${STATUS_NAMES[r.status]}</span>
       </div>
       <div class="inbox-meta">
