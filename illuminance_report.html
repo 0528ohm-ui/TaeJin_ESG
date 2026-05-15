@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>💡 조도 보고서 결재 v0.2</title>
+<title>💡 조도 보고서 결재 v0.2.1</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root {
@@ -187,7 +187,7 @@
 <div class="hdr">
   <h1>💡 조도 보고서 결재</h1>
   <p>조도 측정 연간 결재 시스템 · 4단계 (작성·검토·확인·승인)</p>
-  <div class="v">v0.2 · 본인 Supabase 연결</div>
+  <div class="v">v0.2.1 · 본인 Supabase 연결</div>
   <div id="hdrUserBadge" class="user-badge" style="display:none">👤 -</div>
 </div>
 
@@ -983,6 +983,16 @@ function saveDbCfg(o){
 function getSbUrl(){ return DEFAULT_SB_URL; }
 function getSbKey(){ return DEFAULT_SB_KEY; }
 function getMyPin(){ return getCfg().my_pin || ''; }
+
+// 보고서 삭제 권한: 작성자(step1_pin) 또는 최종 승인자(routeCache의 step4_pin)
+function canDeleteReport(r){
+  const myPin = getMyPin();
+  if(!myPin) return false;
+  if(r.step1_pin && r.step1_pin === myPin) return true;             // 작성자 본인
+  const route = (routeCache||[]).find(x => x.template_code === r.template_code);
+  if(route && route.step4_pin && route.step4_pin === myPin) return true;  // 최종 승인자
+  return false;
+}
 function getMyName(){ return getCfg().my_name || ''; }
 function isCfg(){ return true; }  // 항상 연결됨 (하드코딩)
 function isUsingDefault(){ return true; }
@@ -1495,11 +1505,11 @@ function renderMyUploads(rows){
   wrap.innerHTML = rows.map(r=>{
     const ico = TPL_ICONS[r.template_code]||'📋';
     const stepLabel = r.status==='COMPLETED'?'완료':r.status==='REJECTED'?'반려':`${STEP_NAMES[r.current_step]} 결재중`;
-    // 삭제 가능: DRAFT(작성중), REJECTED(반려) 만 - 결재 진행중/완료는 보존
-    const canDelete = (r.status==='DRAFT' || r.status==='REJECTED');
+    // 삭제 가능: 작성자(step1_pin) 또는 최종 승인자(step4_pin)일 때만 - 모든 상태
+    const canDelete = canDeleteReport(r);
     const safeName = (r.template_name||r.template_code).replace(/'/g,"\\'").replace(/"/g,'&quot;');
     const delBtn = canDelete
-      ? `<button onclick="event.stopPropagation();deleteMyUpload(${r.id},'${safeName}',${r.target_year},${r.target_month})"
+      ? `<button onclick="event.stopPropagation();deleteMyUpload(${r.id},'${safeName}',${r.target_year})"
                  style="background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3);padding:4px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px"
                  title="보고서 삭제">🗑 삭제</button>`
       : '';
@@ -1519,28 +1529,23 @@ function renderMyUploads(rows){
   }).join('');
 }
 
-// 내가 작성한 보고서 삭제 (DRAFT/REJECTED만 가능) - 삭제 후 결재함 새로고침
-async function deleteMyUpload(id, name, y, m){
+// 내가 작성한 보고서 삭제 - 작성자 또는 최종 승인자만, 모든 상태 가능
+async function deleteMyUpload(id, name, y){
   if(!isCfg()){ alert('Supabase 미설정'); return; }
+  // 권한 재확인 (DB 최신 상태로)
+  const cur = await sbSelect('p_monthly_report', `select=*&id=eq.${id}`);
+  if(!cur || !cur.length){ alert('이미 삭제되었거나 없습니다'); await loadInbox(); return; }
+  if(!canDeleteReport(cur[0])){ alert('삭제 권한이 없습니다 (작성자 또는 최종 승인자만 가능)'); return; }
   // 1차 확인
-  if(!confirm(`아래 보고서를 삭제하시겠습니까?\n\n${name} · ${y}.${String(m).padStart(2,'0')}\n\n⚠ 결재 이력도 함께 삭제됩니다\n복구할 수 없습니다.`)) return;
-  // 2차 확인 (안전장치)
-  const confirmText = `${y}.${m}`;
-  const userInput = prompt(`정말 삭제하려면 다음을 그대로 입력하세요:\n\n${confirmText}`);
-  if(userInput !== confirmText){
-    alert('확인 문자열이 다릅니다. 삭제 취소.');
+  if(!confirm(`아래 보고서를 삭제하시겠습니까?\n\n${name} · ${y}년\n\n⚠ 결재 이력도 함께 삭제됩니다\n복구할 수 없습니다.`)) return;
+  // 2차 확인: 연도 직접 입력
+  const userInput = prompt(`정말 삭제하려면 보고서의 연도(${y})를 입력하세요:`);
+  if(userInput !== String(y)){
+    alert('연도가 일치하지 않습니다. 삭제 취소.');
     return;
   }
   try{
-    // 상태 재확인 (그 사이 결재 진행되었을 수도)
-    const cur = await sbSelect('p_monthly_report', `select=status&id=eq.${id}`);
-    if(!cur || !cur.length){ alert('이미 삭제되었거나 없습니다'); await loadInbox(); return; }
-    if(cur[0].status !== 'DRAFT' && cur[0].status !== 'REJECTED'){
-      alert(`상태가 변경되어 삭제할 수 없습니다 (현재: ${STATUS_NAMES[cur[0].status]||cur[0].status})`);
-      await loadInbox();
-      return;
-    }
-    // 결재 로그 먼저 삭제 (cascade가 있긴 하지만 명시적으로)
+    // 결재 로그 먼저 삭제
     await sbReq('DELETE', `p_monthly_approval_log?report_id=eq.${id}`);
     // 보고서 삭제
     await sbReq('DELETE', `p_monthly_report?id=eq.${id}`);
@@ -1578,11 +1583,11 @@ async function loadDraftList(){
     document.getElementById('draftList').innerHTML = rows.map(r=>{
       const ico = TPL_ICONS[r.template_code]||'📋';
       const stepLabel = r.status==='REJECTED'?'반려됨':r.status==='DRAFT'?'작성중':`${STEP_NAMES[r.current_step]} 결재중`;
-      // 삭제 가능: DRAFT(작성중), REJECTED(반려) 만 - 결재 진행중/완료는 보존
-      const canDelete = (r.status==='DRAFT' || r.status==='REJECTED');
+      // 삭제 가능: 작성자(step1_pin) 또는 최종 승인자(step4_pin)일 때만 - 모든 상태
+      const canDelete = canDeleteReport(r);
       const safeName = (r.template_name||r.template_code).replace(/'/g,"\\'").replace(/"/g,'&quot;');
       const delBtn = canDelete
-        ? `<button onclick="event.stopPropagation();deleteReport(${r.id},'${safeName}',${r.target_year},${r.target_month})"
+        ? `<button onclick="event.stopPropagation();deleteReport(${r.id},'${safeName}',${r.target_year})"
                    style="background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3);padding:4px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px"
                    title="보고서 삭제">🗑 삭제</button>`
         : '';
@@ -1606,28 +1611,23 @@ async function loadDraftList(){
   }
 }
 
-// 보고서 삭제 (DRAFT/REJECTED만 가능)
-async function deleteReport(id, name, y, m){
+// 보고서 삭제 - 작성자 또는 최종 승인자만, 모든 상태 가능
+async function deleteReport(id, name, y){
   if(!isCfg()){ alert('Supabase 미설정'); return; }
+  // 권한 재확인 (DB 최신 상태로)
+  const cur = await sbSelect('p_monthly_report', `select=*&id=eq.${id}`);
+  if(!cur || !cur.length){ alert('이미 삭제되었거나 없습니다'); await loadDraftList(); return; }
+  if(!canDeleteReport(cur[0])){ alert('삭제 권한이 없습니다 (작성자 또는 최종 승인자만 가능)'); return; }
   // 1차 확인
-  if(!confirm(`아래 보고서를 삭제하시겠습니까?\n\n${name} · ${y}.${String(m).padStart(2,'0')}\n\n⚠ 결재 이력도 함께 삭제됩니다\n복구할 수 없습니다.`)) return;
-  // 2차 확인 (안전장치)
-  const confirmText = `${y}.${m}`;
-  const userInput = prompt(`정말 삭제하려면 다음을 그대로 입력하세요:\n\n${confirmText}`);
-  if(userInput !== confirmText){
-    alert('확인 문자열이 다릅니다. 삭제 취소.');
+  if(!confirm(`아래 보고서를 삭제하시겠습니까?\n\n${name} · ${y}년\n\n⚠ 결재 이력도 함께 삭제됩니다\n복구할 수 없습니다.`)) return;
+  // 2차 확인: 연도 직접 입력
+  const userInput = prompt(`정말 삭제하려면 보고서의 연도(${y})를 입력하세요:`);
+  if(userInput !== String(y)){
+    alert('연도가 일치하지 않습니다. 삭제 취소.');
     return;
   }
   try{
-    // 상태 재확인 (그 사이 결재 진행되었을 수도)
-    const cur = await sbSelect('p_monthly_report', `select=status&id=eq.${id}`);
-    if(!cur || !cur.length){ alert('이미 삭제되었거나 없습니다'); await loadDraftList(); return; }
-    if(cur[0].status !== 'DRAFT' && cur[0].status !== 'REJECTED'){
-      alert(`상태가 변경되어 삭제할 수 없습니다 (현재: ${STATUS_NAMES[cur[0].status]||cur[0].status})`);
-      await loadDraftList();
-      return;
-    }
-    // 결재 로그 먼저 삭제 (cascade가 있긴 하지만 명시적으로)
+    // 결재 로그 먼저 삭제
     await sbReq('DELETE', `p_monthly_approval_log?report_id=eq.${id}`);
     // 보고서 삭제
     await sbReq('DELETE', `p_monthly_report?id=eq.${id}`);
