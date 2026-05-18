@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>측정실 환경 모니터링</title>
+
+  <!-- 폰트: 산업 계측기 톤 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+  <!-- 차트 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg:         #0f1419;
+      --panel:      #1a2028;
+      --panel-2:    #232b36;
+      --border:     #2a3340;
+      --text:       #e2e8f0;
+      --text-dim:   #94a3b8;
+      --text-faint: #64748b;
+      --temp:       #f59e0b;   /* 호박색 */
+      --temp-glow:  rgba(245, 158, 11, 0.15);
+      --humi:       #06b6d4;   /* 시안 */
+      --humi-glow:  rgba(6, 182, 212, 0.15);
+      --green:      #22c55e;
+      --red:        #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans KR', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      /* 미세한 그리드 배경 */
+      background-image:
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    .container { max-width: 800px; margin: 0 auto; }
+
+    /* 헤더 */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 12px 4px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .title {
+      font-size: 1.05rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+    .title-sub {
+      display: block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-faint);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .version {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-faint);
+    }
+
+    /* 상태 표시 */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .dot.stale { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-time { margin-left: auto; }
+
+    /* 카드 */
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+    }
+    .card.temp::before { background: var(--temp); box-shadow: 0 0 12px var(--temp-glow); }
+    .card.humi::before { background: var(--humi); box-shadow: 0 0 12px var(--humi-glow); }
+
+    .card-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .card-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 2.4rem;
+      line-height: 1;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .card.temp .card-value { color: var(--temp); }
+    .card.humi .card-value { color: var(--humi); }
+    .card-unit {
+      font-size: 0.9rem;
+      font-weight: 400;
+      color: var(--text-faint);
+    }
+    .card-meta {
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-faint);
+    }
+
+    /* 차트 패널 */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+    }
+    .panel-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+    .panel-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-faint);
+    }
+    .chart-wrap {
+      position: relative;
+      height: 280px;
+    }
+
+    /* 통계 미니 */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-faint);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    @media (max-width: 380px) {
+      .card-value { font-size: 2rem; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <div>
+        <span class="title-sub">QC · 측정실</span>
+        <span class="title">환경 모니터링</span>
+      </div>
+      <span class="version">v0.1</span>
+    </header>
+
+    <!-- 상태 표시줄 -->
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">연결 대기...</span>
+      <span class="status-time" id="statusTime">--:--</span>
+    </div>
+
+    <!-- 현재값 카드 -->
+    <div class="cards">
+      <div class="card temp">
+        <div class="card-label">TEMP / 온도</div>
+        <div class="card-value">
+          <span id="curTemp">--</span><span class="card-unit">°C</span>
+        </div>
+        <div class="card-meta" id="tempMeta">--</div>
+      </div>
+      <div class="card humi">
+        <div class="card-label">HUMIDITY / 습도</div>
+        <div class="card-value">
+          <span id="curHumi">--</span><span class="card-unit">%</span>
+        </div>
+        <div class="card-meta" id="humiMeta">--</div>
+      </div>
+    </div>
+
+    <!-- 오늘 추이 차트 -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">오늘 추이</span>
+        <span class="panel-meta" id="chartMeta">--</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="todayChart"></canvas>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">T MIN</div>
+          <div class="stat-value" id="tMin">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">T MAX</div>
+          <div class="stat-value" id="tMax">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">H MIN</div>
+          <div class="stat-value" id="hMin">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">H MAX</div>
+          <div class="stat-value" id="hMax">--</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ============================================================
+    // 설정
+    // ============================================================
+    const SUPABASE_URL = 'https://trhjeongphtendkounig.supabase.co';
+    const ANON_KEY     = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
+    const REFRESH_MS   = 30 * 1000;  // 30초마다 갱신
+    const STALE_MS     = 3 * 60 * 1000; // 마지막 측정 3분 넘으면 stale 표시
+
+    // ============================================================
+    // 시간 유틸 (KST 기준)
+    // ============================================================
+    function todayKstStartISO() {
+      const now = new Date();
+      const y = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', year: 'numeric' });
+      const m = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', month: '2-digit' });
+      const d = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', day: '2-digit' });
+      return `${y}-${m}-${d}T00:00:00+09:00`;
+    }
+    function fmtKstHM(iso) {
+      return new Date(iso).toLocaleTimeString('ko-KR', {
+        timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false
+      });
+    }
+    function fmtKstHMS(iso) {
+      return new Date(iso).toLocaleTimeString('ko-KR', {
+        timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      });
+    }
+
+    // ============================================================
+    // Supabase 호출
+    // ============================================================
+    async function fetchTodayData() {
+      const startISO = todayKstStartISO();
+      const url = `${SUPABASE_URL}/rest/v1/env_log` +
+                  `?measured_at=gte.${encodeURIComponent(startISO)}` +
+                  `&order=measured_at.asc&limit=2000`;
+      const res = await fetch(url, {
+        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    // ============================================================
+    // 차트
+    // ============================================================
+    let chart = null;
+    function renderChart(data) {
+      const labels = data.map(d => fmtKstHM(d.measured_at));
+      const temps  = data.map(d => d.temp);
+      const humis  = data.map(d => d.humi);
+
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = temps;
+        chart.data.datasets[1].data = humis;
+        chart.update('none');
+        return;
+      }
+
+      const ctx = document.getElementById('todayChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: '온도 (°C)',
+              data: temps,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              yAxisID: 'y',
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              borderWidth: 2,
+              fill: true,
+            },
+            {
+              label: '습도 (%)',
+              data: humis,
+              borderColor: '#06b6d4',
+              backgroundColor: 'rgba(6, 182, 212, 0.08)',
+              yAxisID: 'y1',
+              tension: 0.3,
+              pointRadius: 0,
+              pointHoverRadius: 4,
+              borderWidth: 2,
+              fill: true,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 300 },
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono, monospace', size: 11 },
+                boxWidth: 12,
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1a2028',
+              borderColor: '#2a3340',
+              borderWidth: 1,
+              titleColor: '#e2e8f0',
+              bodyColor: '#e2e8f0',
+              titleFont: { family: 'JetBrains Mono, monospace', size: 11 },
+              bodyFont:  { family: 'JetBrains Mono, monospace', size: 12 },
+            }
+          },
+          scales: {
+            y: {
+              type: 'linear', position: 'left',
+              title: { display: true, text: '°C', color: '#f59e0b',
+                       font: { family: 'JetBrains Mono', size: 10 } },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+              grid:  { color: 'rgba(255,255,255,0.04)' },
+            },
+            y1: {
+              type: 'linear', position: 'right',
+              title: { display: true, text: '%', color: '#06b6d4',
+                       font: { family: 'JetBrains Mono', size: 10 } },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+              grid:  { drawOnChartArea: false },
+            },
+            x: {
+              ticks: { color: '#64748b', maxTicksLimit: 8,
+                       font: { family: 'JetBrains Mono', size: 9 } },
+              grid:  { color: 'rgba(255,255,255,0.04)' },
+            }
+          }
+        }
+      });
+    }
+
+    // ============================================================
+    // 통계
+    // ============================================================
+    function updateStats(data) {
+      if (data.length === 0) {
+        ['tMin','tMax','hMin','hMax'].forEach(id =>
+          document.getElementById(id).textContent = '--');
+        return;
+      }
+      const temps = data.map(d => d.temp);
+      const humis = data.map(d => d.humi);
+      document.getElementById('tMin').textContent = Math.min(...temps).toFixed(1) + '°';
+      document.getElementById('tMax').textContent = Math.max(...temps).toFixed(1) + '°';
+      document.getElementById('hMin').textContent = Math.min(...humis).toFixed(1) + '%';
+      document.getElementById('hMax').textContent = Math.max(...humis).toFixed(1) + '%';
+    }
+
+    // ============================================================
+    // 갱신 메인
+    // ============================================================
+    async function refresh() {
+      try {
+        const data = await fetchTodayData();
+        const dot  = document.getElementById('statusDot');
+        const txt  = document.getElementById('statusText');
+        const tm   = document.getElementById('statusTime');
+
+        if (data.length === 0) {
+          txt.textContent = '오늘 데이터 없음';
+          dot.classList.add('stale');
+          tm.textContent = fmtKstHMS(new Date().toISOString());
+          return;
+        }
+
+        const latest = data[data.length - 1];
+        const age = Date.now() - new Date(latest.measured_at).getTime();
+        const isStale = age > STALE_MS;
+
+        document.getElementById('curTemp').textContent = latest.temp.toFixed(1);
+        document.getElementById('curHumi').textContent = latest.humi.toFixed(1);
+        document.getElementById('tempMeta').textContent =
+          '측정 ' + fmtKstHM(latest.measured_at);
+        document.getElementById('humiMeta').textContent =
+          '측정 ' + fmtKstHM(latest.measured_at);
+        document.getElementById('chartMeta').textContent =
+          data.length + ' 측정';
+
+        txt.textContent = isStale ? '신호 끊김 (3분 이상)' : '연결됨';
+        dot.classList.toggle('stale', isStale);
+        tm.textContent = fmtKstHMS(new Date().toISOString());
+
+        renderChart(data);
+        updateStats(data);
+      } catch (err) {
+        console.error(err);
+        document.getElementById('statusText').textContent = '에러: ' + err.message;
+        document.getElementById('statusDot').classList.add('stale');
+      }
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+  </script>
+</body>
+</html>
