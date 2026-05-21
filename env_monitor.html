@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>측정실 환경 모니터링</title>
+  <title>측정실 환경 모니터링 · 이력관리</title>
 
   <!-- 폰트: 산업 계측기 톤 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,6 +12,8 @@
 
   <!-- 차트 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Excel 백업용 -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     :root {
@@ -28,6 +30,7 @@
       --humi-glow:  rgba(6, 182, 212, 0.15);
       --green:      #22c55e;
       --red:        #ef4444;
+      --yellow:     #eab308;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,29 +41,24 @@
       color: var(--text);
       min-height: 100vh;
       padding: 16px;
-      /* 미세한 그리드 배경 */
       background-image:
         linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
       background-size: 24px 24px;
     }
 
-    .container { max-width: 800px; margin: 0 auto; }
+    .container { max-width: 1100px; margin: 0 auto; }
 
     /* 헤더 */
     header {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      padding: 12px 4px 20px;
+      padding: 12px 4px 16px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
-    .title {
-      font-size: 1.05rem;
-      font-weight: 500;
-      letter-spacing: -0.01em;
-    }
+    .title { font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; }
     .title-sub {
       display: block;
       font-family: 'JetBrains Mono', monospace;
@@ -70,153 +68,213 @@
       text-transform: uppercase;
       margin-bottom: 2px;
     }
-    .version {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      color: var(--text-faint);
+    .version { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-faint); }
+
+    /* 탭 */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
     }
+    .tab {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      color: var(--text-faint);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 10px 18px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .tab:hover { color: var(--text-dim); }
+    .tab.active { color: var(--text); border-bottom-color: var(--temp); }
+
+    .tabpanel { display: none; }
+    .tabpanel.active { display: block; animation: fade .2s; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
     /* 상태 표시 */
     .status {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      margin-bottom: 16px;
-      padding: 8px 12px;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      color: var(--text-dim); margin-bottom: 16px;
+      padding: 8px 12px; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 6px;
     }
     .dot {
       width: 8px; height: 8px; border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
+      background: var(--green); box-shadow: 0 0 8px var(--green);
       animation: pulse 2s ease-in-out infinite;
     }
-    .dot.stale { background: var(--red); box-shadow: 0 0 8px var(--red); }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+    .dot.stale { background: var(--red); box-shadow: 0 0 8px var(--red); animation: none; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
     .status-time { margin-left: auto; }
 
     /* 카드 */
     .cards {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 20px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 12px; margin-bottom: 16px;
     }
     .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 18px 16px;
-      position: relative;
-      overflow: hidden;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px 16px;
+      position: relative; overflow: hidden;
     }
-    .card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 3px; height: 100%;
-    }
+    .card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
     .card.temp::before { background: var(--temp); box-shadow: 0 0 12px var(--temp-glow); }
     .card.humi::before { background: var(--humi); box-shadow: 0 0 12px var(--humi-glow); }
-
     .card-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      letter-spacing: 0.12em;
-      color: var(--text-faint);
-      text-transform: uppercase;
-      margin-bottom: 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+      letter-spacing: 0.12em; color: var(--text-faint);
+      text-transform: uppercase; margin-bottom: 12px;
     }
     .card-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 700;
-      font-size: 2.4rem;
-      line-height: 1;
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
+      font-family: 'JetBrains Mono', monospace; font-weight: 700;
+      font-size: 2.4rem; line-height: 1; display: flex;
+      align-items: baseline; gap: 4px;
     }
     .card.temp .card-value { color: var(--temp); }
     .card.humi .card-value { color: var(--humi); }
-    .card-unit {
-      font-size: 0.9rem;
-      font-weight: 400;
-      color: var(--text-faint);
-    }
-    .card-meta {
-      margin-top: 8px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--text-faint);
-    }
+    .card-unit { font-size: 0.9rem; font-weight: 400; color: var(--text-faint); }
+    .card-meta { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-faint); }
 
-    /* 차트 패널 */
+    /* 패널 */
     .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      margin-bottom: 16px;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 16px;
     }
     .panel-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 14px;
+      display: flex; justify-content: space-between;
+      align-items: baseline; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
     }
     .panel-title {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
-      letter-spacing: 0.12em;
-      color: var(--text-dim);
-      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      letter-spacing: 0.12em; color: var(--text-dim); text-transform: uppercase;
     }
-    .panel-meta {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--text-faint);
-    }
-    .chart-wrap {
-      position: relative;
-      height: 280px;
-    }
+    .panel-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-faint); }
+    .chart-wrap { position: relative; height: 280px; }
 
     /* 통계 미니 */
     .stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-      margin-top: 12px;
-      padding-top: 12px;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 8px; margin-top: 12px; padding-top: 12px;
       border-top: 1px solid var(--border);
     }
-    .stat {
-      text-align: center;
-    }
+    .stat { text-align: center; }
     .stat-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.65rem;
-      color: var(--text-faint);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;
+      color: var(--text-faint); letter-spacing: 0.1em;
+      text-transform: uppercase; margin-bottom: 4px;
     }
-    .stat-value {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.95rem;
-      font-weight: 500;
-    }
+    .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; font-weight: 500; }
 
-    @media (max-width: 380px) {
-      .card-value { font-size: 2rem; }
+    /* 컨트롤 (필터/버튼) */
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+    }
+    .controls label {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+      color: var(--text-faint); letter-spacing: 0.05em;
+    }
+    input[type="date"], input[type="number"], select {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px; outline: none;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+    input:focus, select:focus { border-color: var(--temp); }
+    .num-input { width: 70px; }
+
+    .btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+      letter-spacing: 0.04em; background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 14px; cursor: pointer; transition: all .15s;
+    }
+    .btn:hover { border-color: var(--text-dim); background: #2a3340; }
+    .btn.primary { background: var(--temp); color: #1a1208; border-color: var(--temp); font-weight: 700; }
+    .btn.primary:hover { background: #ffb733; }
+    .btn.cyan { background: var(--humi); color: #04222a; border-color: var(--humi); font-weight: 700; }
+    .btn.cyan:hover { background: #22d3ee; }
+    .btn.ghost { background: transparent; }
+
+    /* 테이블 */
+    .table-wrap { max-height: 460px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+    thead th {
+      position: sticky; top: 0; background: var(--panel-2); color: var(--text-dim);
+      text-align: left; padding: 9px 12px; font-weight: 500;
+      letter-spacing: 0.05em; border-bottom: 1px solid var(--border); z-index: 1;
+    }
+    tbody td { padding: 8px 12px; border-bottom: 1px solid rgba(42,51,64,0.5); color: var(--text); }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    .t-val { color: var(--temp); }
+    .h-val { color: var(--humi); }
+    .row-warn td { background: rgba(239,68,68,0.07); }
+    .badge {
+      display: inline-block; font-size: 0.62rem; padding: 2px 7px; border-radius: 10px;
+      letter-spacing: 0.05em; font-weight: 700;
+    }
+    .badge.ok    { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.over  { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge.under { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge.gap   { background: rgba(100,116,139,0.2); color: var(--text-dim); }
+
+    .empty { text-align: center; padding: 30px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+
+    /* 백업 카드 */
+    .backup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    @media (max-width: 720px) { .backup-grid { grid-template-columns: 1fr; } }
+    .backup-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+    .backup-card h3 {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+      letter-spacing: 0.08em; color: var(--text); margin-bottom: 6px;
+    }
+    .backup-card p { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px; }
+    .backup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-top: 1px solid var(--border); margin-top: 8px;
+    }
+    .toggle-row span { font-size: 0.8rem; color: var(--text-dim); }
+    .switch { position: relative; width: 44px; height: 24px; }
+    .switch input { display: none; }
+    .slider {
+      position: absolute; inset: 0; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: .2s;
+    }
+    .slider::before {
+      content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+      background: var(--text-faint); border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: rgba(34,197,94,0.25); border-color: var(--green); }
+    .switch input:checked + .slider::before { transform: translateX(20px); background: var(--green); }
+
+    .log-list {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+      color: var(--text-dim); max-height: 180px; overflow: auto;
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    }
+    .log-list div { padding: 3px 0; border-bottom: 1px solid rgba(42,51,64,0.4); }
+    .log-list .ok { color: var(--green); }
+    .log-list .err { color: var(--red); }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--green);
+      color: var(--text); padding: 12px 18px; border-radius: 8px;
+      font-size: 0.82rem; opacity: 0; pointer-events: none; transition: all .25s; z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.err { border-left-color: var(--red); }
+
+    @media (max-width: 480px) {
+      .cards { grid-template-columns: 1fr; }
       .stats { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
@@ -227,9 +285,9 @@
     <header>
       <div>
         <span class="title-sub">QC · 측정실</span>
-        <span class="title">환경 모니터링</span>
+        <span class="title">환경 모니터링 · 이력관리</span>
       </div>
-      <span class="version">v0.1</span>
+      <span class="version">v0.2</span>
     </header>
 
     <!-- 상태 표시줄 -->
@@ -239,54 +297,273 @@
       <span class="status-time" id="statusTime">--:--</span>
     </div>
 
-    <!-- 현재값 카드 -->
-    <div class="cards">
-      <div class="card temp">
-        <div class="card-label">TEMP / 온도</div>
-        <div class="card-value">
-          <span id="curTemp">--</span><span class="card-unit">°C</span>
+    <!-- 탭 -->
+    <div class="tabs">
+      <button class="tab active" data-tab="live">실시간</button>
+      <button class="tab" data-tab="history">이력관리</button>
+      <button class="tab" data-tab="backup">백업</button>
+      <button class="tab" data-tab="settings">설정</button>
+    </div>
+
+    <!-- ===================== 실시간 탭 ===================== -->
+    <div class="tabpanel active" id="tab-live">
+      <div class="cards">
+        <div class="card temp">
+          <div class="card-label">TEMP / 온도</div>
+          <div class="card-value"><span id="curTemp">--</span><span class="card-unit">°C</span></div>
+          <div class="card-meta" id="tempMeta">--</div>
         </div>
-        <div class="card-meta" id="tempMeta">--</div>
+        <div class="card humi">
+          <div class="card-label">HUMIDITY / 습도</div>
+          <div class="card-value"><span id="curHumi">--</span><span class="card-unit">%</span></div>
+          <div class="card-meta" id="humiMeta">--</div>
+        </div>
       </div>
-      <div class="card humi">
-        <div class="card-label">HUMIDITY / 습도</div>
-        <div class="card-value">
-          <span id="curHumi">--</span><span class="card-unit">%</span>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">오늘 추이</span>
+          <span class="panel-meta" id="chartMeta">--</span>
         </div>
-        <div class="card-meta" id="humiMeta">--</div>
+        <div class="chart-wrap"><canvas id="todayChart"></canvas></div>
+        <div class="stats">
+          <div class="stat"><div class="stat-label">T MIN</div><div class="stat-value" id="tMin">--</div></div>
+          <div class="stat"><div class="stat-label">T MAX</div><div class="stat-value" id="tMax">--</div></div>
+          <div class="stat"><div class="stat-label">H MIN</div><div class="stat-value" id="hMin">--</div></div>
+          <div class="stat"><div class="stat-label">H MAX</div><div class="stat-value" id="hMax">--</div></div>
+        </div>
       </div>
     </div>
 
-    <!-- 오늘 추이 차트 -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">오늘 추이</span>
-        <span class="panel-meta" id="chartMeta">--</span>
+    <!-- ===================== 이력관리 탭 ===================== -->
+    <div class="tabpanel" id="tab-history">
+      <!-- 필터 + 관리한계 -->
+      <div class="panel">
+        <div class="controls">
+          <label>기간</label>
+          <input type="date" id="fromDate" />
+          <span style="color:var(--text-faint)">~</span>
+          <input type="date" id="toDate" />
+          <button class="btn" data-range="today">오늘</button>
+          <button class="btn" data-range="7">7일</button>
+          <button class="btn" data-range="30">30일</button>
+          <button class="btn primary" id="loadHistory">조회</button>
+        </div>
+        <div class="controls" style="margin-bottom:0">
+          <label>관리한계</label>
+          <span style="color:var(--temp);font-family:'JetBrains Mono';font-size:.72rem">온도</span>
+          <input class="num-input" type="number" id="tLow"  step="0.1" value="18"  title="온도 하한" />
+          <span style="color:var(--text-faint)">~</span>
+          <input class="num-input" type="number" id="tHigh" step="0.1" value="24"  title="온도 상한" />
+          <span style="color:var(--humi);font-family:'JetBrains Mono';font-size:.72rem;margin-left:10px">습도</span>
+          <input class="num-input" type="number" id="hLow"  step="0.1" value="40"  title="습도 하한" />
+          <span style="color:var(--text-faint)">~</span>
+          <input class="num-input" type="number" id="hHigh" step="0.1" value="60"  title="습도 상한" />
+          <span style="font-family:'JetBrains Mono';font-size:.7rem;color:var(--text-faint);margin-left:6px">(일탈 판정 기준)</span>
+        </div>
       </div>
-      <div class="chart-wrap">
-        <canvas id="todayChart"></canvas>
+
+      <!-- 요약 통계 -->
+      <div class="cards" style="grid-template-columns:repeat(4,1fr)" id="histSummary">
+        <div class="card"><div class="card-label">측정 건수</div><div class="card-value" style="font-size:1.8rem"><span id="sumCount">--</span></div></div>
+        <div class="card"><div class="card-label">일탈 건수</div><div class="card-value" style="font-size:1.8rem;color:var(--red)"><span id="sumOver">--</span></div></div>
+        <div class="card temp"><div class="card-label">온도 평균</div><div class="card-value" style="font-size:1.8rem"><span id="sumTavg">--</span><span class="card-unit">°C</span></div></div>
+        <div class="card humi"><div class="card-label">습도 평균</div><div class="card-value" style="font-size:1.8rem"><span id="sumHavg">--</span><span class="card-unit">%</span></div></div>
       </div>
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-label">T MIN</div>
-          <div class="stat-value" id="tMin">--</div>
+
+      <!-- 이력 추이 차트 -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">기간 추이</span>
+          <span class="panel-meta" id="histChartMeta">--</span>
         </div>
-        <div class="stat">
-          <div class="stat-label">T MAX</div>
-          <div class="stat-value" id="tMax">--</div>
+        <div class="chart-wrap"><canvas id="histChart"></canvas></div>
+      </div>
+
+      <!-- 일자별 요약 -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">일자별 요약</span>
+          <span class="panel-meta">일평균 · 최대 · 최소 · 일탈</span>
         </div>
-        <div class="stat">
-          <div class="stat-label">H MIN</div>
-          <div class="stat-value" id="hMin">--</div>
+        <div class="table-wrap">
+          <table id="dailyTable">
+            <thead><tr>
+              <th>일자</th><th>건수</th>
+              <th>T평균</th><th>T최소</th><th>T최대</th>
+              <th>H평균</th><th>H최소</th><th>H최대</th>
+              <th>일탈</th>
+            </tr></thead>
+            <tbody><tr><td colspan="9" class="empty">기간을 선택하고 조회하세요</td></tr></tbody>
+          </table>
         </div>
-        <div class="stat">
-          <div class="stat-label">H MAX</div>
-          <div class="stat-value" id="hMax">--</div>
+      </div>
+
+      <!-- 상세 이력 (일탈/누락 표시) -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">상세 이력 (일탈 · 측정누락 표시)</span>
+          <span class="panel-meta">
+            <button class="btn ghost" id="filterAll">전체</button>
+            <button class="btn ghost" id="filterWarn">일탈만</button>
+            <button class="btn cyan" id="exportHistCsv">CSV 내보내기</button>
+          </span>
+        </div>
+        <div class="table-wrap">
+          <table id="detailTable">
+            <thead><tr>
+              <th>측정시각</th><th>온도(°C)</th><th>습도(%)</th><th>판정</th><th>비고</th>
+            </tr></thead>
+            <tbody><tr><td colspan="5" class="empty">기간을 선택하고 조회하세요</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== 백업 탭 ===================== -->
+    <div class="tabpanel" id="tab-backup">
+      <div class="backup-grid">
+        <!-- 수동 백업 -->
+        <div class="backup-card">
+          <h3>수동 백업</h3>
+          <p>선택한 <b style="color:var(--temp)">기간</b>의 측정 이력을 즉시 내려받습니다. Excel은 일자별 요약 시트와 원본 시트를 함께 포함합니다.</p>
+          <div class="controls" style="margin-bottom:8px">
+            <label>기간</label>
+            <input type="date" id="backupFrom" />
+            <span style="color:var(--text-faint)">~</span>
+            <input type="date" id="backupTo" />
+          </div>
+          <div class="controls" style="margin-bottom:12px">
+            <button class="btn ghost" data-bkrange="today">오늘</button>
+            <button class="btn ghost" data-bkrange="7">7일</button>
+            <button class="btn ghost" data-bkrange="30">30일</button>
+            <button class="btn ghost" data-bkrange="month">이번달</button>
+          </div>
+          <div class="backup-actions">
+            <button class="btn primary" id="backupXlsx">Excel 백업</button>
+            <button class="btn cyan" id="backupCsv">CSV 백업</button>
+          </div>
+        </div>
+
+        <!-- 자동 백업 -->
+        <div class="backup-card">
+          <h3>일일 자동 백업</h3>
+          <p>매일 지정한 시각에 전일(어제) 측정 이력을 자동으로 <b style="color:var(--temp)">Excel(.xlsx)</b>로 내려받습니다. '일자별요약' · '원본이력' 두 시트로 저장되며, 백업 실행 기록은 <b style="color:var(--humi)">Supabase</b>에 함께 적재되어 다른 기기에서도 확인됩니다.</p>
+          <div class="controls" style="margin-bottom:6px">
+            <label>실행 시각</label>
+            <input type="time" id="autoTime" value="07:00" style="font-family:'JetBrains Mono';background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px" />
+            <span style="font-family:'JetBrains Mono';font-size:.72rem;color:var(--text-faint);margin-left:8px">형식 · Excel (.xlsx)</span>
+          </div>
+          <div class="toggle-row">
+            <span>일일 자동 백업 사용</span>
+            <label class="switch"><input type="checkbox" id="autoToggle" /><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <span>Supabase 백업기록 동기화</span>
+            <label class="switch"><input type="checkbox" id="sbSyncToggle" checked /><span class="slider"></span></label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 백업 이력 로그 -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">백업 실행 이력</span>
+          <span class="panel-meta">
+            <button class="btn ghost" id="refreshLog">새로고침</button>
+            <button class="btn ghost" id="clearLog">로컬 로그 비우기</button>
+          </span>
+        </div>
+        <div class="log-list" id="backupLog"><div>아직 백업 기록이 없습니다.</div></div>
+      </div>
+    </div>
+
+    <!-- ===================== 설정 탭 ===================== -->
+    <div class="tabpanel" id="tab-settings">
+      <div class="backup-grid">
+        <!-- 사용자 / 결재자 정보 -->
+        <div class="backup-card">
+          <h3>사용자 정보</h3>
+          <p>측정·백업 기록에 남길 담당자 정보입니다. PIN은 여러 시스템(조도/월간보고 등)에서 결재자 식별에 공통으로 사용됩니다.</p>
+          <div class="controls" style="margin-bottom:8px">
+            <label>이름</label>
+            <input type="text" id="setName" placeholder="홍길동" style="font-family:'Noto Sans KR';font-size:.82rem;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;width:120px" />
+            <label style="margin-left:6px">부서</label>
+            <input type="text" id="setDept" placeholder="품질관리팀" style="font-family:'Noto Sans KR';font-size:.82rem;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;width:120px" />
+          </div>
+          <div class="controls" style="margin-bottom:12px">
+            <label>PIN</label>
+            <input type="password" id="setPin" inputmode="numeric" maxlength="8" placeholder="••••" class="num-input" style="width:110px;letter-spacing:3px" />
+            <span style="font-family:'JetBrains Mono';font-size:.7rem;color:var(--text-faint)">결재자 식별용 4~8자리</span>
+          </div>
+          <div class="backup-actions">
+            <button class="btn primary" id="saveUser">사용자 저장</button>
+          </div>
+        </div>
+
+        <!-- 관리한계 기본값 -->
+        <div class="backup-card">
+          <h3>관리한계 기본값</h3>
+          <p>이력 일탈 판정에 적용되는 온·습도 관리 상·하한선입니다. 저장하면 이력관리 탭에도 자동 반영되고 Supabase에 공유됩니다.</p>
+          <div class="controls" style="margin-bottom:8px">
+            <span style="color:var(--temp);font-family:'JetBrains Mono';font-size:.72rem;width:36px">온도</span>
+            <input class="num-input" type="number" id="setTLow"  step="0.1" value="18" title="온도 하한" />
+            <span style="color:var(--text-faint)">~</span>
+            <input class="num-input" type="number" id="setTHigh" step="0.1" value="24" title="온도 상한" />
+            <span style="color:var(--text-faint);font-size:.72rem">°C</span>
+          </div>
+          <div class="controls" style="margin-bottom:12px">
+            <span style="color:var(--humi);font-family:'JetBrains Mono';font-size:.72rem;width:36px">습도</span>
+            <input class="num-input" type="number" id="setHLow"  step="0.1" value="40" title="습도 하한" />
+            <span style="color:var(--text-faint)">~</span>
+            <input class="num-input" type="number" id="setHHigh" step="0.1" value="60" title="습도 상한" />
+            <span style="color:var(--text-faint);font-size:.72rem">%</span>
+          </div>
+          <div class="backup-actions">
+            <button class="btn primary" id="saveLimits">관리한계 저장</button>
+            <button class="btn cyan" id="loadLimitsSb">Supabase에서 불러오기</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 무인(서버측) 백업 안내 -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">무인 서버측 자동 백업 (Supabase)</span>
+        </div>
+        <p style="font-size:.82rem;color:var(--text-dim);line-height:1.6;margin-bottom:10px">
+          이 화면을 닫아도 동작하는 완전 무인 백업은 Supabase의 예약 작업으로 구성합니다.
+          <b style="color:var(--humi)">pg_cron</b> + <b style="color:var(--humi)">Edge Function</b>으로 매일 전일 데이터를 집계해
+          <code style="background:var(--panel-2);padding:1px 6px;border-radius:4px;color:var(--temp)">env_backup_log</code> 테이블에 적재하도록 예약하면,
+          PC가 꺼져 있어도 서버에서 자동 실행됩니다. 아래 SQL을 Supabase SQL Editor에서 한 번 실행해 테이블을 준비하세요.
+        </p>
+        <div class="log-list" style="max-height:none;color:var(--text)">
+<div style="color:var(--text-faint)">-- 백업 기록 테이블 (1회 실행)</div>
+<div>create table if not exists env_backup_log (</div>
+<div>&nbsp;&nbsp;id bigint generated always as identity primary key,</div>
+<div>&nbsp;&nbsp;backup_date date not null,</div>
+<div>&nbsp;&nbsp;row_count int not null default 0,</div>
+<div>&nbsp;&nbsp;over_count int not null default 0,</div>
+<div>&nbsp;&nbsp;t_avg numeric, h_avg numeric,</div>
+<div>&nbsp;&nbsp;format text default 'xlsx',</div>
+<div>&nbsp;&nbsp;source text default 'client',</div>
+<div>&nbsp;&nbsp;operator text,</div>
+<div>&nbsp;&nbsp;created_at timestamptz default now()</div>
+<div>);</div>
+<div>&nbsp;</div>
+<div style="color:var(--text-faint)">-- (선택) 익명 INSERT 허용 RLS 정책</div>
+<div>alter table env_backup_log enable row level security;</div>
+<div>create policy "insert_anon" on env_backup_log</div>
+<div>&nbsp;&nbsp;for insert to anon with check (true);</div>
+<div>create policy "read_anon" on env_backup_log</div>
+<div>&nbsp;&nbsp;for select to anon using (true);</div>
         </div>
       </div>
     </div>
 
   </div>
+
+  <div class="toast" id="toast"></div>
 
   <script>
     // ============================================================
@@ -294,204 +571,621 @@
     // ============================================================
     const SUPABASE_URL = 'https://trhjeongphtendkounig.supabase.co';
     const ANON_KEY     = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
-    const REFRESH_MS   = 30 * 1000;  // 30초마다 갱신
-    const STALE_MS     = 3 * 60 * 1000; // 마지막 측정 3분 넘으면 stale 표시
+    const REFRESH_MS   = 30 * 1000;
+    const STALE_MS     = 3 * 60 * 1000;
+    const GAP_MIN      = 10; // 측정 간격이 이 분(min)을 넘으면 '측정누락' 구간으로 표시
+    const LS_SETTINGS  = 'env_monitor_v2_settings';
+    const LS_LOG       = 'env_monitor_v2_backuplog';
+    const LS_SHARED    = 'P_MONTHLY_V3_SETTINGS'; // 다른 시스템(조도/월간보고)과 공유하는 사용자/PIN 설정
+    const SB_BACKUP_TABLE = 'env_backup_log';     // Supabase 백업기록 테이블
+    const SB_CONFIG_TABLE = 'env_config';         // 관리한계 등 공유 설정 테이블
+    const CONFIG_ID    = 'env_monitor_limits';    // env_config 단일 행 식별자
+
+    let historyData = []; // 현재 조회된 이력
+    let detailFilter = 'all';
 
     // ============================================================
     // 시간 유틸 (KST 기준)
     // ============================================================
-    function todayKstStartISO() {
-      const now = new Date();
-      const y = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', year: 'numeric' });
-      const m = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', month: '2-digit' });
-      const d = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul', day: '2-digit' });
-      return `${y}-${m}-${d}T00:00:00+09:00`;
+    function kstParts(date) {
+      const y = date.toLocaleString('en-US', { timeZone: 'Asia/Seoul', year: 'numeric' });
+      const m = date.toLocaleString('en-US', { timeZone: 'Asia/Seoul', month: '2-digit' });
+      const d = date.toLocaleString('en-US', { timeZone: 'Asia/Seoul', day: '2-digit' });
+      return { y, m, d };
     }
-    function fmtKstHM(iso) {
-      return new Date(iso).toLocaleTimeString('ko-KR', {
-        timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false
-      });
-    }
-    function fmtKstHMS(iso) {
-      return new Date(iso).toLocaleTimeString('ko-KR', {
-        timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-      });
+    function todayKstISODate() { const {y,m,d}=kstParts(new Date()); return `${y}-${m}-${d}`; }
+    function dateToKstStartISO(ymd) { return `${ymd}T00:00:00+09:00`; }
+    function dateToKstEndISO(ymd)   { return `${ymd}T23:59:59+09:00`; }
+    function todayKstStartISO()     { return dateToKstStartISO(todayKstISODate()); }
+    function fmtKstHM(iso)  { return new Date(iso).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false}); }
+    function fmtKstHMS(iso) { return new Date(iso).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
+    function fmtKstDate(iso){ const {y,m,d}=kstParts(new Date(iso)); return `${y}-${m}-${d}`; }
+    function fmtKstFull(iso){ return `${fmtKstDate(iso)} ${fmtKstHMS(iso)}`; }
+    function addDaysISO(ymd, delta) {
+      const dt = new Date(`${ymd}T12:00:00+09:00`);
+      dt.setDate(dt.getDate() + delta);
+      const {y,m,d}=kstParts(dt); return `${y}-${m}-${d}`;
     }
 
     // ============================================================
     // Supabase 호출
     // ============================================================
+    async function fetchRange(startISO, endISO) {
+      const url = `${SUPABASE_URL}/rest/v1/env_log`
+        + `?measured_at=gte.${encodeURIComponent(startISO)}`
+        + `&measured_at=lte.${encodeURIComponent(endISO)}`
+        + `&order=measured_at.asc&limit=20000`;
+      const res = await fetch(url, { headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
     async function fetchTodayData() {
       const startISO = todayKstStartISO();
-      const url = `${SUPABASE_URL}/rest/v1/env_log` +
-                  `?measured_at=gte.${encodeURIComponent(startISO)}` +
-                  `&order=measured_at.asc&limit=2000`;
-      const res = await fetch(url, {
-        headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
-      });
+      const url = `${SUPABASE_URL}/rest/v1/env_log`
+        + `?measured_at=gte.${encodeURIComponent(startISO)}`
+        + `&order=measured_at.asc&limit=2000`;
+      const res = await fetch(url, { headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     }
 
     // ============================================================
-    // 차트
+    // 판정 (관리한계 일탈 / 측정누락)
+    // ============================================================
+    function getLimits() {
+      return {
+        tLow:  parseFloat(document.getElementById('tLow').value),
+        tHigh: parseFloat(document.getElementById('tHigh').value),
+        hLow:  parseFloat(document.getElementById('hLow').value),
+        hHigh: parseFloat(document.getElementById('hHigh').value),
+      };
+    }
+    // 한 행의 판정: ok / over(상한초과) / under(하한미만)
+    function judge(row, lim) {
+      const flags = [];
+      if (row.temp > lim.tHigh) flags.push('온도 상한초과');
+      if (row.temp < lim.tLow)  flags.push('온도 하한미만');
+      if (row.humi > lim.hHigh) flags.push('습도 상한초과');
+      if (row.humi < lim.hLow)  flags.push('습도 하한미만');
+      if (flags.length === 0) return { type: 'ok', note: '정상' };
+      const over = flags.some(f => f.includes('상한'));
+      return { type: over ? 'over' : 'under', note: flags.join(', ') };
+    }
+
+    // ============================================================
+    // 실시간 차트
     // ============================================================
     let chart = null;
     function renderChart(data) {
       const labels = data.map(d => fmtKstHM(d.measured_at));
       const temps  = data.map(d => d.temp);
       const humis  = data.map(d => d.humi);
-
       if (chart) {
         chart.data.labels = labels;
         chart.data.datasets[0].data = temps;
         chart.data.datasets[1].data = humis;
-        chart.update('none');
-        return;
+        chart.update('none'); return;
       }
-
-      const ctx = document.getElementById('todayChart').getContext('2d');
-      chart = new Chart(ctx, {
+      chart = makeDualChart('todayChart', labels, temps, humis);
+    }
+    function makeDualChart(canvasId, labels, temps, humis) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      return new Chart(ctx, {
         type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: '온도 (°C)',
-              data: temps,
-              borderColor: '#f59e0b',
-              backgroundColor: 'rgba(245, 158, 11, 0.08)',
-              yAxisID: 'y',
-              tension: 0.3,
-              pointRadius: 0,
-              pointHoverRadius: 4,
-              borderWidth: 2,
-              fill: true,
-            },
-            {
-              label: '습도 (%)',
-              data: humis,
-              borderColor: '#06b6d4',
-              backgroundColor: 'rgba(6, 182, 212, 0.08)',
-              yAxisID: 'y1',
-              tension: 0.3,
-              pointRadius: 0,
-              pointHoverRadius: 4,
-              borderWidth: 2,
-              fill: true,
-            }
-          ]
-        },
+        data: { labels, datasets: [
+          { label:'온도 (°C)', data:temps, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)', yAxisID:'y',  tension:0.3, pointRadius:0, pointHoverRadius:4, borderWidth:2, fill:true },
+          { label:'습도 (%)',  data:humis, borderColor:'#06b6d4', backgroundColor:'rgba(6,182,212,0.08)',  yAxisID:'y1', tension:0.3, pointRadius:0, pointHoverRadius:4, borderWidth:2, fill:true },
+        ]},
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: { duration: 300 },
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: {
-              labels: {
-                color: '#94a3b8',
-                font: { family: 'JetBrains Mono, monospace', size: 11 },
-                boxWidth: 12,
-              }
-            },
-            tooltip: {
-              backgroundColor: '#1a2028',
-              borderColor: '#2a3340',
-              borderWidth: 1,
-              titleColor: '#e2e8f0',
-              bodyColor: '#e2e8f0',
-              titleFont: { family: 'JetBrains Mono, monospace', size: 11 },
-              bodyFont:  { family: 'JetBrains Mono, monospace', size: 12 },
-            }
+          responsive:true, maintainAspectRatio:false, animation:{duration:300},
+          interaction:{ mode:'index', intersect:false },
+          plugins:{
+            legend:{ labels:{ color:'#94a3b8', font:{family:'JetBrains Mono, monospace', size:11}, boxWidth:12 } },
+            tooltip:{ backgroundColor:'#1a2028', borderColor:'#2a3340', borderWidth:1, titleColor:'#e2e8f0', bodyColor:'#e2e8f0',
+                      titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:12} }
           },
-          scales: {
-            y: {
-              type: 'linear', position: 'left',
-              title: { display: true, text: '°C', color: '#f59e0b',
-                       font: { family: 'JetBrains Mono', size: 10 } },
-              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
-              grid:  { color: 'rgba(255,255,255,0.04)' },
-            },
-            y1: {
-              type: 'linear', position: 'right',
-              title: { display: true, text: '%', color: '#06b6d4',
-                       font: { family: 'JetBrains Mono', size: 10 } },
-              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
-              grid:  { drawOnChartArea: false },
-            },
-            x: {
-              ticks: { color: '#64748b', maxTicksLimit: 8,
-                       font: { family: 'JetBrains Mono', size: 9 } },
-              grid:  { color: 'rgba(255,255,255,0.04)' },
-            }
+          scales:{
+            y:{ type:'linear', position:'left', title:{display:true,text:'°C',color:'#f59e0b',font:{family:'JetBrains Mono',size:10}}, ticks:{color:'#94a3b8',font:{family:'JetBrains Mono',size:10}}, grid:{color:'rgba(255,255,255,0.04)'} },
+            y1:{ type:'linear', position:'right', title:{display:true,text:'%',color:'#06b6d4',font:{family:'JetBrains Mono',size:10}}, ticks:{color:'#94a3b8',font:{family:'JetBrains Mono',size:10}}, grid:{drawOnChartArea:false} },
+            x:{ ticks:{color:'#64748b',maxTicksLimit:10,font:{family:'JetBrains Mono',size:9}}, grid:{color:'rgba(255,255,255,0.04)'} }
           }
         }
       });
     }
-
-    // ============================================================
-    // 통계
-    // ============================================================
     function updateStats(data) {
-      if (data.length === 0) {
-        ['tMin','tMax','hMin','hMax'].forEach(id =>
-          document.getElementById(id).textContent = '--');
-        return;
-      }
-      const temps = data.map(d => d.temp);
-      const humis = data.map(d => d.humi);
-      document.getElementById('tMin').textContent = Math.min(...temps).toFixed(1) + '°';
-      document.getElementById('tMax').textContent = Math.max(...temps).toFixed(1) + '°';
-      document.getElementById('hMin').textContent = Math.min(...humis).toFixed(1) + '%';
-      document.getElementById('hMax').textContent = Math.max(...humis).toFixed(1) + '%';
+      const ids=['tMin','tMax','hMin','hMax'];
+      if (data.length===0){ ids.forEach(id=>document.getElementById(id).textContent='--'); return; }
+      const temps=data.map(d=>d.temp), humis=data.map(d=>d.humi);
+      document.getElementById('tMin').textContent=Math.min(...temps).toFixed(1)+'°';
+      document.getElementById('tMax').textContent=Math.max(...temps).toFixed(1)+'°';
+      document.getElementById('hMin').textContent=Math.min(...humis).toFixed(1)+'%';
+      document.getElementById('hMax').textContent=Math.max(...humis).toFixed(1)+'%';
     }
 
     // ============================================================
-    // 갱신 메인
+    // 실시간 갱신 메인
     // ============================================================
     async function refresh() {
       try {
         const data = await fetchTodayData();
-        const dot  = document.getElementById('statusDot');
-        const txt  = document.getElementById('statusText');
-        const tm   = document.getElementById('statusTime');
-
-        if (data.length === 0) {
-          txt.textContent = '오늘 데이터 없음';
-          dot.classList.add('stale');
-          tm.textContent = fmtKstHMS(new Date().toISOString());
-          return;
-        }
-
-        const latest = data[data.length - 1];
-        const age = Date.now() - new Date(latest.measured_at).getTime();
-        const isStale = age > STALE_MS;
-
-        document.getElementById('curTemp').textContent = latest.temp.toFixed(1);
-        document.getElementById('curHumi').textContent = latest.humi.toFixed(1);
-        document.getElementById('tempMeta').textContent =
-          '측정 ' + fmtKstHM(latest.measured_at);
-        document.getElementById('humiMeta').textContent =
-          '측정 ' + fmtKstHM(latest.measured_at);
-        document.getElementById('chartMeta').textContent =
-          data.length + ' 측정';
-
-        txt.textContent = isStale ? '신호 끊김 (3분 이상)' : '연결됨';
+        const dot=document.getElementById('statusDot'), txt=document.getElementById('statusText'), tm=document.getElementById('statusTime');
+        if (data.length===0){ txt.textContent='오늘 데이터 없음'; dot.classList.add('stale'); tm.textContent=fmtKstHMS(new Date().toISOString()); return; }
+        const latest=data[data.length-1];
+        const age=Date.now()-new Date(latest.measured_at).getTime();
+        const isStale=age>STALE_MS;
+        document.getElementById('curTemp').textContent=latest.temp.toFixed(1);
+        document.getElementById('curHumi').textContent=latest.humi.toFixed(1);
+        document.getElementById('tempMeta').textContent='측정 '+fmtKstHM(latest.measured_at);
+        document.getElementById('humiMeta').textContent='측정 '+fmtKstHM(latest.measured_at);
+        document.getElementById('chartMeta').textContent=data.length+' 측정';
+        txt.textContent=isStale?'신호 끊김 (3분 이상)':'연결됨';
         dot.classList.toggle('stale', isStale);
-        tm.textContent = fmtKstHMS(new Date().toISOString());
-
-        renderChart(data);
-        updateStats(data);
-      } catch (err) {
+        tm.textContent=fmtKstHMS(new Date().toISOString());
+        renderChart(data); updateStats(data);
+      } catch(err) {
         console.error(err);
-        document.getElementById('statusText').textContent = '에러: ' + err.message;
+        document.getElementById('statusText').textContent='에러: '+err.message;
         document.getElementById('statusDot').classList.add('stale');
       }
     }
 
-    refresh();
-    setInterval(refresh, REFRESH_MS);
+    // ============================================================
+    // 이력관리: 조회 / 렌더
+    // ============================================================
+    let histChart = null;
+    async function loadHistory() {
+      const from=document.getElementById('fromDate').value;
+      const to  =document.getElementById('toDate').value;
+      if (!from || !to){ toast('기간을 선택하세요', true); return; }
+      try {
+        toast('조회 중...');
+        const data = await fetchRange(dateToKstStartISO(from), dateToKstEndISO(to));
+        historyData = data;
+        renderHistory();
+        toast(`조회 완료 · ${data.length}건`);
+      } catch(err){ toast('조회 실패: '+err.message, true); }
+    }
+
+    function renderHistory() {
+      const lim = getLimits();
+      const data = historyData;
+
+      // 요약
+      if (data.length>0) {
+        const temps=data.map(d=>d.temp), humis=data.map(d=>d.humi);
+        const overCount = data.filter(d=>judge(d,lim).type!=='ok').length;
+        document.getElementById('sumCount').textContent=data.length;
+        document.getElementById('sumOver').textContent=overCount;
+        document.getElementById('sumTavg').textContent=(temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1);
+        document.getElementById('sumHavg').textContent=(humis.reduce((a,b)=>a+b,0)/humis.length).toFixed(1);
+      } else {
+        ['sumCount','sumOver','sumTavg','sumHavg'].forEach(id=>document.getElementById(id).textContent='--');
+      }
+
+      // 기간 추이 차트
+      const labels=data.map(d=>data.length>500?fmtKstDate(d.measured_at):fmtKstHM(d.measured_at));
+      const temps=data.map(d=>d.temp), humis=data.map(d=>d.humi);
+      document.getElementById('histChartMeta').textContent=data.length+' 측정';
+      const ctx=document.getElementById('histChart').getContext('2d');
+      if (histChart) histChart.destroy();
+      histChart = makeDualChart('histChart', labels, temps, humis);
+
+      renderDailyTable(data, lim);
+      renderDetailTable(data, lim);
+    }
+
+    function dailyAgg(data) {
+      const map = {};
+      data.forEach(d=>{
+        const day=fmtKstDate(d.measured_at);
+        (map[day]=map[day]||[]).push(d);
+      });
+      return map;
+    }
+    function renderDailyTable(data, lim) {
+      const tbody=document.querySelector('#dailyTable tbody');
+      if (data.length===0){ tbody.innerHTML='<tr><td colspan="9" class="empty">데이터 없음</td></tr>'; return; }
+      const map=dailyAgg(data);
+      const rows=Object.keys(map).sort().map(day=>{
+        const arr=map[day]; const t=arr.map(x=>x.temp), h=arr.map(x=>x.humi);
+        const tavg=(t.reduce((a,b)=>a+b,0)/t.length).toFixed(1);
+        const havg=(h.reduce((a,b)=>a+b,0)/h.length).toFixed(1);
+        const over=arr.filter(x=>judge(x,lim).type!=='ok').length;
+        const warn = over>0?'row-warn':'';
+        return `<tr class="${warn}">
+          <td>${day}</td><td>${arr.length}</td>
+          <td class="t-val">${tavg}</td><td class="t-val">${Math.min(...t).toFixed(1)}</td><td class="t-val">${Math.max(...t).toFixed(1)}</td>
+          <td class="h-val">${havg}</td><td class="h-val">${Math.min(...h).toFixed(1)}</td><td class="h-val">${Math.max(...h).toFixed(1)}</td>
+          <td>${over>0?`<span class="badge over">${over}</span>`:`<span class="badge ok">0</span>`}</td>
+        </tr>`;
+      });
+      tbody.innerHTML=rows.join('');
+    }
+
+    function renderDetailTable(data, lim) {
+      const tbody=document.querySelector('#detailTable tbody');
+      if (data.length===0){ tbody.innerHTML='<tr><td colspan="5" class="empty">데이터 없음</td></tr>'; return; }
+      const rows=[];
+      let prev=null;
+      data.forEach(d=>{
+        // 측정누락 구간 표시
+        if (prev) {
+          const gap=(new Date(d.measured_at)-new Date(prev.measured_at))/60000;
+          if (gap>GAP_MIN) {
+            rows.push({ warn:true, html:`<tr class="row-warn">
+              <td colspan="2">${fmtKstFull(prev.measured_at)} ~ ${fmtKstHMS(d.measured_at)}</td>
+              <td></td><td><span class="badge gap">측정누락</span></td>
+              <td>약 ${Math.round(gap)}분 간 데이터 없음</td></tr>` });
+          }
+        }
+        const j=judge(d,lim);
+        const warn=j.type!=='ok';
+        const badge = j.type==='ok'?'<span class="badge ok">정상</span>'
+                    : j.type==='over'?'<span class="badge over">상한초과</span>'
+                    : '<span class="badge under">하한미만</span>';
+        rows.push({ warn, html:`<tr class="${warn?'row-warn':''}">
+          <td>${fmtKstFull(d.measured_at)}</td>
+          <td class="t-val">${d.temp.toFixed(1)}</td>
+          <td class="h-val">${d.humi.toFixed(1)}</td>
+          <td>${badge}</td>
+          <td style="color:var(--text-faint)">${warn?j.note:''}</td></tr>` });
+        prev=d;
+      });
+      const filtered = detailFilter==='warn' ? rows.filter(r=>r.warn) : rows;
+      tbody.innerHTML = filtered.length ? filtered.map(r=>r.html).join('') : '<tr><td colspan="5" class="empty">해당 항목 없음</td></tr>';
+    }
+
+    // ============================================================
+    // 백업: CSV / Excel 생성
+    // ============================================================
+    function buildRows(data, lim) {
+      return data.map(d=>{
+        const j=judge(d,lim);
+        return { 측정시각:fmtKstFull(d.measured_at), '온도(°C)':d.temp, '습도(%)':d.humi, 판정:j.note };
+      });
+    }
+    function buildDaily(data, lim) {
+      const map=dailyAgg(data);
+      return Object.keys(map).sort().map(day=>{
+        const arr=map[day]; const t=arr.map(x=>x.temp), h=arr.map(x=>x.humi);
+        return {
+          일자:day, 건수:arr.length,
+          T평균:+(t.reduce((a,b)=>a+b,0)/t.length).toFixed(1), T최소:Math.min(...t), T최대:Math.max(...t),
+          H평균:+(h.reduce((a,b)=>a+b,0)/h.length).toFixed(1), H최소:Math.min(...h), H최대:Math.max(...h),
+          일탈건수:arr.filter(x=>judge(x,lim).type!=='ok').length,
+        };
+      });
+    }
+    function downloadBlob(content, filename, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+    function exportCsv(rows, filename) {
+      if (!rows.length){ toast('내보낼 데이터가 없습니다', true); return; }
+      const headers=Object.keys(rows[0]);
+      const csv=[headers.join(',')].concat(
+        rows.map(r=>headers.map(h=>`"${String(r[h]).replace(/"/g,'""')}"`).join(','))
+      ).join('\r\n');
+      downloadBlob('\ufeff'+csv, filename, 'text/csv;charset=utf-8;'); // BOM for 한글
+    }
+    function exportXlsx(detailRows, dailyRows, filename) {
+      if (!detailRows.length){ toast('내보낼 데이터가 없습니다', true); return; }
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dailyRows),  '일자별요약');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailRows), '원본이력');
+      XLSX.writeFile(wb, filename);
+    }
+
+    // ============================================================
+    // Supabase 백업기록 적재 / 조회 (참고 시스템과 동일한 SB 정보 사용)
+    // ============================================================
+    function sbHeaders(extra) {
+      return Object.assign({ 'apikey':ANON_KEY, 'Authorization':`Bearer ${ANON_KEY}`, 'Content-Type':'application/json' }, extra||{});
+    }
+    // 백업 실행 기록을 Supabase env_backup_log 에 적재
+    async function pushBackupLog(rec) {
+      if (!sbSyncEnabled()) return false;
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${SB_BACKUP_TABLE}`, {
+        method:'POST', headers: sbHeaders({ 'Prefer':'return=minimal' }), body: JSON.stringify(rec),
+      });
+      if (!res.ok) throw new Error(`SB 적재 HTTP ${res.status}`);
+      return true;
+    }
+    // Supabase 백업기록 최근 N건 조회
+    async function fetchBackupLog(limit=30) {
+      const url = `${SUPABASE_URL}/rest/v1/${SB_BACKUP_TABLE}?select=*&order=created_at.desc&limit=${limit}`;
+      const res = await fetch(url, { headers: sbHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
+    function sbSyncEnabled() {
+      const el=document.getElementById('sbSyncToggle');
+      return el ? el.checked : true;
+    }
+    // 백업 1건의 요약치 계산 → SB 적재용 레코드
+    function backupSummaryRecord(ymd, data, lim, source) {
+      const t=data.map(d=>d.temp), h=data.map(d=>d.humi);
+      const over=data.filter(d=>judge(d,lim).type!=='ok').length;
+      return {
+        backup_date: ymd,
+        row_count: data.length,
+        over_count: over,
+        t_avg: t.length ? +(t.reduce((a,b)=>a+b,0)/t.length).toFixed(2) : null,
+        h_avg: h.length ? +(h.reduce((a,b)=>a+b,0)/h.length).toFixed(2) : null,
+        format: 'xlsx',
+        source: source || 'client',
+        operator: getOperatorName(),
+      };
+    }
+
+    // 특정 날짜 백업 (자동백업용 - 전일 1일)
+    async function backupDay(ymd, format, source) {
+      return backupRange(ymd, ymd, format, source);
+    }
+
+    // 기간 범위 백업 (Supabase 조회 → 파일 다운로드 + SB 기록 적재)
+    async function backupRange(fromYmd, toYmd, format, source) {
+      const lim=getLimits();
+      const data=await fetchRange(dateToKstStartISO(fromYmd), dateToKstEndISO(toYmd));
+      const label = fromYmd===toYmd ? fromYmd : `${fromYmd}_${toYmd}`;
+      if (!data.length) throw new Error(`${label} 기간 데이터 없음`);
+      const detail=buildRows(data, lim), daily=buildDaily(data, lim);
+      const base=`측정실환경_${label}`;
+      if (format==='csv' || format==='both') exportCsv(detail, base+'.csv');
+      if (format==='xlsx'|| format==='both') exportXlsx(detail, daily, base+'.xlsx');
+      // Supabase 백업기록 적재 (종료일을 backup_date로, 실패해도 파일 백업은 성공 처리)
+      try {
+        const rec=backupSummaryRecord(toYmd, data, lim, source);
+        rec.range_from = fromYmd; rec.range_to = toYmd;
+        await pushBackupLog(rec);
+      } catch(e){ addLog(`Supabase 기록 적재 실패 · ${e.message}`, false); }
+      return data.length;
+    }
+
+    // ============================================================
+    // 백업 로그 / 자동백업 설정
+    // ============================================================
+    function loadSettings() {
+      try { return JSON.parse(localStorage.getItem(LS_SETTINGS)) || {}; } catch { return {}; }
+    }
+    function saveSettings(s) { localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); }
+    function loadLog() { try { return JSON.parse(localStorage.getItem(LS_LOG)) || []; } catch { return []; } }
+    function saveLog(l) { localStorage.setItem(LS_LOG, JSON.stringify(l.slice(0,50))); }
+    function addLog(msg, ok=true) {
+      const log=loadLog();
+      log.unshift({ time:fmtKstFull(new Date().toISOString()), msg, ok });
+      saveLog(log); renderLog();
+    }
+
+    // 공유 사용자 설정 (참고 시스템과 동일 키: P_MONTHLY_V3_SETTINGS)
+    function loadShared() {
+      try { return JSON.parse(localStorage.getItem(LS_SHARED)) || {}; } catch { return {}; }
+    }
+    function saveShared(obj) {
+      const cur=loadShared();
+      localStorage.setItem(LS_SHARED, JSON.stringify(Object.assign(cur, obj)));
+    }
+    function getOperatorName() {
+      const s=loadShared();
+      return s.my_name ? (s.my_dept ? `${s.my_name}/${s.my_dept}` : s.my_name) : '미지정';
+    }
+
+    // 로컬 로그 + Supabase 기록을 합쳐 표시
+    async function renderLog() {
+      const el=document.getElementById('backupLog');
+      const local=loadLog().map(l=>({ time:l.time, ok:l.ok, txt:l.msg, tag:'LOCAL' }));
+      let remote=[];
+      if (sbSyncEnabled()) {
+        try {
+          const rows=await fetchBackupLog(30);
+          remote=rows.map(r=>({
+            time: fmtKstFull(r.created_at),
+            ok: true,
+            txt: `${r.backup_date} 백업 · ${r.row_count}건 (일탈 ${r.over_count}) · ${r.operator||'-'}`,
+            tag: (r.source||'client').toUpperCase(),
+          }));
+        } catch(e){ /* SB 조회 실패 시 로컬만 표시 */ }
+      }
+      const all=remote.concat(local).slice(0,40);
+      if (!all.length){ el.innerHTML='<div>아직 백업 기록이 없습니다.</div>'; return; }
+      el.innerHTML=all.map(l=>
+        `<div class="${l.ok?'ok':'err'}">[${l.time}] <span style="color:var(--text-faint)">${l.tag}</span> ${l.txt}</div>`
+      ).join('');
+    }
+
+    // 자동백업 타이머 (1분마다 시각 비교)
+    let autoTimer=null, lastAutoRun=null;
+    function startAutoTimer() {
+      if (autoTimer) clearInterval(autoTimer);
+      autoTimer=setInterval(checkAutoBackup, 60*1000);
+      checkAutoBackup();
+    }
+    async function checkAutoBackup() {
+      const s=loadSettings();
+      if (!s.autoEnabled) return;
+      const nowHM=new Date().toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false});
+      const todayKey=todayKstISODate();
+      if (nowHM===s.autoTime && lastAutoRun!==todayKey) {
+        lastAutoRun=todayKey;
+        const yesterday=addDaysISO(todayKey, -1);
+        try {
+          const n=await backupDay(yesterday, 'xlsx', 'auto-client');
+          addLog(`자동백업 성공 · ${yesterday} (${n}건)`, true);
+        } catch(err){ addLog(`자동백업 실패 · ${err.message}`, false); }
+      }
+    }
+
+    // ============================================================
+    // UI 바인딩
+    // ============================================================
+    function toast(msg, isErr=false) {
+      const t=document.getElementById('toast');
+      t.textContent=msg; t.classList.toggle('err', isErr); t.classList.add('show');
+      clearTimeout(t._timer); t._timer=setTimeout(()=>t.classList.remove('show'), 2600);
+    }
+
+    // 탭 전환
+    document.querySelectorAll('.tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // 기간 프리셋
+    document.querySelectorAll('[data-range]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const r=btn.dataset.range, today=todayKstISODate();
+        document.getElementById('toDate').value=today;
+        document.getElementById('fromDate').value = r==='today'?today:addDaysISO(today, -(parseInt(r)-1));
+      });
+    });
+    document.getElementById('loadHistory').addEventListener('click', loadHistory);
+
+    // 상세 필터
+    document.getElementById('filterAll').addEventListener('click', ()=>{ detailFilter='all'; renderDetailTable(historyData, getLimits()); });
+    document.getElementById('filterWarn').addEventListener('click', ()=>{ detailFilter='warn'; renderDetailTable(historyData, getLimits()); });
+    document.getElementById('exportHistCsv').addEventListener('click', ()=>{
+      if (!historyData.length){ toast('먼저 조회하세요', true); return; }
+      exportCsv(buildRows(historyData, getLimits()), `측정실환경_이력_${todayKstISODate()}.csv`);
+      addLog(`수동 CSV 내보내기 · ${historyData.length}건`, true);
+    });
+    // 관리한계 변경 시 재판정
+    ['tLow','tHigh','hLow','hHigh'].forEach(id=>
+      document.getElementById(id).addEventListener('change', ()=>{ if (historyData.length) renderHistory(); }));
+
+    // 백업 기간 읽기 + 검증
+    function getBackupRange() {
+      const from=document.getElementById('backupFrom').value || todayKstISODate();
+      const to  =document.getElementById('backupTo').value   || todayKstISODate();
+      if (from>to) return { from:to, to:from };  // 뒤집혀 입력되면 자동 교정
+      return { from, to };
+    }
+    function rangeLabel(r){ return r.from===r.to ? r.from : `${r.from} ~ ${r.to}`; }
+
+    // 백업 기간 프리셋
+    document.querySelectorAll('[data-bkrange]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const r=btn.dataset.bkrange, today=todayKstISODate();
+        document.getElementById('backupTo').value=today;
+        if (r==='today')      document.getElementById('backupFrom').value=today;
+        else if (r==='month') document.getElementById('backupFrom').value=today.slice(0,8)+'01';
+        else                  document.getElementById('backupFrom').value=addDaysISO(today, -(parseInt(r)-1));
+      });
+    });
+
+    // 백업 버튼 (기간 범위)
+    document.getElementById('backupXlsx').addEventListener('click', async ()=>{
+      const r=getBackupRange();
+      try { const n=await backupRange(r.from, r.to, 'xlsx', 'manual'); toast(`Excel 백업 완료 (${n}건)`); addLog(`수동 Excel 백업 · ${rangeLabel(r)} (${n}건)`, true); }
+      catch(err){ toast(err.message, true); addLog(`Excel 백업 실패 · ${err.message}`, false); }
+    });
+    document.getElementById('backupCsv').addEventListener('click', async ()=>{
+      const r=getBackupRange();
+      try { const n=await backupRange(r.from, r.to, 'csv', 'manual'); toast(`CSV 백업 완료 (${n}건)`); addLog(`수동 CSV 백업 · ${rangeLabel(r)} (${n}건)`, true); }
+      catch(err){ toast(err.message, true); addLog(`CSV 백업 실패 · ${err.message}`, false); }
+    });
+
+    // 자동백업 설정 저장
+    function syncAutoSettings() {
+      saveSettings(Object.assign(loadSettings(), {
+        autoEnabled: document.getElementById('autoToggle').checked,
+        autoTime:    document.getElementById('autoTime').value,
+        sbSync:      document.getElementById('sbSyncToggle').checked,
+      }));
+    }
+    document.getElementById('autoToggle').addEventListener('change', e=>{ syncAutoSettings(); toast(e.target.checked?'일일 자동 백업 ON':'자동 백업 OFF'); });
+    document.getElementById('autoTime').addEventListener('change', syncAutoSettings);
+    document.getElementById('sbSyncToggle').addEventListener('change', e=>{ syncAutoSettings(); renderLog(); toast(e.target.checked?'Supabase 동기화 ON':'Supabase 동기화 OFF'); });
+    document.getElementById('clearLog').addEventListener('click', ()=>{ saveLog([]); renderLog(); toast('로컬 로그 비움'); });
+    document.getElementById('refreshLog').addEventListener('click', ()=>{ renderLog(); toast('백업기록 새로고침'); });
+
+    // ----- 설정 탭: 사용자 정보 -----
+    document.getElementById('saveUser').addEventListener('click', ()=>{
+      const name=document.getElementById('setName').value.trim();
+      const dept=document.getElementById('setDept').value.trim();
+      const pin =document.getElementById('setPin').value.trim();
+      if (pin && !/^\d{4,8}$/.test(pin)){ toast('PIN은 4~8자리 숫자입니다', true); return; }
+      saveShared({ my_name:name, my_dept:dept, my_pin:pin });
+      toast('사용자 정보 저장됨');
+    });
+
+    // ----- 설정 탭: 관리한계 -----
+    function applyLimitsToHistory(t1,t2,h1,h2) {
+      document.getElementById('tLow').value=t1;  document.getElementById('tHigh').value=t2;
+      document.getElementById('hLow').value=h1;  document.getElementById('hHigh').value=h2;
+      if (historyData.length) renderHistory();
+    }
+    document.getElementById('saveLimits').addEventListener('click', async ()=>{
+      const t1=+document.getElementById('setTLow').value, t2=+document.getElementById('setTHigh').value;
+      const h1=+document.getElementById('setHLow').value, h2=+document.getElementById('setHHigh').value;
+      if (t1>=t2 || h1>=h2){ toast('하한이 상한보다 작아야 합니다', true); return; }
+      saveSettings(Object.assign(loadSettings(), { tLow:t1, tHigh:t2, hLow:h1, hHigh:h2 }));
+      applyLimitsToHistory(t1,t2,h1,h2);
+      // Supabase env_config 에 upsert (실패해도 로컬 저장은 유지)
+      try {
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/${SB_CONFIG_TABLE}`, {
+          method:'POST',
+          headers: sbHeaders({ 'Prefer':'resolution=merge-duplicates,return=minimal' }),
+          body: JSON.stringify({ id:CONFIG_ID, t_low:t1, t_high:t2, h_low:h1, h_high:h2, updated_at:new Date().toISOString() }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast('관리한계 저장 · Supabase 공유됨');
+      } catch(e){ toast('관리한계 로컬 저장됨 (SB 공유 실패)', false); }
+    });
+    document.getElementById('loadLimitsSb').addEventListener('click', async ()=>{
+      try {
+        const url=`${SUPABASE_URL}/rest/v1/${SB_CONFIG_TABLE}?id=eq.${encodeURIComponent(CONFIG_ID)}&select=*`;
+        const res=await fetch(url, { headers: sbHeaders() });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const rows=await res.json();
+        if (!rows.length){ toast('Supabase에 저장된 설정이 없습니다', true); return; }
+        const c=rows[0];
+        document.getElementById('setTLow').value=c.t_low;  document.getElementById('setTHigh').value=c.t_high;
+        document.getElementById('setHLow').value=c.h_low;  document.getElementById('setHHigh').value=c.h_high;
+        applyLimitsToHistory(c.t_low, c.t_high, c.h_low, c.h_high);
+        toast('Supabase 관리한계 불러옴');
+      } catch(e){ toast('불러오기 실패: '+e.message, true); }
+    });
+
+    // ============================================================
+    // 초기화
+    // ============================================================
+    function init() {
+      const today=todayKstISODate();
+      document.getElementById('toDate').value=today;
+      document.getElementById('fromDate').value=addDaysISO(today,-6);
+      document.getElementById('backupTo').value=today;
+      document.getElementById('backupFrom').value=addDaysISO(today,-6);
+
+      const s=loadSettings();
+      document.getElementById('autoToggle').checked=!!s.autoEnabled;
+      if (s.autoTime)   document.getElementById('autoTime').value=s.autoTime;
+      if (typeof s.sbSync==='boolean') document.getElementById('sbSyncToggle').checked=s.sbSync;
+
+      // 저장된 관리한계 복원 (이력 탭 + 설정 탭 동기화)
+      if (typeof s.tLow==='number') {
+        document.getElementById('tLow').value=s.tLow;   document.getElementById('tHigh').value=s.tHigh;
+        document.getElementById('hLow').value=s.hLow;   document.getElementById('hHigh').value=s.hHigh;
+        document.getElementById('setTLow').value=s.tLow; document.getElementById('setTHigh').value=s.tHigh;
+        document.getElementById('setHLow').value=s.hLow; document.getElementById('setHHigh').value=s.hHigh;
+      }
+      // 공유 사용자 정보 복원
+      const sh=loadShared();
+      if (sh.my_name) document.getElementById('setName').value=sh.my_name;
+      if (sh.my_dept) document.getElementById('setDept').value=sh.my_dept;
+      if (sh.my_pin)  document.getElementById('setPin').value=sh.my_pin;
+
+      renderLog();
+      refresh(); setInterval(refresh, REFRESH_MS);
+      startAutoTimer();
+    }
+    init();
   </script>
 </body>
 </html>
