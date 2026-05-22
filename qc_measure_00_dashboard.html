@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.4</title>
+<title>측정기 종합현황 v1.5</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -194,10 +194,13 @@ function daysBetween(d1, d2){
 }
 
 function todayKST(){
-  // KST 기준 YYYY-MM-DD
+  // 로컬(KST) 기준 YYYY-MM-DD
+  // toISOString()은 UTC라 KST 새벽엔 전날로 밀릴 위험 → 로컬 시간 직접 조립
   const now = new Date();
-  const kst = new Date(now.getTime() + (9*60 - now.getTimezoneOffset()) * 60000);
-  return kst.toISOString().slice(0,10);
+  const y = now.getFullYear();
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const d = String(now.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+d;
 }
 
 function nowKSTISO(){

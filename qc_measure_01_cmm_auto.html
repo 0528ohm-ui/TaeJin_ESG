@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>측정기 일상점검 v2.8</title>
+<title>측정기 일상점검 v2.9</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--accent2:#0ea5e9;--ok:#22c55e;--ok-bg:rgba(34,197,94,.12);--ng:#ef4444;--ng-bg:rgba(239,68,68,.12);--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--radius:12px}
@@ -271,6 +271,16 @@ const PAGE_EQ = (_qsEq && _qsEq.trim()) || EQUIPMENT_FIXED;
 // 본인 깃허브 Pages 기준 URL (파일 이동 시 여기만 수정)
 const BASE_URL = 'https://0528ohm-ui.github.io/TaeJin_ESG/';
 
+// 로컬(KST) 기준 오늘 날짜 YYYY-MM-DD
+// toISOString()은 UTC라 KST 새벽엔 전날로 밀림 → 사용 금지
+function todayKSTLocal(){
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const d = String(now.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+d;
+}
+
 const DEFAULT_CHECKLIST_DB = {
   '3차원측정기(자동)': [
     {label:'본체 외관 청소상태',period:1},{label:'프로브(스타일러스) 손상유무',period:1},{label:'에어공급 압력 정상',period:1},{label:'정반 이물질 제거',period:1},{label:'온도 20±2℃ 유지 확인',period:1},{label:'습도 45~60% 유지 확인',period:1},{label:'각 축 이송 원활동작',period:1},{label:'소프트웨어 정상구동',period:1},{label:'X/Y/Z 각 축 가이드 윤활',period:7},{label:'게이지블록 마스터샘플 검증',period:7},{label:'에어 드라이어 점검',period:7},{label:'구동부 윤활유 점검',period:30},{label:'프로브 교정(Probe Qualification)',period:30},{label:'데이터 백업',period:30},
@@ -512,7 +522,7 @@ function daysBetween(d1, d2){
 async function calcDueMap(){
   _itemDueMap = {};
   _itemLastDate = {};
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayKSTLocal();
 
   // 측정기 별 최근 60건 조회 (3개월 분량 충분)
   let rows = [];
@@ -572,7 +582,7 @@ function renderChecklist(){
     } else {
       // 며칠전인지 표시
       if(lastDt){
-        const today = new Date().toISOString().slice(0,10);
+        const today = todayKSTLocal();
         const d = daysBetween(lastDt, today);
         const lbl = d===0 ? '오늘완료' : (d+'일전');
         stateTag = '<span class="skip-tag">✓ '+lbl+'</span>';
@@ -860,7 +870,7 @@ function downloadXlsx(){
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '점검이력');
-  const today = new Date().toISOString().slice(0,10);
+  const today = todayKSTLocal();
   XLSX.writeFile(wb, CURRENT_EQ+'_점검이력_'+today+'.xlsx');
 }
 window.downloadXlsx = downloadXlsx;
