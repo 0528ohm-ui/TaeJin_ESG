@@ -1,0 +1,31 @@
+<!--
+==================================================================
+  ESG 메인페이지(팀장님 깃허브)에 박을 측정실 점검 카드 스니펫
+  
+  핵심: ESG 메인에서 로그인된 이름(esg_pin_auth)을 읽어
+        ?inspector=이름 으로 대시보드 URL에 붙여서 이동.
+        → 서로 다른 깃허브 도메인이어도 점검자 자동 세팅됨.
+==================================================================
+-->
+
+<!-- 카드 클릭 시 inspector 파라미터 붙여서 이동 (onclick 방식) -->
+<div onclick="(function(){
+  var auth = null;
+  try{ auth = JSON.parse(localStorage.getItem('esg_pin_auth')||'null'); }catch(e){}
+  var name = (auth && auth.name && !(auth.exp && Date.now()>auth.exp)) ? auth.name : '';
+  var url = 'https://0528ohm-ui.github.io/TaeJin_ESG/qc_measure/dashboard.html';
+  if(name) url += '?inspector=' + encodeURIComponent(name);
+  window.open(url, '_blank');
+})()"
+style="display:flex;align-items:center;gap:16px;padding:18px 20px;margin:8px 0;
+       background:#1e293b;border:1px solid #334155;border-radius:12px;
+       cursor:pointer;transition:border-color .15s"
+onmouseover="this.style.borderColor='#38bdf8'"
+onmouseout="this.style.borderColor='#334155'">
+  <span style="font-size:28px">📐</span>
+  <div>
+    <div style="font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:3px">측정실 일상점검</div>
+    <div style="font-size:11px;color:#94a3b8">측정기 12대 · 일간/주간/월간 점검 현황</div>
+  </div>
+  <span style="margin-left:auto;color:#94a3b8;font-size:16px">›</span>
+</div>
