@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>측정기 일상점검 v2.6</title>
+<title>측정기 일상점검 v2.8</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--accent2:#0ea5e9;--ok:#22c55e;--ok-bg:rgba(34,197,94,.12);--ng:#ef4444;--ng-bg:rgba(239,68,68,.12);--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--radius:12px}
@@ -90,6 +90,17 @@
     .check-label{font-size:12px}
     .okng-btn{width:42px;height:32px;font-size:12px}
   }
+/* ---------- 점검자 선택 모달 ---------- */
+.insp-modal-box{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:22px 20px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.insp-modal-title{font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:6px}
+.insp-modal-sub{font-size:12px;color:#94a3b8;margin-bottom:16px}
+.insp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+@media (max-width:380px){.insp-grid{grid-template-columns:repeat(2,1fr)}}
+.insp-btn{padding:13px 6px;background:#0f172a;border:1.5px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;font-weight:600;cursor:pointer;transition:all .12s}
+.insp-btn:hover{border-color:var(--accent);color:var(--accent)}
+.insp-btn:active{transform:scale(.96)}
+.insp-cancel{width:100%;padding:11px;background:transparent;border:1px solid #475569;border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer;margin-top:6px}
+.insp-cancel:hover{border-color:#64748b;color:#cbd5e1}
 </style>
 </head>
 <body>
@@ -122,10 +133,11 @@
         </div>
       </div>
       <div class="fg">
-        <label class="field-label">점검자 <span style="font-size:10px;color:var(--accent);font-weight:600">· ESG 로그인 자동</span></label>
-        <div id="inspectorDisplay" style="padding:11px 14px;background:rgba(56,189,248,.08);border:1.5px solid rgba(56,189,248,.3);border-radius:8px;font-size:14px;font-weight:700;color:var(--accent);min-height:44px;display:flex;align-items:center;gap:6px">
+        <label class="field-label">점검자 <span style="font-size:10px;color:var(--accent);font-weight:600">· 클릭하여 변경</span></label>
+        <div id="inspectorDisplay" onclick="openInspectorModal(true)" style="padding:11px 14px;background:rgba(56,189,248,.08);border:1.5px solid rgba(56,189,248,.3);border-radius:8px;font-size:14px;font-weight:700;color:var(--accent);min-height:44px;display:flex;align-items:center;gap:6px;cursor:pointer">
           <span style="font-size:18px">👤</span>
-          <span id="inspectorName">로그인 필요</span>
+          <span id="inspectorName">선택 필요</span>
+          <span style="margin-left:auto;font-size:11px;color:#94a3b8;font-weight:500">▼</span>
         </div>
         <input type="hidden" id="inspector" name="inspector" required>
       </div>
@@ -298,6 +310,10 @@ const DEFAULT_CHECKLIST_DB = {
   ],
 };
 
+// 점검자 명단 — user_pin 테이블에서 품질관리팀 자동 로드 (loadInspectors)
+// 아래 5명은 DB 연결 실패 시 폴백
+let INSPECTORS = ['강병주','김상기','허미정','오현민','문수진'];
+
 const SB_URL = 'https://trhjeongphtendkounig.supabase.co';
 const SB_KEY = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
 const SB_HEADERS = {'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
@@ -331,18 +347,42 @@ function getEsgAuth(){
   }catch(e){ return null; }
 }
 function applyLogin(){
-  // 로그인 우선순위:
-  // 1) URL ?inspector=이름 (다른 origin ESG 메인에서 파라미터로 전달받은 경우)
-  // 2) localStorage esg_inspector_name (파라미터로 한 번 받은 뒤 세션 유지)
-  // 3) localStorage esg_pin_auth (같은 origin ESG 메인에서 자동 인계되는 경우)
-  const urlName = new URLSearchParams(location.search).get('inspector');
-  if(urlName){
-    try{ localStorage.setItem('esg_inspector_name', urlName); }catch(e){}
-  }
-  const savedName = (() => { try{ return localStorage.getItem('esg_inspector_name')||''; }catch(e){ return ''; } })();
-  const auth = getEsgAuth();
-  const name = urlName || savedName || (auth ? auth.name : '');
+  // 로그인 폴백 체인 (팀장님 페이지와 키 호환):
+  // 1) URL 파라미터 inspector|user|worker|name
+  // 2) localStorage esg_pin_auth (같은 origin ESG 메인일 때)
+  // 3) localStorage QC_LAST_INSPECTOR (팀장님 검사기점검 등에서 저장)
+  // 4) localStorage mes_last_worker
+  // 5) localStorage esg_inspector_name (자체 키)
+  const sp = new URLSearchParams(location.search);
+  const urlName = sp.get('inspector') || sp.get('user') || sp.get('worker') || sp.get('name') || '';
 
+  let name = urlName;
+  if(!name){
+    const auth = getEsgAuth();
+    if(auth) name = auth.name;
+  }
+  if(!name){ try{ name = localStorage.getItem('QC_LAST_INSPECTOR')||''; }catch(e){} }
+  if(!name){ try{ name = localStorage.getItem('mes_last_worker')||''; }catch(e){} }
+  if(!name){ try{ name = localStorage.getItem('esg_inspector_name')||''; }catch(e){} }
+
+  // 받은 이름은 디바이스에 저장 (다음 진입 시 자동 인계)
+  if(name){
+    try{
+      localStorage.setItem('QC_LAST_INSPECTOR', name);
+      localStorage.setItem('esg_inspector_name', name);
+    }catch(e){}
+  }
+
+  setInspectorUI(name);
+
+  // 점검자 정보 없으면 자동으로 선택 모달 표시 (강제 선택)
+  if(!name){
+    setTimeout(function(){ openInspectorModal(false); }, 200);
+  }
+}
+
+// 헤더의 점검자 UI 갱신
+function setInspectorUI(name){
   const nameEl = document.getElementById('inspectorName');
   const hidEl = document.getElementById('inspector');
   const badge = document.getElementById('hdrUserBadge');
@@ -350,18 +390,53 @@ function applyLogin(){
   if(name){
     nameEl.textContent = name;
     hidEl.value = name;
-    badge.style.display = 'inline-block';
-    badge.textContent = '👤 '+name;
-    btn.disabled = false;
+    if(badge){ badge.style.display = 'inline-block'; badge.textContent = '👤 '+name; }
+    if(btn) btn.disabled = false;
   } else {
-    nameEl.textContent = 'ESG 메인 시스템 로그인 필요';
+    nameEl.textContent = '선택 필요';
     hidEl.value = '';
-    badge.style.display = 'none';
-    btn.disabled = true;
+    if(badge) badge.style.display = 'none';
+    if(btn) btn.disabled = true;
   }
 }
+
+// 점검자 선택 모달 열기 (allowCancel=true: 변경용·취소가능 / false: 강제선택)
+function openInspectorModal(allowCancel){
+  const cur = document.getElementById('inspector').value;
+  const buttons = INSPECTORS.map(function(n){
+    const sel = (n === cur) ? 'background:var(--accent);color:#0f172a;border-color:var(--accent)' : '';
+    return '<button type="button" class="insp-btn" style="'+sel+'" onclick="selectInspector(\''+n+'\')">'+n+'</button>';
+  }).join('');
+  const cancel = allowCancel ? '<button type="button" class="insp-cancel" onclick="closeInspectorModal()">취소</button>' : '';
+  document.getElementById('inspectorModal').innerHTML =
+    '<div class="insp-modal-box">' +
+      '<div class="insp-modal-title">👤 점검자 선택</div>' +
+      '<div class="insp-modal-sub">' + (allowCancel?'다른 검사자로 변경합니다':'점검을 시작하려면 검사자를 선택하세요') + '</div>' +
+      '<div class="insp-grid">' + buttons + '</div>' +
+      cancel +
+    '</div>';
+  document.getElementById('inspectorModal').style.display = 'flex';
+}
+
+function closeInspectorModal(){
+  document.getElementById('inspectorModal').style.display = 'none';
+}
+
+// 검사자 선택 시 호출 → localStorage 저장 + UI 갱신
+function selectInspector(name){
+  try{
+    localStorage.setItem('QC_LAST_INSPECTOR', name);
+    localStorage.setItem('esg_inspector_name', name);
+  }catch(e){}
+  setInspectorUI(name);
+  closeInspectorModal();
+}
+
+window.openInspectorModal = openInspectorModal;
+window.closeInspectorModal = closeInspectorModal;
+window.selectInspector = selectInspector;
 window.addEventListener('storage', (e)=>{
-  if(e.key === 'esg_pin_auth' || e.key === 'esg_inspector_name') applyLogin();
+  if(e.key === 'esg_pin_auth' || e.key === 'QC_LAST_INSPECTOR' || e.key === 'esg_inspector_name') applyLogin();
 });
 
 async function sbInsert(table, row){
@@ -828,12 +903,47 @@ function initDateTime(){
   document.getElementById('checkTime').value = hh+':'+mm;
 }
 
+// user_pin 테이블에서 품질관리팀 명단 동적 로드
+// dept='품질관리팀' 또는 PIN 첫자리 '4' (자동 매핑) 인 사람만 필터링
+// 실패 시 위의 INSPECTORS 폴백 명단으로 동작
+async function loadInspectorsFromDB(){
+  try{
+    const url = SB_URL + '/rest/v1/user_pin?select=name,pin_plain,dept&order=name.asc';
+    const res = await fetch(url, {headers: SB_HEADERS});
+    if(!res.ok) return;
+    const data = await res.json();
+    if(!Array.isArray(data) || data.length === 0) return;
+    const qcMembers = data.filter(function(r){
+      const dept = (r.dept || '').trim();
+      if(dept === '품질관리팀') return true;
+      if(!dept && r.pin_plain && String(r.pin_plain).charAt(0) === '4') return true;
+      return false;
+    });
+    const names = qcMembers
+      .map(function(r){ return String(r.name||'').trim(); })
+      .filter(function(n){ return n; });
+    if(names.length){
+      INSPECTORS = names;
+      // 모달이 이미 열려있으면 다시 렌더링 (취소 가능 여부 유지)
+      const modal = document.getElementById('inspectorModal');
+      if(modal && modal.style.display === 'flex'){
+        const wasCancelable = modal.querySelector('.insp-cancel') !== null;
+        openInspectorModal(wasCancelable);
+      }
+    }
+  }catch(e){
+    console.warn('user_pin 조회 실패 → 폴백 명단 사용', e);
+  }
+}
+
 window.addEventListener('DOMContentLoaded', async function(){
   document.title = '📐 '+CURRENT_EQ+' 일상점검';
   document.getElementById('hdrTitle').textContent = '📐 '+CURRENT_EQ+' 일상점검';
   document.getElementById('cfgSbUrl').textContent = SB_URL;
   document.getElementById('cfgSbKey').textContent = SB_KEY.length > 20 ? SB_KEY.slice(0,20)+'...'+SB_KEY.slice(-6) : SB_KEY;
   initDateTime();
+  // user_pin 조회는 비동기로 시작 (응답 기다리지 않고 폴백 명단으로 즉시 모달 가능)
+  loadInspectorsFromDB();
   applyLogin();
 
   const loaded = await loadItemsFromServer();
@@ -843,6 +953,9 @@ window.addEventListener('DOMContentLoaded', async function(){
   renderChecklist();
 });
 </script>
+
+<!-- 점검자 선택 모달 -->
+<div id="inspectorModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center;padding:16px"></div>
 
 </body>
 </html>
