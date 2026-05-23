@@ -12,6 +12,8 @@
 
   <!-- 차트 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- 관리한계 가로줄용 annotation 플러그인 -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <!-- Excel 백업용 -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -287,7 +289,7 @@
         <span class="title-sub">QC · 측정실</span>
         <span class="title">환경 모니터링 · 이력관리</span>
       </div>
-      <span class="version">v0.2</span>
+      <span class="version">v0.2.1</span>
     </header>
 
     <!-- 상태 표시줄 -->
@@ -402,7 +404,7 @@
       <!-- 상세 이력 (일탈/누락 표시) -->
       <div class="panel">
         <div class="panel-header">
-          <span class="panel-title">상세 이력 (일탈 · 측정누락 표시)</span>
+          <span class="panel-title">상세 이력 (일탈 표시)</span>
           <span class="panel-meta">
             <button class="btn ghost" id="filterAll">전체</button>
             <button class="btn ghost" id="filterWarn">일탈만</button>
@@ -660,16 +662,35 @@
       const labels = data.map(d => fmtKstHM(d.measured_at));
       const temps  = data.map(d => d.temp);
       const humis  = data.map(d => d.humi);
+      const lim    = getLimits();
       if (chart) {
         chart.data.labels = labels;
         chart.data.datasets[0].data = temps;
         chart.data.datasets[1].data = humis;
+        // 관리한계 가로선 동기화
+        updateLimitLines(chart, lim);
         chart.update('none'); return;
       }
-      chart = makeDualChart('todayChart', labels, temps, humis);
+      chart = makeDualChart('todayChart', labels, temps, humis, lim);
     }
-    function makeDualChart(canvasId, labels, temps, humis) {
+    // 차트의 관리한계 가로선 위치 갱신 (annotation 직접 수정)
+    function updateLimitLines(c, lim) {
+      const ann = c.options.plugins.annotation && c.options.plugins.annotation.annotations;
+      if (!ann) return;
+      ann.tHigh.yMin = ann.tHigh.yMax = lim.tHigh;
+      ann.tLow.yMin  = ann.tLow.yMax  = lim.tLow;
+      ann.hHigh.yMin = ann.hHigh.yMax = lim.hHigh;
+      ann.hLow.yMin  = ann.hLow.yMax  = lim.hLow;
+    }
+    function makeDualChart(canvasId, labels, temps, humis, lim) {
       const ctx = document.getElementById(canvasId).getContext('2d');
+      // 관리한계 가로선 (온도=주황, 습도=시안, 점선)
+      const limitAnnotations = lim ? {
+        tHigh: { type:'line', yScaleID:'y',  yMin:lim.tHigh, yMax:lim.tHigh, borderColor:'rgba(245,158,11,0.55)', borderWidth:1.5, borderDash:[5,4] },
+        tLow:  { type:'line', yScaleID:'y',  yMin:lim.tLow,  yMax:lim.tLow,  borderColor:'rgba(245,158,11,0.55)', borderWidth:1.5, borderDash:[5,4] },
+        hHigh: { type:'line', yScaleID:'y1', yMin:lim.hHigh, yMax:lim.hHigh, borderColor:'rgba(6,182,212,0.55)',  borderWidth:1.5, borderDash:[5,4] },
+        hLow:  { type:'line', yScaleID:'y1', yMin:lim.hLow,  yMax:lim.hLow,  borderColor:'rgba(6,182,212,0.55)',  borderWidth:1.5, borderDash:[5,4] }
+      } : {};
       return new Chart(ctx, {
         type: 'line',
         data: { labels, datasets: [
@@ -682,7 +703,8 @@
           plugins:{
             legend:{ labels:{ color:'#94a3b8', font:{family:'JetBrains Mono, monospace', size:11}, boxWidth:12 } },
             tooltip:{ backgroundColor:'#1a2028', borderColor:'#2a3340', borderWidth:1, titleColor:'#e2e8f0', bodyColor:'#e2e8f0',
-                      titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:12} }
+                      titleFont:{family:'JetBrains Mono', size:11}, bodyFont:{family:'JetBrains Mono', size:12} },
+            annotation: { annotations: limitAnnotations }
           },
           scales:{
             y:{ type:'linear', position:'left', title:{display:true,text:'°C',color:'#f59e0b',font:{family:'JetBrains Mono',size:10}}, ticks:{color:'#94a3b8',font:{family:'JetBrains Mono',size:10}}, grid:{color:'rgba(255,255,255,0.04)'} },
@@ -768,7 +790,7 @@
       document.getElementById('histChartMeta').textContent=data.length+' 측정';
       const ctx=document.getElementById('histChart').getContext('2d');
       if (histChart) histChart.destroy();
-      histChart = makeDualChart('histChart', labels, temps, humis);
+      histChart = makeDualChart('histChart', labels, temps, humis, lim);
 
       renderDailyTable(data, lim);
       renderDetailTable(data, lim);
@@ -805,19 +827,9 @@
     function renderDetailTable(data, lim) {
       const tbody=document.querySelector('#detailTable tbody');
       if (data.length===0){ tbody.innerHTML='<tr><td colspan="5" class="empty">데이터 없음</td></tr>'; return; }
+      // 측정누락 표시는 제거 (매일 00시 cron으로 3개 외 자동 삭제되는 운영 특성상 누락이 아닌 정상 동작)
       const rows=[];
-      let prev=null;
       data.forEach(d=>{
-        // 측정누락 구간 표시
-        if (prev) {
-          const gap=(new Date(d.measured_at)-new Date(prev.measured_at))/60000;
-          if (gap>GAP_MIN) {
-            rows.push({ warn:true, html:`<tr class="row-warn">
-              <td colspan="2">${fmtKstFull(prev.measured_at)} ~ ${fmtKstHMS(d.measured_at)}</td>
-              <td></td><td><span class="badge gap">측정누락</span></td>
-              <td>약 ${Math.round(gap)}분 간 데이터 없음</td></tr>` });
-          }
-        }
         const j=judge(d,lim);
         const warn=j.type!=='ok';
         const badge = j.type==='ok'?'<span class="badge ok">정상</span>'
@@ -829,7 +841,6 @@
           <td class="h-val">${d.humi.toFixed(1)}</td>
           <td>${badge}</td>
           <td style="color:var(--text-faint)">${warn?j.note:''}</td></tr>` });
-        prev=d;
       });
       const filtered = detailFilter==='warn' ? rows.filter(r=>r.warn) : rows;
       tbody.innerHTML = filtered.length ? filtered.map(r=>r.html).join('') : '<tr><td colspan="5" class="empty">해당 항목 없음</td></tr>';
@@ -1055,9 +1066,12 @@
       exportCsv(buildRows(historyData, getLimits()), `측정실환경_이력_${todayKstISODate()}.csv`);
       addLog(`수동 CSV 내보내기 · ${historyData.length}건`, true);
     });
-    // 관리한계 변경 시 재판정
+    // 관리한계 변경 시 재판정 + 실시간 차트 가로선 즉시 갱신
     ['tLow','tHigh','hLow','hHigh'].forEach(id=>
-      document.getElementById(id).addEventListener('change', ()=>{ if (historyData.length) renderHistory(); }));
+      document.getElementById(id).addEventListener('change', ()=>{
+        if (chart) { updateLimitLines(chart, getLimits()); chart.update('none'); }
+        if (historyData.length) renderHistory();
+      }));
 
     // 백업 기간 읽기 + 검증
     function getBackupRange() {
@@ -1119,6 +1133,8 @@
     function applyLimitsToHistory(t1,t2,h1,h2) {
       document.getElementById('tLow').value=t1;  document.getElementById('tHigh').value=t2;
       document.getElementById('hLow').value=h1;  document.getElementById('hHigh').value=h2;
+      // 실시간 차트 가로선도 즉시 동기화
+      if (chart) { updateLimitLines(chart, { tLow:t1, tHigh:t2, hLow:h1, hHigh:h2 }); chart.update('none'); }
       if (historyData.length) renderHistory();
     }
     document.getElementById('saveLimits').addEventListener('click', async ()=>{
