@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.7</title>
+<title>측정기 종합현황 v1.8</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -483,7 +483,7 @@ async function askBulk(period){
         '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.12);border-left:3px solid #f59e0b;border-radius:4px;font-size:12px;line-height:1.6">' +
         '⚠ 빠진 평일 <b>'+backfillDays.length+'일</b> 자동 채움<br>' +
         '<span style="color:var(--text2);font-size:11px">'+dl+'</span><br>' +
-        '<span style="color:var(--text3);font-size:10px">(시간 랜덤: 08:30~12:00 또는 13:30~16:30 / 점검자: '+getCurrentInspector()+')</span>' +
+        '<span style="color:var(--text3);font-size:10px">· 각 평일에 일간 항목 OK · 각 주 마지막 평일에 주간 / 각 달 마지막 평일에 월간 항목도 함께 OK<br>· 시간 랜덤 (08:30~12:00 또는 13:30~16:30) · 점검자: '+getCurrentInspector()+'</span>' +
         '</div>';
     }
   }
@@ -591,28 +591,54 @@ async function getRecentBulkDate(){
   }catch(e){ return null; }
 }
 
-// 백필 전용 INSERT (특정 날짜/시간/측정기에 일간 항목 OK row 새로 생성)
-async function insertBackfillLog(eqName, date, time, dailyItems, inspector){
-  const okItems = {};
-  dailyItems.forEach(it => { okItems[it.label] = 'OK'; });
-  const payload = {
-    check_date: date,
-    check_time: time,
-    inspector: inspector,
-    equipment: eqName,
-    items_json: okItems,
-    ng_count: 0,
-    result: 'OK',
-    memo: '(자동 채움)'
-  };
-  const r = await fetch(SB_URL + '/rest/v1/qc_measure_log', {
-    method: 'POST',
-    headers: SB_HEADERS_POST,
-    body: JSON.stringify(payload)
+// 백필 INSERT/PATCH (특정 날짜에 일간 + 옵션으로 주간/월간 항목 추가)
+// 같은 (eq, date) row가 이미 있으면 items_json merge로 PATCH, 없으면 POST
+async function backfillEqLog(eqName, date, time, items, inspector, includeWeekly, includeMonthly){
+  const itemsJson = {};
+  items.forEach(it => {
+    const p = Number(it.period);
+    if(p === 1) itemsJson[it.label] = 'OK';
+    else if(p === 7 && includeWeekly) itemsJson[it.label] = 'OK';
+    else if(p === 30 && includeMonthly) itemsJson[it.label] = 'OK';
   });
-  if(!r.ok){
-    const t = await r.text();
-    throw new Error('백필 INSERT 실패 HTTP '+r.status+' '+t);
+  if(Object.keys(itemsJson).length === 0) return;
+
+  // 기존 row 확인
+  const qUrl = SB_URL + '/rest/v1/qc_measure_log?select=id,items_json&equipment=eq.' +
+               encodeURIComponent(eqName) + '&check_date=eq.' + date + '&limit=1';
+  const qr = await fetch(qUrl, {headers: SB_HEADERS});
+  if(!qr.ok) throw new Error('백필 조회실패 HTTP '+qr.status);
+  const exist = await qr.json();
+
+  if(exist && exist.length > 0){
+    // 기존 row와 merge → PATCH
+    const cur = exist[0].items_json || {};
+    const merged = Object.assign({}, cur, itemsJson);
+    const ng = Object.values(merged).filter(v => v === 'NG').length;
+    const pr = await fetch(SB_URL + '/rest/v1/qc_measure_log?id=eq.' + exist[0].id, {
+      method: 'PATCH',
+      headers: SB_HEADERS_POST,
+      body: JSON.stringify({ items_json: merged, ng_count: ng, result: ng > 0 ? 'NG' : 'OK' })
+    });
+    if(!pr.ok){ const t = await pr.text(); throw new Error('백필 PATCH 실패 '+pr.status+' '+t); }
+  } else {
+    // 신규 row → POST
+    const payload = {
+      check_date: date,
+      check_time: time,
+      inspector: inspector,
+      equipment: eqName,
+      items_json: itemsJson,
+      ng_count: 0,
+      result: 'OK',
+      memo: '(자동 채움)'
+    };
+    const pr = await fetch(SB_URL + '/rest/v1/qc_measure_log', {
+      method: 'POST',
+      headers: SB_HEADERS_POST,
+      body: JSON.stringify(payload)
+    });
+    if(!pr.ok){ const t = await pr.text(); throw new Error('백필 POST 실패 '+pr.status+' '+t); }
   }
 }
 
@@ -695,11 +721,30 @@ async function runBulk(period, backfillDays){
   let backfillOk = 0, backfillFail = 0;
   const errors = [];
 
-  // 1) 백필 먼저 (일간만 해당) — 날짜별로 같은 시간, 날짜끼리는 다른 시간
+  // 1) 백필 먼저 (일간 버튼에서만 트리거)
+  //    날짜별 동일 시간(이날 모든 측정기 공통), 날짜끼리는 다른 시간
+  //    각 주의 마지막 백필 평일에 주간 항목도 함께, 각 달의 마지막 평일에 월간 항목도 함께 merge
+  let weeklyBackfillCount = 0, monthlyBackfillCount = 0;
   if(period === 1 && backfillDays.length > 0){
     const inspector = getCurrentInspector();
+
+    // 각 주(monday) / 각 달(YYYY-MM)의 마지막 백필 평일 찾기
+    const weekLastDay = {};   // mondayOf(date) → 그 주에서 가장 늦은 백필 평일
+    const monthLastDay = {};  // YYYY-MM → 그 달에서 가장 늦은 백필 평일
+    backfillDays.forEach(d => {
+      const wk = mondayOf(d);
+      const mn = d.slice(0,7);
+      if(!weekLastDay[wk] || weekLastDay[wk] < d) weekLastDay[wk] = d;
+      if(!monthLastDay[mn] || monthLastDay[mn] < d) monthLastDay[mn] = d;
+    });
+
     for(const date of backfillDays){
-      const time = randomWorkTime();   // 이 날짜에 모든 측정기 동일 시간
+      const time = randomWorkTime();
+      const wk = mondayOf(date);
+      const mn = date.slice(0,7);
+      const includeWeekly  = (weekLastDay[wk] === date);
+      const includeMonthly = (monthLastDay[mn] === date);
+
       for(let i=0; i<EQUIPMENTS.length; i++){
         const eq = EQUIPMENTS[i];
         const cached = __allStatusCache[i];
@@ -707,16 +752,17 @@ async function runBulk(period, backfillDays){
         if(!items || items.length===0){
           try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
         }
-        const dailyItems = items.filter(it => Number(it.period) === 1);
-        if(dailyItems.length === 0) continue;
+        if(!items || items.length === 0) continue;
         try{
-          await insertBackfillLog(eq.name, date, time, dailyItems, inspector);
+          await backfillEqLog(eq.name, date, time, items, inspector, includeWeekly, includeMonthly);
           backfillOk++;
         }catch(e){
           backfillFail++;
           console.error('백필 실패', eq.name, date, e);
         }
       }
+      if(includeWeekly) weeklyBackfillCount++;
+      if(includeMonthly) monthlyBackfillCount++;
     }
   }
 
@@ -749,7 +795,11 @@ async function runBulk(period, backfillDays){
 
   let msg = '✅ '+periodLabel(period)+' 일괄 OK: '+okEq+'대 / '+totalItems+'개 항목';
   if(backfillDays.length > 0){
-    msg += ' · 백필 '+backfillDays.length+'일 ('+backfillOk+'건 성공' + (backfillFail>0 ? ' / '+backfillFail+'건 실패' : '') + ')';
+    msg += ' · 백필 '+backfillDays.length+'일 ('+backfillOk+'건';
+    if(weeklyBackfillCount > 0) msg += ' · 주간 '+weeklyBackfillCount+'주';
+    if(monthlyBackfillCount > 0) msg += ' · 월간 '+monthlyBackfillCount+'달';
+    if(backfillFail > 0) msg += ' / 실패 '+backfillFail;
+    msg += ')';
   }
   if(errors.length > 0){
     showToast(msg + ' · 일부 실패 '+errors.length+'대 (콘솔 확인)', 'error');
