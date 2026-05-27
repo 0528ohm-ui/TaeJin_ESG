@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>측정기 일상점검 v2.9</title>
+<title>측정기 일상점검 v3.0</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--accent2:#0ea5e9;--ok:#22c55e;--ok-bg:rgba(34,197,94,.12);--ng:#ef4444;--ng-bg:rgba(239,68,68,.12);--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--radius:12px}
@@ -281,6 +281,21 @@ function todayKSTLocal(){
   return y+'-'+m+'-'+d;
 }
 
+// YYYY-MM-DD 입력 → 그 날이 속한 주의 월요일 YYYY-MM-DD 반환 (ISO 주)
+function mondayOf(ymd){
+  const parts = String(ymd).split('-').map(Number);
+  const dt = new Date(parts[0], parts[1]-1, parts[2]);
+  const day = dt.getDay();                // 0=일,1=월,...,6=토
+  const offset = (day === 0) ? -6 : (1 - day);
+  dt.setDate(dt.getDate() + offset);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  const dd = String(dt.getDate()).padStart(2,'0');
+  return yy+'-'+mm+'-'+dd;
+}
+function sameWeek(d1, d2){ return mondayOf(d1) === mondayOf(d2); }
+function sameMonth(d1, d2){ return String(d1).slice(0,7) === String(d2).slice(0,7); }
+
 const DEFAULT_CHECKLIST_DB = {
   '3차원측정기(자동)': [
     {label:'본체 외관 청소상태',period:1},{label:'프로브(스타일러스) 손상유무',period:1},{label:'에어공급 압력 정상',period:1},{label:'정반 이물질 제거',period:1},{label:'온도 20±2℃ 유지 확인',period:1},{label:'습도 45~60% 유지 확인',period:1},{label:'각 축 이송 원활동작',period:1},{label:'소프트웨어 정상구동',period:1},{label:'X/Y/Z 각 축 가이드 윤활',period:7},{label:'게이지블록 마스터샘플 검증',period:7},{label:'에어 드라이어 점검',period:7},{label:'구동부 윤활유 점검',period:30},{label:'프로브 교정(Probe Qualification)',period:30},{label:'데이터 백업',period:30},
@@ -550,15 +565,17 @@ async function calcDueMap(){
     }
     _itemLastDate[it.label] = last;
 
-    // 도래 판정
+    // 도래 판정 (캘린더 기준)
+    // 일간: 날짜가 다르면 도래
+    // 주간: 점검한 주(월~일)와 오늘 주가 다르면 도래
+    // 월간: 점검한 달과 오늘 달이 다르면 도래
     let due;
     if(!last){
       due = true;
     } else {
-      const diff = daysBetween(last, today);
-      if(it.period === 1)      due = diff >= 1;
-      else if(it.period === 7) due = diff >= 7;
-      else                     due = diff >= 30;
+      if(it.period === 1)       due = last !== today;
+      else if(it.period === 7)  due = !sameWeek(last, today);
+      else                      due = !sameMonth(last, today);
     }
     _itemDueMap[it.key] = due;
   }

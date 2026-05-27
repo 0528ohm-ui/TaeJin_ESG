@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.5</title>
+<title>측정기 종합현황 v1.7</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -217,24 +217,47 @@ function nowKSTISO(){
   return `${y}-${m}-${d}T${hh}:${mm}:${ss}+09:00`;
 }
 
+// YYYY-MM-DD 입력 → 그 날이 속한 주의 월요일 YYYY-MM-DD 반환
+function mondayOf(ymd){
+  const parts = String(ymd).split('-').map(Number);
+  const dt = new Date(parts[0], parts[1]-1, parts[2]);
+  const day = dt.getDay();
+  const offset = (day === 0) ? -6 : (1 - day);
+  dt.setDate(dt.getDate() + offset);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth()+1).padStart(2,'0');
+  const dd = String(dt.getDate()).padStart(2,'0');
+  return yy+'-'+mm+'-'+dd;
+}
+function sameWeek(d1, d2){ return mondayOf(d1) === mondayOf(d2); }
+function sameMonth(d1, d2){ return String(d1).slice(0,7) === String(d2).slice(0,7); }
+function weeksBetween(d1, d2){ return Math.floor(daysBetween(mondayOf(d1), mondayOf(d2)) / 7); }
+function monthsBetween(d1, d2){
+  const a = String(d1).split('-').map(Number), b = String(d2).split('-').map(Number);
+  return (b[0]-a[0])*12 + (b[1]-a[1]);
+}
+
 function cellStatus(period, lastDate, today){
+  // 도래 판정 (캘린더 기준)
+  // 일간: 날짜 다르면 due, 2일 이상이면 overdue
+  // 주간: 같은 주 안이면 ok, 1주 차이면 due, 2주 이상이면 overdue
+  // 월간: 같은 달 안이면 ok, 1달 차이면 due, 2달 이상이면 overdue
   if(!lastDate) return 'never';
+  if(lastDate === today) return 'ok';
   const diff = daysBetween(lastDate, today);
-  if(diff === 0) return 'ok';
   if(period === 1){
     if(diff >= 2) return 'overdue';
-    if(diff >= 1) return 'due';
-    return 'ok';
+    return 'due';
   }
   if(period === 7){
-    if(diff > 7) return 'overdue';
-    if(diff >= 7) return 'due';
-    return 'ok';
+    if(sameWeek(lastDate, today)) return 'ok';
+    if(weeksBetween(lastDate, today) >= 2) return 'overdue';
+    return 'due';
   }
   if(period === 30){
-    if(diff > 30) return 'overdue';
-    if(diff >= 30) return 'due';
-    return 'ok';
+    if(sameMonth(lastDate, today)) return 'ok';
+    if(monthsBetween(lastDate, today) >= 2) return 'overdue';
+    return 'due';
   }
   return 'ok';
 }
@@ -427,7 +450,7 @@ function periodLabel(p){
   return ''+p;
 }
 
-function askBulk(period){
+async function askBulk(period){
   // 해당 주기에 항목이 있는 측정기 개수 카운트
   let eqCount = 0, itemCount = 0;
   EQUIPMENTS.forEach((eq, i)=>{
@@ -441,14 +464,39 @@ function askBulk(period){
     return;
   }
 
+  // 일간일 때만 백필(빠진 평일) 자동 채움 안내
+  let backfillDays = [];
+  let backfillNote = '';
+  if(period === 1){
+    const recent = await getRecentBulkDate();
+    const today = todayKST();
+    if(recent && recent < today){
+      backfillDays = missingWeekdays(recent, today);
+    }
+    if(backfillDays.length > 0){
+      const dl = backfillDays.map(d => {
+        const dd = new Date(d.split('-')[0], parseInt(d.split('-')[1])-1, d.split('-')[2]);
+        const w = ['일','월','화','수','목','금','토'][dd.getDay()];
+        return d+'('+w+')';
+      }).join(', ');
+      backfillNote =
+        '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.12);border-left:3px solid #f59e0b;border-radius:4px;font-size:12px;line-height:1.6">' +
+        '⚠ 빠진 평일 <b>'+backfillDays.length+'일</b> 자동 채움<br>' +
+        '<span style="color:var(--text2);font-size:11px">'+dl+'</span><br>' +
+        '<span style="color:var(--text3);font-size:10px">(시간 랜덤: 08:30~12:00 또는 13:30~16:30 / 점검자: '+getCurrentInspector()+')</span>' +
+        '</div>';
+    }
+  }
+
   const body =
     '<b>'+periodLabel(period)+'</b> 점검을 일괄 완료 처리합니다.<br><br>' +
     '· 대상 측정기: <b>'+eqCount+'대</b><br>' +
     '· 대상 항목: <b>'+itemCount+'개</b> (모두 OK 판정)<br>' +
-    '· 점검일: <b>'+todayKST()+'</b><br><br>' +
-    '실행하시겠습니까?';
+    '· 점검일: <b>'+todayKST()+'</b>' +
+    backfillNote +
+    '<br><br>실행하시겠습니까?';
 
-  openModal('일괄 점검완료 확인', body, ()=>runBulk(period));
+  openModal('일괄 점검완료 확인', body, ()=>runBulk(period, backfillDays));
 }
 window.askBulk = askBulk;
 
@@ -469,6 +517,103 @@ function nowKSTTime(){
   const mm = String(now.getMinutes()).padStart(2,'0');
   const ss = String(now.getSeconds()).padStart(2,'0');
   return hh+':'+mm+':'+ss;
+}
+
+// ===== 백필 (빠진 평일 자동 채우기) 관련 헬퍼 =====
+
+// 현재 검사자 (URL 파라미터 > localStorage > esg_pin_auth > 일괄완료)
+function getCurrentInspector(){
+  const sp = new URLSearchParams(location.search);
+  const urlName = sp.get('inspector') || sp.get('user') || sp.get('worker') || sp.get('name');
+  if(urlName) return urlName.trim();
+  try{ const n = localStorage.getItem('QC_LAST_INSPECTOR'); if(n) return n; }catch(e){}
+  try{ const n = localStorage.getItem('esg_inspector_name'); if(n) return n; }catch(e){}
+  const auth = getEsgAuth();
+  if(auth) return auth.name;
+  return '일괄완료';
+}
+
+// 평일 여부 (월=1 ~ 금=5)
+function isWeekday(ymd){
+  const p = String(ymd).split('-').map(Number);
+  const day = new Date(p[0], p[1]-1, p[2]).getDay();
+  return day >= 1 && day <= 5;
+}
+
+// fromYmd 다음날부터 toYmd 전날까지의 평일 목록
+function missingWeekdays(fromYmd, toYmd){
+  const result = [];
+  if(!fromYmd || !toYmd) return result;
+  const p1 = String(fromYmd).split('-').map(Number);
+  const p2 = String(toYmd).split('-').map(Number);
+  const cur = new Date(p1[0], p1[1]-1, p1[2]);
+  cur.setDate(cur.getDate() + 1);                  // 시작일 다음날부터
+  const end = new Date(p2[0], p2[1]-1, p2[2]);     // 종료일 미포함
+  let safety = 0;
+  while(cur < end && safety++ < 400){              // 안전 가드 400일
+    const day = cur.getDay();
+    if(day >= 1 && day <= 5){
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth()+1).padStart(2,'0');
+      const d = String(cur.getDate()).padStart(2,'0');
+      result.push(y+'-'+m+'-'+d);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+}
+
+// 근무시간 내 랜덤 시각 (08:30~12:00 또는 13:30~16:30)
+function randomWorkTime(){
+  const isAm = Math.random() < 0.5;
+  let totalMin;
+  if(isAm){
+    // 510분(08:30) ~ 720분(12:00)
+    totalMin = 510 + Math.floor(Math.random() * 211);
+  }else{
+    // 810분(13:30) ~ 990분(16:30)
+    totalMin = 810 + Math.floor(Math.random() * 181);
+  }
+  const h = String(Math.floor(totalMin/60)).padStart(2,'0');
+  const m = String(totalMin%60).padStart(2,'0');
+  const s = String(Math.floor(Math.random()*60)).padStart(2,'0');
+  return h+':'+m+':'+s;
+}
+
+// 전체 측정기 중 가장 최근 점검일 (백필 시작 기준점)
+async function getRecentBulkDate(){
+  try{
+    const url = SB_URL + '/rest/v1/qc_measure_log?select=check_date&order=check_date.desc&limit=1';
+    const r = await fetch(url, {headers: SB_HEADERS});
+    if(!r.ok) return null;
+    const rows = await r.json();
+    return rows.length ? rows[0].check_date : null;
+  }catch(e){ return null; }
+}
+
+// 백필 전용 INSERT (특정 날짜/시간/측정기에 일간 항목 OK row 새로 생성)
+async function insertBackfillLog(eqName, date, time, dailyItems, inspector){
+  const okItems = {};
+  dailyItems.forEach(it => { okItems[it.label] = 'OK'; });
+  const payload = {
+    check_date: date,
+    check_time: time,
+    inspector: inspector,
+    equipment: eqName,
+    items_json: okItems,
+    ng_count: 0,
+    result: 'OK',
+    memo: '(자동 채움)'
+  };
+  const r = await fetch(SB_URL + '/rest/v1/qc_measure_log', {
+    method: 'POST',
+    headers: SB_HEADERS_POST,
+    body: JSON.stringify(payload)
+  });
+  if(!r.ok){
+    const t = await r.text();
+    throw new Error('백필 INSERT 실패 HTTP '+r.status+' '+t);
+  }
 }
 
 async function upsertEqLog(eqName, period, items){
@@ -540,20 +685,47 @@ async function upsertEqLog(eqName, period, items){
   }
 }
 
-async function runBulk(period){
+async function runBulk(period, backfillDays){
+  backfillDays = backfillDays || [];
   const btnMap = {1:'btnDaily', 7:'btnWeekly', 30:'btnMonthly'};
   const btn = document.getElementById(btnMap[period]);
   if(btn){ btn.disabled = true; btn.textContent = '⏳ 저장 중...'; }
 
   let okEq = 0, skipEq = 0, totalItems = 0;
+  let backfillOk = 0, backfillFail = 0;
   const errors = [];
 
+  // 1) 백필 먼저 (일간만 해당) — 날짜별로 같은 시간, 날짜끼리는 다른 시간
+  if(period === 1 && backfillDays.length > 0){
+    const inspector = getCurrentInspector();
+    for(const date of backfillDays){
+      const time = randomWorkTime();   // 이 날짜에 모든 측정기 동일 시간
+      for(let i=0; i<EQUIPMENTS.length; i++){
+        const eq = EQUIPMENTS[i];
+        const cached = __allStatusCache[i];
+        let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
+        if(!items || items.length===0){
+          try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
+        }
+        const dailyItems = items.filter(it => Number(it.period) === 1);
+        if(dailyItems.length === 0) continue;
+        try{
+          await insertBackfillLog(eq.name, date, time, dailyItems, inspector);
+          backfillOk++;
+        }catch(e){
+          backfillFail++;
+          console.error('백필 실패', eq.name, date, e);
+        }
+      }
+    }
+  }
+
+  // 2) 오늘 일괄저장 (기존 로직)
   for(let i=0; i<EQUIPMENTS.length; i++){
     const eq = EQUIPMENTS[i];
     const cached = __allStatusCache[i];
     let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
     if(!items || items.length===0){
-      // 항목 자체 없음 → 서버에서 한번 더 시도
       try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
     }
     if(!items || items.length===0){ skipEq++; continue; }
@@ -575,10 +747,14 @@ async function runBulk(period){
     if(period===30) btn.innerHTML = '✅ 월간 점검완료<span class="b-sub">30일 주기 항목</span>';
   }
 
-  if(errors.length===0){
-    showToast('✅ '+periodLabel(period)+' 점검완료 처리: '+okEq+'대 / '+totalItems+'개 항목 OK 저장', 'success');
+  let msg = '✅ '+periodLabel(period)+' 일괄 OK: '+okEq+'대 / '+totalItems+'개 항목';
+  if(backfillDays.length > 0){
+    msg += ' · 백필 '+backfillDays.length+'일 ('+backfillOk+'건 성공' + (backfillFail>0 ? ' / '+backfillFail+'건 실패' : '') + ')';
+  }
+  if(errors.length > 0){
+    showToast(msg + ' · 일부 실패 '+errors.length+'대 (콘솔 확인)', 'error');
   } else {
-    showToast('일부 실패 — 성공 '+okEq+'대 / 실패 '+errors.length+'대 (콘솔 확인)', 'error');
+    showToast(msg, 'success');
   }
 
   // 화면 갱신
