@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>공정검사 입력 v0.8</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
+
+/* ── 공통 ── */
+.screen{display:none;min-height:100vh}
+.screen.active{display:block}
+
+.hdr{background:#1e3a5f;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.hdr h1{font-size:16px;font-weight:700;letter-spacing:-.3px}
+.hdr .sub{font-size:11px;opacity:.7;margin-top:2px}
+.badge{background:#3b82f6;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
+
+.card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.card-title{font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn:active{opacity:.7}
+.btn-primary{background:#1e3a5f;color:#fff}
+.btn-success{background:#16a34a;color:#fff}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-ghost{background:#f1f5f9;color:#334155}
+
+.inp{width:100%;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:15px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:#3b82f6}
+label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+
+/* ── 서브 네비 ── */
+.sub-nav{display:flex;background:#162d4a;border-top:1px solid rgba(255,255,255,.1)}
+.snav-btn{flex:1;padding:10px 0;border:none;background:transparent;color:rgba(255,255,255,.55);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.snav-btn.active{color:#fff;border-bottom-color:#60a5fa}
+
+/* ── 설정 화면 ── */
+#measure-screen{display:none}
+#measure-screen.active{display:block}
+#cfg-screen{display:none;padding-bottom:32px}
+#cfg-screen.active{display:block}
+.cfg-spec-row{background:#fff;border-radius:10px;margin-bottom:8px;overflow:hidden;border:1.5px solid #e2e8f0}
+.cfg-spec-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+.cfg-spec-hdr:active{background:#f8fafc}
+.cfg-no{min-width:26px;height:26px;border-radius:6px;background:#1e3a5f;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.cfg-name{flex:1;font-size:13px;font-weight:700}
+.cfg-badge{font-size:10px;padding:2px 6px;border-radius:5px;font-weight:700}
+.cfg-badge.press{background:#dbeafe;color:#1d4ed8}
+.cfg-badge.machining{background:#fef3c7;color:#92400e}
+.cfg-badge.both{background:#dcfce7;color:#166534}
+.cfg-edit-panel{padding:12px 14px 14px;border-top:1px solid #f1f5f9;display:none;flex-direction:column;gap:10px}
+.cfg-edit-panel.open{display:flex}
+.cfg-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cfg-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.cfg-field label{font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
+.cfg-field input,.cfg-field select{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none}
+.cfg-field input:focus,.cfg-field select:focus{border-color:#3b82f6}
+.cfg-save-btn{background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:100%}
+.cfg-save-btn:active{opacity:.7}
+.cfg-saved{color:#16a34a;font-size:12px;font-weight:700;text-align:center;min-height:16px}
+
+/* ── 이력 화면 ── */
+#hist-screen{display:none;padding:20px 12px}
+#hist-screen.active{display:block}
+
+#setup-screen h2{font-size:22px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
+#setup-screen p{font-size:13px;color:#64748b;margin-bottom:28px}
+
+/* ── PIN 화면 ── */
+#pin-screen{display:none}
+#pin-screen.active{display:flex;flex-direction:column;align-items:center;padding:40px 16px}
+#pin-screen h2{font-size:20px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
+#pin-screen p{font-size:13px;color:#64748b;margin-bottom:28px}
+
+.pin-dots{display:flex;gap:14px;margin-bottom:32px}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #cbd5e1;background:transparent;transition:background .15s,border-color .15s}
+.pin-dot.filled{background:#1e3a5f;border-color:#1e3a5f}
+
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px}
+.pin-btn{padding:18px 0;border:none;border-radius:12px;background:#f1f5f9;font-size:22px;font-weight:700;color:#1e293b;cursor:pointer;transition:background .1s}
+.pin-btn:active{background:#dde3ec}
+.pin-btn.del{background:#fee2e2;color:#dc2626}
+.pin-err{color:#dc2626;font-size:13px;font-weight:600;margin-top:12px;min-height:20px}
+
+/* ── 메인 화면 ── */
+.user-bar{display:flex;align-items:center;gap:8px;font-size:13px}
+.user-name{font-weight:700}
+.logout-btn{background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600}
+.logout-btn:active{opacity:.7}
+
+/* 부품 선택 */
+.part-search-wrap{position:relative}
+.part-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:2px;display:none}
+.part-dropdown.open{display:block}
+.part-opt{padding:12px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px}
+.part-opt:last-child{border-bottom:none}
+.part-opt:active{background:#f0f2f5}
+.part-opt .pno{font-size:11px;color:#64748b;margin-top:2px}
+.selected-part{background:#eff6ff;border:1.5px solid #3b82f6;border-radius:8px;padding:12px 14px;font-size:14px;font-weight:600;color:#1e40af;display:none}
+.selected-part .pno{font-size:11px;color:#3b82f6;margin-top:2px;font-weight:400}
+
+/* 항목 카드 */
+.spec-card{background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;border:1.5px solid #e2e8f0;transition:border-color .2s}
+.spec-card.ng{border-color:#fca5a5;background:#fff5f5}
+.spec-card.ok{border-color:#86efac}
+.spec-hdr{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
+.spec-no{min-width:28px;height:28px;border-radius:7px;background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.spec-info{flex:1}
+.spec-name{font-size:14px;font-weight:700;color:#1e293b}
+.spec-text{font-size:12px;color:#3b82f6;font-weight:600;margin-top:2px}
+.spec-method{font-size:11px;color:#94a3b8;margin-top:1px}
+.spec-result{font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.spec-result.ok{background:#dcfce7;color:#16a34a}
+.spec-result.ng{background:#fee2e2;color:#dc2626}
+.spec-result.empty{background:#f1f5f9;color:#94a3b8}
+
+/* 치수 입력 (가로 셀형 — 한 줄 최대 5칸) */
+.pts-grid{display:grid;gap:6px}
+.pt-cell{display:flex;flex-direction:column;gap:3px}
+.pt-label{font-size:10px;font-weight:700;color:#94a3b8;text-align:center}
+.pt-inp{width:100%;padding:10px 4px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:14px;text-align:center;outline:none}
+.pt-inp:focus{border-color:#3b82f6}
+.pt-inp.ng{border-color:#fca5a5;background:#fff5f5;color:#dc2626}
+.pt-inp.ok{border-color:#86efac}
+.lsl-usl{font-size:11px;color:#94a3b8;text-align:right;margin-top:6px}
+.lsl-usl span{color:#1e3a5f;font-weight:600}
+
+/* 부품 탭바 (헤더 아래 고정) */
+.tab-bar{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:sticky;top:var(--hdr-h,64px);z-index:99;background:#f0f2f5;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 13px;background:#e2e8f0;border-radius:9px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.tab.active{background:#1e3a5f;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.tab.active .tab-close{background:rgba(255,255,255,.2);color:#fff}
+.tab-close{width:18px;height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.08);color:#64748b;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tab-close:active{background:rgba(0,0,0,.18)}
+
+/* 외관 토글 */
+.visual-toggle{display:flex;gap:10px}
+.vt-btn{flex:1;padding:14px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;font-weight:700;background:#f8fafc;color:#94a3b8;cursor:pointer;transition:all .15s}
+.vt-btn.ok-sel{border-color:#16a34a;background:#dcfce7;color:#16a34a}
+.vt-btn.ng-sel{border-color:#dc2626;background:#fee2e2;color:#dc2626}
+
+/* 모드 토글 + 칸수 조절 바 */
+.mode-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mode-toggle{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px}
+.mt-btn{padding:6px 14px;border:none;border-radius:6px;background:transparent;font-size:12px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.mt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.cnt-ctrl{display:flex;align-items:center;gap:8px}
+.cnt-btn{width:32px;height:32px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:17px;font-weight:700;color:#1e3a5f;cursor:pointer;line-height:1}
+.cnt-btn:active{background:#f1f5f9}
+.cnt-num{font-size:14px;font-weight:700;color:#1e3a5f;min-width:18px;text-align:center}
+
+/* 최솟값/최댓값 */
+.minmax-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.minmax-grid label{font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px}
+
+/* 저장 영역 */
+.save-area{padding:12px 12px 32px}
+.save-summary{background:#eff6ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;display:none}
+.save-summary .ng-cnt{color:#dc2626;font-weight:700}
+
+/* 로딩 */
+.loading{text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px}
+</style>
+</head>
+<body>
+
+<!-- ① 설정 화면 -->
+<div id="setup-screen" class="screen active">
+  <h2>🔧 초기 설정</h2>
+  <p>Supabase 연결 정보를 입력하세요.<br>한 번 저장하면 다시 묻지 않습니다.</p>
+  <div style="display:flex;flex-direction:column;gap:14px;max-width:400px">
+    <div>
+      <label>Supabase URL</label>
+      <input class="inp" id="sb-url" type="url" placeholder="https://xxxx.supabase.co">
+    </div>
+    <div>
+      <label>anon key</label>
+      <input class="inp" id="sb-key" type="password" placeholder="eyJ...">
+    </div>
+    <button class="btn btn-primary" onclick="saveSetup()">저장하고 시작</button>
+  </div>
+</div>
+
+<!-- ② PIN 입력 화면 -->
+<div id="pin-screen" class="screen">
+  <h2>🔐 PIN 입력</h2>
+  <p>품질관리팀 PIN 4자리를 입력하세요</p>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinInput('1')">1</button>
+    <button class="pin-btn" onclick="pinInput('2')">2</button>
+    <button class="pin-btn" onclick="pinInput('3')">3</button>
+    <button class="pin-btn" onclick="pinInput('4')">4</button>
+    <button class="pin-btn" onclick="pinInput('5')">5</button>
+    <button class="pin-btn" onclick="pinInput('6')">6</button>
+    <button class="pin-btn" onclick="pinInput('7')">7</button>
+    <button class="pin-btn" onclick="pinInput('8')">8</button>
+    <button class="pin-btn" onclick="pinInput('9')">9</button>
+    <button class="pin-btn" onclick="pinInput('0')" style="grid-column:2">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-err" id="pin-err"></div>
+  <button onclick="resetSetup()" style="margin-top:20px;background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;text-decoration:underline">설정 다시하기</button>
+</div>
+
+<!-- ③ 메인 화면 -->
+<div id="main-screen" class="screen">
+  <div class="hdr">
+    <div>
+      <h1>공정검사 입력 <span class="badge">v0.9</span></h1>
+      <div class="sub" id="hdr-sub">테스트 환경</div>
+    </div>
+    <div class="user-bar">
+      <span class="user-name" id="user-name-disp"></span>
+      <button class="logout-btn" onclick="logout()">로그아웃</button>
+    </div>
+  </div>
+  <!-- 서브 네비 -->
+  <div class="sub-nav" id="sub-nav">
+    <button class="snav-btn active" id="snav-measure" onclick="switchNav('measure')">📐 측정</button>
+    <button class="snav-btn" id="snav-hist" onclick="switchNav('hist')">📋 이력조회</button>
+    <button class="snav-btn" id="snav-cfg" onclick="switchNav('cfg')">⚙️ 설정</button>
+  </div>
+
+  <!-- ── 측정 탭 ── -->
+  <div id="measure-screen" class="active">
+    <!-- 부품 탭바 (sticky) -->
+    <div class="tab-bar" id="tab-bar" style="display:none"></div>
+
+    <!-- 부품 검색 (탭바 아래) -->
+    <div class="card" id="part-card">
+      <div class="card-title">부품 검색 → 탭 추가</div>
+      <div class="part-search-wrap">
+        <input class="inp" id="part-search" type="text" placeholder="부품번호 또는 부품명 검색…" oninput="filterParts(this.value)" onfocus="openDropdown()" onblur="setTimeout(closeDropdown,200)">
+        <div class="part-dropdown" id="part-dropdown"></div>
+      </div>
+    </div>
+
+    <!-- 검사 정보 -->
+    <div class="card" id="insp-info-card" style="display:none">
+      <div class="card-title">② 검사 정보</div>
+      <div class="row2">
+        <div>
+          <label>검사일</label>
+          <input class="inp" id="insp-date" type="date">
+        </div>
+        <div>
+          <label>검사시간</label>
+          <input class="inp" id="insp-time" type="time">
+        </div>
+      </div>
+    </div>
+
+    <!-- 검사 항목 -->
+    <div id="specs-area" style="display:none">
+      <div style="padding:4px 12px 0;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">
+        ③ 측정값 입력
+      </div>
+      <div id="specs-list" style="padding:8px 12px 0"></div>
+    </div>
+
+    <!-- 저장 -->
+    <div class="save-area" id="save-area" style="display:none">
+      <div class="save-summary" id="save-summary"></div>
+      <button class="btn btn-success" onclick="saveAll()">💾 검사 결과 저장</button>
+    </div>
+
+    <div id="main-loading" class="loading" style="display:none">항목 불러오는 중…</div>
+  </div><!-- /measure-screen -->
+
+  <!-- ── 이력조회 탭 ── -->
+  <div id="hist-screen">
+    <p style="color:#94a3b8;font-size:14px;text-align:center;padding-top:40px">이력조회 — 준비 중</p>
+  </div>
+
+  <!-- ── 설정 탭 ── -->
+  <div id="cfg-screen">
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">⚙️ 부품 선택</div>
+      <div class="part-search-wrap">
+        <input class="inp" id="cfg-part-search" type="text" placeholder="부품번호 또는 부품명 검색…"
+          oninput="filterPartsCfg(this.value)" onfocus="openDropdownCfg()" onblur="setTimeout(closeDropdownCfg,200)">
+        <div class="part-dropdown" id="cfg-part-dropdown"></div>
+      </div>
+      <div id="cfg-selected-part" style="display:none;margin-top:8px;font-size:13px;font-weight:700;color:#1e40af"></div>
+    </div>
+    <div id="cfg-spec-list" style="padding:0 12px 20px"></div>
+    <div id="cfg-loading" class="loading" style="display:none">항목 불러오는 중…</div>
+  </div>
+
+</div><!-- /main-screen -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════
+// 상수 / 전역 상태
+// ══════════════════════════════════
+const SK = {
+  URL:  'QC_SB_URL',
+  KEY:  'QC_SB_KEY',
+  AUTH: 'QC_PROCESS_AUTH'
+};
+
+let sbUrl = '', sbKey = '';
+let auth = null;          // { name }
+let allParts = [];        // qc_part 전체
+
+// ── 부품 탭 상태 ──
+// tabs[i] = { part, specs, inputs, date, time }
+let tabs = [];
+let activeTabIdx = -1;
+
+// 기존 함수들이 참조하는 포인터 (active 탭 것을 가리킴)
+let selectedPart = null;
+let specs = [];
+let specInputs = {};
+
+// ── PIN 입력 버퍼 ──
+let pinBuf = '';
+
+// ══════════════════════════════════
+// 초기화
+// ══════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  sbUrl = localStorage.getItem(SK.URL) || '';
+  sbKey = localStorage.getItem(SK.KEY) || '';
+
+  if (!sbUrl || !sbKey) { showScreen('setup'); return; }
+
+  // 저장된 인증 확인
+  const saved = localStorage.getItem(SK.AUTH);
+  if (saved) {
+    try { auth = JSON.parse(saved); } catch(e) { auth = null; }
+  }
+
+  if (auth && auth.name) {
+    await enterMain();
+  } else {
+    showScreen('pin');
+  }
+});
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`${name}-screen`).classList.add('active');
+}
+
+// ══════════════════════════════════
+// Supabase 헬퍼
+// ══════════════════════════════════
+async function sbFetch(path, opts = {}) {
+  const { method = 'GET', body, prefer, headers: xh = {} } = opts;
+  const h = {
+    'apikey': sbKey,
+    'Authorization': `Bearer ${sbKey}`,
+    'Content-Type': 'application/json',
+    ...xh
+  };
+  if (prefer) h['Prefer'] = prefer;
+  const res = await fetch(`${sbUrl}/rest/v1/${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;   // 본문 없는 201/204 대응
+}
+
+async function sbAll(path, params = '') {
+  const rows = [];
+  let from = 0;
+  const PAGE = 1000;
+  while (true) {
+    const sep = params ? '&' : '?';
+    const chunk = await sbFetch(`${path}?${params}${sep}limit=${PAGE}&offset=${from}`);
+    if (!chunk || !chunk.length) break;
+    rows.push(...chunk);
+    if (chunk.length < PAGE) break;
+    from += PAGE;
+  }
+  return rows;
+}
+
+// ══════════════════════════════════
+// 설정 저장
+// ══════════════════════════════════
+async function saveSetup() {
+  const url = document.getElementById('sb-url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { toast('URL과 키를 모두 입력하세요'); return; }
+  localStorage.setItem(SK.URL, url);
+  localStorage.setItem(SK.KEY, key);
+  sbUrl = url; sbKey = key;
+  showScreen('pin');
+}
+
+// ══════════════════════════════════
+// PIN 인증
+// ══════════════════════════════════
+function pinInput(digit) {
+  if (pinBuf.length >= 4) return;
+  pinBuf += digit;
+  renderPinDots();
+  if (pinBuf.length === 4) verifyPin();
+}
+function pinDel() {
+  pinBuf = pinBuf.slice(0, -1);
+  renderPinDots();
+  document.getElementById('pin-err').textContent = '';
+}
+function renderPinDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById(`d${i}`).classList.toggle('filled', i < pinBuf.length);
+  }
+}
+
+async function verifyPin() {
+  document.getElementById('pin-err').textContent = '';
+  try {
+    // user_pin: name, pin_plain, dept (품질관리팀 또는 PIN 첫자리 4)
+    const rows = await sbFetch(`user_pin?pin_plain=eq.${pinBuf}&select=name,dept,pin_plain`);
+    const hit = (rows || []).find(r => {
+      const dept = (r.dept || '').trim();
+      if (dept === '품질관리팀') return true;
+      if (!dept && String(r.pin_plain).charAt(0) === '4') return true;
+      return false;
+    });
+    if (hit) {
+      auth = { name: hit.name };
+      localStorage.setItem(SK.AUTH, JSON.stringify(auth));
+      await enterMain();
+    } else {
+      document.getElementById('pin-err').textContent = 'PIN이 올바르지 않습니다';
+      pinBuf = '';
+      renderPinDots();
+    }
+  } catch(e) {
+    document.getElementById('pin-err').textContent = '연결 오류: ' + e.message;
+    pinBuf = '';
+    renderPinDots();
+  }
+}
+
+function resetSetup() {
+  localStorage.removeItem(SK.URL);
+  localStorage.removeItem(SK.KEY);
+  localStorage.removeItem(SK.AUTH);
+  // 입력 필드 초기화
+  document.getElementById('sb-url').value = '';
+  document.getElementById('sb-key').value = '';
+  showScreen('setup');
+}
+
+function logout() {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  localStorage.removeItem(SK.AUTH);
+  auth = null;
+  pinBuf = '';
+  renderPinDots();
+  showScreen('pin');
+}
+
+// ══════════════════════════════════
+// 메인 진입
+// ══════════════════════════════════
+async function enterMain() {
+  document.getElementById('user-name-disp').textContent = auth.name;
+  // 오늘 날짜/시간 기본값 (KST 로컬 구성 — toISOString 금지)
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('insp-date').value =
+    `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  document.getElementById('insp-time').value =
+    `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  showScreen('main');
+
+  // 탭바 sticky 위치 = 실제 헤더 높이
+  requestAnimationFrame(() => {
+    const h = document.querySelector('#main-screen .hdr')?.offsetHeight || 64;
+    document.documentElement.style.setProperty('--hdr-h', h + 'px');
+  });
+
+  // 부품 목록 로드
+  try {
+    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material&order=part_number');
+  } catch(e) {
+    toast('부품 목록 로드 실패: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════
+// 부품 검색 / 선택
+// ══════════════════════════════════
+function filterParts(q) {
+  const dd = document.getElementById('part-dropdown');
+  if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
+  const kw = q.toLowerCase();
+  const matched = allParts.filter(p =>
+    p.part_number.toLowerCase().includes(kw) ||
+    (p.part_name || '').toLowerCase().includes(kw)
+  ).slice(0, 20);
+
+  if (!matched.length) {
+    dd.innerHTML = '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
+  } else {
+    dd.innerHTML = matched.map(p => `
+      <div class="part-opt" onmousedown="selectPart(${p.id})">
+        <div>${p.part_name || '—'}</div>
+        <div class="pno">${p.part_number}${p.material ? ' · ' + p.material : ''}</div>
+      </div>`).join('');
+  }
+  dd.classList.add('open');
+}
+
+function openDropdown() {
+  if (document.getElementById('part-dropdown').innerHTML)
+    document.getElementById('part-dropdown').classList.add('open');
+}
+function closeDropdown() {
+  document.getElementById('part-dropdown').classList.remove('open');
+}
+
+// 부품 선택 → 탭 추가 (이미 열려있으면 그 탭으로 전환)
+async function selectPart(id) {
+  document.getElementById('part-search').value = '';
+  document.getElementById('part-dropdown').classList.remove('open');
+
+  const existing = tabs.findIndex(t => t.part.id === id);
+  if (existing >= 0) { switchTab(existing); return; }
+
+  const part = allParts.find(p => p.id === id);
+  if (!part) return;
+
+  document.getElementById('main-loading').style.display = 'block';
+
+  try {
+    const loadedSpecs = await sbAll(
+      'qc_part_spec',
+      `part_id=eq.${id}&process_type=in.("press","both")&order=item_no`
+    );
+    const inputs = {};
+    loadedSpecs.forEach(s => {
+      if (s.is_visual) {
+        inputs[s.id] = { type: 'visual', val: 'OK' };
+      } else if (s.is_min_max) {
+        inputs[s.id] = { type: 'minmax', min: '', max: '' };
+      } else {
+        const n = s.measure_points || 5;
+        inputs[s.id] = { type: 'points', vals: Array(n).fill('') };
+      }
+    });
+
+    // 새 탭의 검사일/시간 기본값 = 현재
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    tabs.push({
+      part,
+      specs: loadedSpecs,
+      inputs,
+      date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
+      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
+    });
+
+    document.getElementById('main-loading').style.display = 'none';
+    switchTab(tabs.length - 1);
+  } catch(e) {
+    document.getElementById('main-loading').style.display = 'none';
+    toast('항목 로드 실패: ' + e.message);
+  }
+}
+
+// 현재 탭의 검사정보 input 값 + 스크롤 위치를 탭 상태에 보관
+function stashActiveTab() {
+  if (activeTabIdx < 0 || !tabs[activeTabIdx]) return;
+  tabs[activeTabIdx].date = document.getElementById('insp-date').value;
+  tabs[activeTabIdx].time = document.getElementById('insp-time').value;
+  tabs[activeTabIdx].scrollY = window.scrollY;
+}
+
+function switchTab(idx) {
+  if (idx < 0 || idx >= tabs.length) return;
+  stashActiveTab();
+  activeTabIdx = idx;
+  const t = tabs[idx];
+
+  // 포인터 스왑 → 기존 함수들 그대로 동작
+  selectedPart = t.part;
+  specs = t.specs;
+  specInputs = t.inputs;
+
+  document.getElementById('insp-date').value = t.date;
+  document.getElementById('insp-time').value = t.time;
+  document.getElementById('insp-info-card').style.display = 'block';
+  document.getElementById('specs-area').style.display = 'block';
+  document.getElementById('save-area').style.display = 'block';
+
+  renderTabBar();
+  renderSpecs();
+
+  // 마지막으로 보던 위치로 복원 (새 탭은 0)
+  window.scrollTo(0, t.scrollY || 0);
+}
+
+function closeTab(idx, ev) {
+  if (ev) ev.stopPropagation();
+  const t = tabs[idx];
+  // 입력값 있으면 확인
+  const hasInput = t.specs.some(s => {
+    const inp = t.inputs[s.id];
+    if (!inp) return false;
+    if (inp.type === 'minmax') return inp.min !== '' || inp.max !== '';
+    if (inp.type === 'points') return inp.vals.some(v => v !== '');
+    return false;
+  });
+  if (hasInput && !confirm(`${t.part.part_number} 탭에 입력값이 있습니다. 닫을까요?`)) return;
+
+  tabs.splice(idx, 1);
+  if (tabs.length === 0) {
+    activeTabIdx = -1;
+    selectedPart = null; specs = []; specInputs = {};
+    document.getElementById('insp-info-card').style.display = 'none';
+    document.getElementById('specs-area').style.display = 'none';
+    document.getElementById('save-area').style.display = 'none';
+    renderTabBar();
+    return;
+  }
+  // 닫은 탭 기준으로 active 보정
+  if (activeTabIdx >= idx) activeTabIdx = Math.max(0, activeTabIdx - 1);
+  const keep = activeTabIdx;
+  activeTabIdx = -1;        // stash 방지 (이미 사라진 탭 참조 방지)
+  switchTab(keep);
+}
+
+function renderTabBar() {
+  const bar = document.getElementById('tab-bar');
+  if (!tabs.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = tabs.map((t, i) => `
+    <div class="tab ${i === activeTabIdx ? 'active' : ''}" onclick="switchTab(${i})">
+      ${t.part.part_number}
+      <button class="tab-close" onclick="closeTab(${i}, event)">✕</button>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════
+// spec 렌더링
+// ══════════════════════════════════
+function renderSpecs() {
+  const list = document.getElementById('specs-list');
+  list.innerHTML = specs.map(s => renderSpecCard(s)).join('');
+  updateSummary();
+}
+
+function renderSpecCard(s) {
+  const inp = specInputs[s.id];
+  const res = calcResult(s, inp);
+  const resCls = res === 'OK' ? 'ok' : res === 'NG' ? 'ng' : 'empty';
+  const resLabel = res || '—';
+  const cardCls = res === 'NG' ? 'ng' : res === 'OK' ? 'ok' : '';
+
+  let inputHtml = '';
+  let ctrlHtml = '';
+
+  if (s.is_visual) {
+    const okSel = inp.val === 'OK' ? 'ok-sel' : '';
+    const ngSel = inp.val === 'NG' ? 'ng-sel' : '';
+    inputHtml = `
+      <div class="visual-toggle">
+        <button class="vt-btn ${okSel}" id="vt-ok-${s.id}" onclick="setVisual(${s.id},'OK')">✓ OK</button>
+        <button class="vt-btn ${ngSel}" id="vt-ng-${s.id}" onclick="setVisual(${s.id},'NG')">✕ NG</button>
+      </div>`;
+  } else {
+    // 치수 항목: 모드 토글 (포인트 ↔ 최소/최대) + 포인트 모드일 때 칸수 조절
+    const isMM = inp.type === 'minmax';
+    ctrlHtml = `
+      <div class="mode-bar">
+        <div class="mode-toggle">
+          <button class="mt-btn ${!isMM?'sel':''}" onclick="switchMode(${s.id},'points')">포인트</button>
+          <button class="mt-btn ${isMM?'sel':''}" onclick="switchMode(${s.id},'minmax')">최소/최대</button>
+        </div>
+        ${!isMM ? `
+        <div class="cnt-ctrl">
+          <button class="cnt-btn" onclick="changeCount(${s.id},-1)">−</button>
+          <span class="cnt-num" id="cnt-${s.id}">${inp.vals.length}</span>
+          <button class="cnt-btn" onclick="changeCount(${s.id},1)">＋</button>
+        </div>` : ''}
+      </div>`;
+
+    const lsuStr = buildLslUsl(s);
+    if (isMM) {
+      inputHtml = `
+        <div class="minmax-grid">
+          <div>
+            <label>최솟값</label>
+            <input class="pt-inp" type="text" inputmode="decimal" id="mm-min-${s.id}"
+              value="${inp.min}" placeholder="—"
+              oninput="setMinMax(${s.id},'min',this)">
+          </div>
+          <div>
+            <label>최댓값</label>
+            <input class="pt-inp" type="text" inputmode="decimal" id="mm-max-${s.id}"
+              value="${inp.max}" placeholder="—"
+              oninput="setMinMax(${s.id},'max',this)">
+          </div>
+        </div>
+        ${lsuStr}`;
+    } else {
+      const n = inp.vals.length;
+      const cols = Math.min(n, 5);   // 한 줄 최대 5칸, 초과 시 자동 줄바꿈
+      const cells = inp.vals.map((v, i) => {
+        const cls = getValClass(parseFloat(v), s.lsl, s.usl);
+        return `<div class="pt-cell">
+          <span class="pt-label">X${i+1}</span>
+          <input class="pt-inp ${cls}" type="text" inputmode="decimal" id="pt-${s.id}-${i}"
+            value="${v}" placeholder="—"
+            oninput="setPt(${s.id},${i},this)">
+        </div>`;
+      }).join('');
+      inputHtml = `<div class="pts-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>${lsuStr}`;
+    }
+  }
+
+  return `
+    <div class="spec-card ${cardCls}" id="sc-${s.id}">
+      <div class="spec-hdr">
+        <div class="spec-no">${s.item_no ?? '—'}</div>
+        <div class="spec-info">
+          <div class="spec-name">${s.item_name || '—'}</div>
+          <div class="spec-text">${s.spec_text || ''}</div>
+          <div class="spec-method">${s.inspection_method || ''}</div>
+        </div>
+        <div class="spec-result ${resCls}" id="res-${s.id}">${resLabel}</div>
+      </div>
+      ${ctrlHtml}
+      ${inputHtml}
+    </div>`;
+}
+
+function buildLslUsl(s) {
+  if (s.lsl == null && s.usl == null) return '';
+  const parts = [];
+  if (s.lsl != null) parts.push(`LSL <span>${s.lsl}</span>`);
+  if (s.usl != null) parts.push(`USL <span>${s.usl}</span>`);
+  return `<div class="lsl-usl">${parts.join(' &nbsp; ')}</div>`;
+}
+
+function getValClass(v, lsl, usl) {
+  if (isNaN(v)) return '';
+  if ((lsl != null && v < lsl) || (usl != null && v > usl)) return 'ng';
+  if (lsl != null || usl != null) return 'ok';
+  return '';
+}
+
+// ══════════════════════════════════
+// 입력 핸들러
+// ══════════════════════════════════
+// 숫자/소수점만 허용 (마이너스 포함)
+function sanitizeNum(el) {
+  let v = el.value.replace(/[^0-9.\-]/g, '');
+  if (el.value !== v) el.value = v;
+  return v;
+}
+
+function setVisual(id, val) {
+  specInputs[id].val = val;
+  document.getElementById(`vt-ok-${id}`).classList.toggle('ok-sel', val === 'OK');
+  document.getElementById(`vt-ng-${id}`).classList.toggle('ng-sel', val === 'NG');
+  updateCardState(id);
+}
+
+function setMinMax(id, key, el) {
+  specInputs[id][key] = sanitizeNum(el);
+  updateCardState(id);
+}
+
+function setPt(id, idx, el) {
+  const v = sanitizeNum(el);
+  specInputs[id].vals[idx] = v;
+  // 해당 input 클래스만 토글 (재렌더링 없음 → 소수점 입력 유지)
+  const s = specs.find(x => x.id === id);
+  const cls = getValClass(parseFloat(v), s.lsl, s.usl);
+  el.classList.remove('ok', 'ng');
+  if (cls) el.classList.add(cls);
+  updateCardState(id);
+}
+
+// 카드 테두리 + 결과 뱃지만 갱신 (input은 안 건드림)
+function updateCardState(id) {
+  const s = specs.find(x => x.id === id);
+  if (!s) return;
+  const res = calcResult(s, specInputs[id]);
+  const card = document.getElementById(`sc-${id}`);
+  const badge = document.getElementById(`res-${id}`);
+  if (card) {
+    card.classList.remove('ok', 'ng');
+    if (res === 'OK') card.classList.add('ok');
+    if (res === 'NG') card.classList.add('ng');
+  }
+  if (badge) {
+    badge.className = 'spec-result ' + (res === 'OK' ? 'ok' : res === 'NG' ? 'ng' : 'empty');
+    badge.textContent = res || '—';
+  }
+  updateSummary();
+}
+
+// 포인트 ↔ 최소/최대 모드 전환 (입력 중 아닐 때라 재렌더링 OK)
+function switchMode(id, mode) {
+  const inp = specInputs[id];
+  if (inp.type === mode || (mode === 'points' && inp.type === 'points')) {
+    if ((mode === 'minmax') === (inp.type === 'minmax')) return; // 동일 모드면 무시
+  }
+  const s = specs.find(x => x.id === id);
+  if (mode === 'minmax') {
+    specInputs[id] = { type: 'minmax', min: '', max: '' };
+  } else {
+    const n = s.measure_points || 5;
+    specInputs[id] = { type: 'points', vals: Array(n).fill('') };
+  }
+  refreshCard(id);
+}
+
+// 칸 수 조절 (1~10)
+function changeCount(id, delta) {
+  const inp = specInputs[id];
+  if (inp.type !== 'points') return;
+  const n = inp.vals.length + delta;
+  if (n < 1 || n > 10) return;
+  if (delta > 0) inp.vals.push('');
+  else inp.vals.pop();
+  refreshCard(id);
+}
+
+function refreshCard(id) {
+  const s = specs.find(x => x.id === id);
+  if (!s) return;
+  const old = document.getElementById(`sc-${id}`);
+  if (!old) return;
+  old.outerHTML = renderSpecCard(s);
+  updateSummary();
+}
+
+// ══════════════════════════════════
+// 실시간 판정
+// ══════════════════════════════════
+function calcResult(s, inp) {
+  if (!inp) return null;
+  if (s.is_visual) return inp.val || 'OK';
+  if (inp.type === 'minmax') {
+    const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+    if (isNaN(mn) || isNaN(mx)) return null;
+    return checkVals([mn, mx], s.lsl, s.usl);
+  }
+  const nums = (inp.vals || []).map(v => parseFloat(v)).filter(v => !isNaN(v));
+  if (!nums.length) return null;
+  return checkVals(nums, s.lsl, s.usl);
+}
+
+function checkVals(nums, lsl, usl) {
+  for (const v of nums) {
+    if (lsl != null && v < lsl) return 'NG';
+    if (usl != null && v > usl) return 'NG';
+  }
+  return 'OK';
+}
+
+function updateSummary() {
+  const sumEl = document.getElementById('save-summary');
+  let ok = 0, ng = 0, empty = 0;
+  specs.forEach(s => {
+    const r = calcResult(s, specInputs[s.id]);
+    if (r === 'OK') ok++;
+    else if (r === 'NG') ng++;
+    else empty++;
+  });
+  if (ng > 0 || ok > 0) {
+    sumEl.style.display = 'block';
+    sumEl.innerHTML = `총 ${specs.length}항목 &nbsp;·&nbsp; OK ${ok} &nbsp;·&nbsp; <span class="ng-cnt">NG ${ng}</span> &nbsp;·&nbsp; 미입력 ${empty}`;
+  } else {
+    sumEl.style.display = 'none';
+  }
+}
+
+// ══════════════════════════════════
+// 가우시안 랜덤 (min_max 자동 생성)
+// ══════════════════════════════════
+function gaussRand(mean, std) {
+  const u = 1 - Math.random(), v = Math.random();
+  return mean + Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * std;
+}
+
+function fillMinMax(minV, maxV, count = 5) {
+  const mean = (minV + maxV) / 2;
+  const std = (maxV - minV) / 6;
+  const dp = Math.max(
+    (minV.toString().split('.')[1] || '').length,
+    (maxV.toString().split('.')[1] || '').length
+  );
+  const pts = [minV];
+  for (let i = 0; i < count - 2; i++) {
+    let v;
+    let attempts = 0;
+    do { v = gaussRand(mean, std); attempts++; }
+    while ((v < minV || v > maxV) && attempts < 100);
+    pts.push(parseFloat(v.toFixed(dp)));
+  }
+  pts.push(maxV);
+  return pts;
+}
+
+// ══════════════════════════════════
+// 저장
+// ══════════════════════════════════
+async function saveAll() {
+  const date = document.getElementById('insp-date').value;
+  const time = document.getElementById('insp-time').value;
+
+  if (!date) { toast('검사일을 입력하세요'); return; }
+
+  // 미입력 확인
+  const emptySpecs = specs.filter(s => calcResult(s, specInputs[s.id]) === null);
+  if (emptySpecs.length > 0) {
+    if (!confirm(`미입력 항목이 ${emptySpecs.length}개 있습니다. 그래도 저장하시겠습니까?`)) return;
+  }
+
+  const btn = document.querySelector('#save-area .btn');
+  btn.textContent = '저장 중…'; btn.disabled = true;
+
+  try {
+    // 1. 헤더 INSERT
+    const inspRows = await sbFetch('qc_shipping_inspection', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: {
+        part_id: selectedPart.id,
+        inspection_date: date,
+        inspection_time: time || null,
+        inspector: auth.name
+      }
+    });
+    const iid = inspRows[0].id;
+
+    // 2. 측정값 INSERT
+    // PostgREST 일괄 INSERT는 모든 행의 키가 동일해야 함 (PGRST102 방지)
+    const mRows = [];
+    for (const s of specs) {
+      const inp = specInputs[s.id];
+      const row = {
+        inspection_id: iid,
+        spec_id: s.id,
+        item_no: s.item_no,
+        item_name: s.item_name,
+        inspection_method: s.inspection_method,
+        spec_text: s.spec_text,
+        visual_result: null,
+        x1:null, x2:null, x3:null, x4:null, x5:null,
+        x6:null, x7:null, x8:null, x9:null, x10:null
+      };
+      if (s.is_visual) {
+        row.visual_result = inp.val || 'OK';
+      } else if (inp.type === 'minmax') {
+        const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+        if (!isNaN(mn) && !isNaN(mx)) {
+          const pts = fillMinMax(mn, mx, s.measure_points || 5);
+          pts.forEach((v, i) => { row[`x${i+1}`] = v; });
+        }
+      } else {
+        inp.vals.forEach((v, i) => {
+          if (v !== '' && !isNaN(parseFloat(v))) row[`x${i+1}`] = parseFloat(v);
+        });
+      }
+      mRows.push(row);
+    }
+
+    await sbFetch('qc_shipping_measurement', {
+      method: 'POST',
+      body: mRows
+    });
+
+    // 3. 칸 수 / 모드 변경분을 spec 에 반영 → 다음에 열 때 그대로 유지
+    for (const s of specs) {
+      const inp = specInputs[s.id];
+      if (s.is_visual) continue;
+      let patch = null;
+      if (inp.type === 'minmax') {
+        if (!s.is_min_max) patch = { is_min_max: true };
+      } else {
+        const n = inp.vals.length;
+        if (s.is_min_max || n !== s.measure_points) {
+          patch = { is_min_max: false, measure_points: n };
+        }
+      }
+      if (patch) {
+        await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: patch });
+        Object.assign(s, patch);   // 로컬도 갱신
+      }
+    }
+
+    toast('✅ 저장 완료!');
+    // 측정값만 리셋 (같은 부품으로 다음 검사 가능)
+    specs.forEach(s => {
+      const inp = specInputs[s.id];
+      if (inp.type === 'visual') inp.val = 'OK';
+      else if (inp.type === 'minmax') { inp.min = ''; inp.max = ''; }
+      else inp.vals = inp.vals.map(() => '');
+    });
+    renderSpecs();
+
+  } catch(e) {
+    toast('❌ 저장 실패: ' + e.message);
+  } finally {
+    btn.textContent = '💾 검사 결과 저장';
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════
+// 서브 네비 전환
+// ══════════════════════════════════
+const NAV_SCREENS = ['measure', 'hist', 'cfg'];
+function switchNav(name) {
+  NAV_SCREENS.forEach(n => {
+    document.getElementById(`${n}-screen`).classList.toggle('active', n === name);
+    document.getElementById(`snav-${n}`).classList.toggle('active', n === name);
+  });
+  // 탭바는 측정 탭일 때만 sticky 동작
+  document.getElementById('tab-bar').style.position = name === 'measure' ? '' : 'static';
+}
+
+// ══════════════════════════════════
+// 설정 탭 — 부품 검색
+// ══════════════════════════════════
+let cfgPart = null, cfgSpecs = [];
+
+function filterPartsCfg(q) {
+  const dd = document.getElementById('cfg-part-dropdown');
+  if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
+  const kw = q.toLowerCase();
+  const matched = allParts.filter(p =>
+    p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw)
+  ).slice(0, 20);
+  dd.innerHTML = matched.length
+    ? matched.map(p => `<div class="part-opt" onmousedown="selectPartCfg(${p.id})">
+        <div>${p.part_name||'—'}</div><div class="pno">${p.part_number}</div></div>`).join('')
+    : '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
+  dd.classList.add('open');
+}
+function openDropdownCfg() {
+  if (document.getElementById('cfg-part-dropdown').innerHTML)
+    document.getElementById('cfg-part-dropdown').classList.add('open');
+}
+function closeDropdownCfg() { document.getElementById('cfg-part-dropdown').classList.remove('open'); }
+
+async function selectPartCfg(id) {
+  document.getElementById('cfg-part-search').value = '';
+  document.getElementById('cfg-part-dropdown').classList.remove('open');
+  cfgPart = allParts.find(p => p.id === id);
+  if (!cfgPart) return;
+  document.getElementById('cfg-selected-part').style.display = 'block';
+  document.getElementById('cfg-selected-part').textContent = `${cfgPart.part_name} · ${cfgPart.part_number}`;
+  document.getElementById('cfg-loading').style.display = 'block';
+  document.getElementById('cfg-spec-list').innerHTML = '';
+  try {
+    // 설정 탭은 전체 spec (process_type 구분 없이)
+    cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=item_no`);
+    renderCfgSpecs();
+  } catch(e) {
+    toast('로드 실패: ' + e.message);
+  } finally {
+    document.getElementById('cfg-loading').style.display = 'none';
+  }
+}
+
+// ── 설정 spec 렌더링 ──
+function renderCfgSpecs() {
+  const el = document.getElementById('cfg-spec-list');
+  el.innerHTML = cfgSpecs.map(s => `
+    <div class="cfg-spec-row" id="cfgrow-${s.id}">
+      <div class="cfg-spec-hdr" onclick="toggleCfgEdit(${s.id})">
+        <div class="cfg-no">${s.item_no??'—'}</div>
+        <div class="cfg-name">${s.item_name||'—'}
+          <div style="font-size:11px;color:#94a3b8;font-weight:400;margin-top:1px">${s.spec_text||''}</div>
+        </div>
+        <span class="cfg-badge ${s.process_type||'press'}">${s.process_type||'press'}</span>
+        <span style="font-size:16px;color:#94a3b8;margin-left:4px">›</span>
+      </div>
+      <div class="cfg-edit-panel" id="cfgedit-${s.id}">
+        <div class="cfg-row2">
+          <div class="cfg-field">
+            <label>항목명</label>
+            <input type="text" id="cfgf-name-${s.id}" value="${s.item_name||''}">
+          </div>
+          <div class="cfg-field">
+            <label>측정기</label>
+            <input type="text" id="cfgf-method-${s.id}" value="${s.inspection_method||''}">
+          </div>
+        </div>
+        <div class="cfg-field">
+          <label>규격 (spec_text)</label>
+          <input type="text" id="cfgf-spec-${s.id}" value="${s.spec_text||''}">
+        </div>
+        <div class="cfg-row3">
+          <div class="cfg-field">
+            <label>LSL</label>
+            <input type="text" inputmode="decimal" id="cfgf-lsl-${s.id}" value="${s.lsl??''}">
+          </div>
+          <div class="cfg-field">
+            <label>USL</label>
+            <input type="text" inputmode="decimal" id="cfgf-usl-${s.id}" value="${s.usl??''}">
+          </div>
+          <div class="cfg-field">
+            <label>측정칸수</label>
+            <input type="number" min="1" max="10" id="cfgf-pts-${s.id}" value="${s.measure_points??5}" ${s.is_visual?'disabled':''}>
+          </div>
+        </div>
+        <div class="cfg-row2">
+          <div class="cfg-field">
+            <label>공정 구분</label>
+            <select id="cfgf-ptype-${s.id}">
+              <option value="press" ${(s.process_type||'press')==='press'?'selected':''}>press</option>
+              <option value="machining" ${s.process_type==='machining'?'selected':''}>machining</option>
+              <option value="both" ${s.process_type==='both'?'selected':''}>both</option>
+            </select>
+          </div>
+          <div class="cfg-field">
+            <label>입력 방식</label>
+            <select id="cfgf-mm-${s.id}" ${s.is_visual?'disabled':''}>
+              <option value="0" ${!s.is_min_max?'selected':''}>포인트 입력</option>
+              <option value="1" ${s.is_min_max?'selected':''}>최소/최대</option>
+            </select>
+          </div>
+        </div>
+        <button class="cfg-save-btn" onclick="saveCfgSpec(${s.id})">저장</button>
+        <div class="cfg-saved" id="cfgsaved-${s.id}"></div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleCfgEdit(id) {
+  const panel = document.getElementById(`cfgedit-${id}`);
+  panel.classList.toggle('open');
+}
+
+async function saveCfgSpec(id) {
+  const btn = document.querySelector(`#cfgrow-${id} .cfg-save-btn`);
+  btn.textContent = '저장 중…'; btn.disabled = true;
+  try {
+    const lsl = document.getElementById(`cfgf-lsl-${id}`).value.trim();
+    const usl = document.getElementById(`cfgf-usl-${id}`).value.trim();
+    const patch = {
+      item_name:          document.getElementById(`cfgf-name-${id}`).value.trim(),
+      inspection_method:  document.getElementById(`cfgf-method-${id}`).value.trim(),
+      spec_text:          document.getElementById(`cfgf-spec-${id}`).value.trim(),
+      lsl:  lsl === '' ? null : parseFloat(lsl),
+      usl:  usl === '' ? null : parseFloat(usl),
+      measure_points: parseInt(document.getElementById(`cfgf-pts-${id}`).value) || 5,
+      process_type:   document.getElementById(`cfgf-ptype-${id}`).value,
+      is_min_max:     document.getElementById(`cfgf-mm-${id}`).value === '1'
+    };
+    await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch });
+    // 로컬 cfgSpecs + 측정 탭 specs 동시 갱신
+    const idx = cfgSpecs.findIndex(s => s.id === id);
+    if (idx >= 0) Object.assign(cfgSpecs[idx], patch);
+    const si = specs.findIndex(s => s.id === id);
+    if (si >= 0) Object.assign(specs[si], patch);
+    document.getElementById(`cfgsaved-${id}`).textContent = '✓ 저장됨';
+    setTimeout(() => { document.getElementById(`cfgsaved-${id}`).textContent = ''; }, 2000);
+  } catch(e) {
+    toast('저장 실패: ' + e.message);
+  } finally {
+    btn.textContent = '저장'; btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════
+// 유틸
+// ══════════════════════════════════
+let toastTimer;
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+</script>
+</body>
+</html>
