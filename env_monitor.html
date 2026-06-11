@@ -30,6 +30,8 @@
       --temp-glow:  rgba(245, 158, 11, 0.15);
       --humi:       #06b6d4;   /* 시안 */
       --humi-glow:  rgba(6, 182, 212, 0.15);
+      --feel:       #a78bfa;   /* 체감온도 - 보라 */
+      --feel-glow:  rgba(167, 139, 250, 0.15);
       --green:      #22c55e;
       --red:        #ef4444;
       --yellow:     #eab308;
@@ -120,6 +122,8 @@
       display: grid; grid-template-columns: 1fr 1fr;
       gap: 12px; margin-bottom: 16px;
     }
+    /* 실시간 탭: 온도/습도/체감 3열 한 줄 */
+    .cards.live3 { grid-template-columns: repeat(3, 1fr); }
     .card {
       background: var(--panel); border: 1px solid var(--border);
       border-radius: 10px; padding: 18px 16px;
@@ -128,6 +132,7 @@
     .card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; }
     .card.temp::before { background: var(--temp); box-shadow: 0 0 12px var(--temp-glow); }
     .card.humi::before { background: var(--humi); box-shadow: 0 0 12px var(--humi-glow); }
+    .card.feel::before { background: var(--feel); box-shadow: 0 0 12px var(--feel-glow); }
     .card-label {
       font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
       letter-spacing: 0.12em; color: var(--text-faint);
@@ -140,6 +145,12 @@
     }
     .card.temp .card-value { color: var(--temp); }
     .card.humi .card-value { color: var(--humi); }
+    .card.feel .card-value { color: var(--feel); }
+    /* 체감온도 쾌적도 배지 */
+    .feel-badge {
+      display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600;
+    }
     .card-unit { font-size: 0.9rem; font-weight: 400; color: var(--text-faint); }
     .card-meta { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-faint); }
 
@@ -276,7 +287,7 @@
     .toast.err { border-left-color: var(--red); }
 
     @media (max-width: 480px) {
-      .cards { grid-template-columns: 1fr; }
+      .cards, .cards.live3 { grid-template-columns: 1fr; }
       .stats { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
@@ -289,7 +300,7 @@
         <span class="title-sub">QC · 측정실</span>
         <span class="title">환경 모니터링 · 이력관리</span>
       </div>
-      <span class="version">v0.2.1</span>
+      <span class="version">v0.3</span>
     </header>
 
     <!-- 상태 표시줄 -->
@@ -309,7 +320,7 @@
 
     <!-- ===================== 실시간 탭 ===================== -->
     <div class="tabpanel active" id="tab-live">
-      <div class="cards">
+      <div class="cards live3">
         <div class="card temp">
           <div class="card-label">TEMP / 온도</div>
           <div class="card-value"><span id="curTemp">--</span><span class="card-unit">°C</span></div>
@@ -319,6 +330,11 @@
           <div class="card-label">HUMIDITY / 습도</div>
           <div class="card-value"><span id="curHumi">--</span><span class="card-unit">%</span></div>
           <div class="card-meta" id="humiMeta">--</div>
+        </div>
+        <div class="card feel">
+          <div class="card-label">FEELS LIKE / 체감</div>
+          <div class="card-value"><span id="curFeel">--</span><span class="card-unit">°C</span></div>
+          <div class="card-meta"><span class="feel-badge" id="feelBadge">--</span></div>
         </div>
       </div>
 
@@ -632,7 +648,44 @@
     }
 
     // ============================================================
-    // 판정 (관리한계 일탈 / 측정누락)
+    // 체감온도 (실내, 풍속 약함 가정)
+    //  - 27°C 이상: Heat Index (열지수, 고온다습 체감 상승)
+    //  - 27°C 미만: Apparent Temperature (Steadman 간이, 습도 보정)
+    // 입력: 온도(°C), 습도(%RH) → 출력: 체감온도(°C)
+    // ============================================================
+    function calcFeelsLike(T, RH) {
+      if (T >= 27) {
+        // Heat Index (NOAA 회귀식, 섭씨 변환판)
+        const Tf = T * 9/5 + 32;
+        let HI = -42.379 + 2.04901523*Tf + 10.14333127*RH
+               - 0.22475541*Tf*RH - 0.00683783*Tf*Tf
+               - 0.05481717*RH*RH + 0.00122874*Tf*Tf*RH
+               + 0.00085282*Tf*RH*RH - 0.00000199*Tf*Tf*RH*RH;
+        // 저습/고습 보정
+        if (RH < 13 && Tf >= 80 && Tf <= 112)
+          HI -= ((13-RH)/4) * Math.sqrt((17-Math.abs(Tf-95))/17);
+        else if (RH > 85 && Tf >= 80 && Tf <= 87)
+          HI += ((RH-85)/10) * ((87-Tf)/5);
+        return (HI - 32) * 5/9;
+      } else {
+        // Apparent Temperature (Steadman): 수증기압 e 기반
+        const e = (RH/100) * 6.105 * Math.exp(17.27*T/(237.7+T));
+        // 실내 풍속 0.1 m/s 가정 → wind 항 거의 0
+        return T + 0.348*e - 0.70*0.1 - 4.25;
+      }
+    }
+    // 체감온도 → 쾌적도 단계 (실내 기준)
+    function comfortLevel(feel) {
+      if (feel < 16)  return { label:'추움',     color:'#60a5fa', bg:'rgba(96,165,250,0.12)' };
+      if (feel < 20)  return { label:'다소 추움', color:'#22d3ee', bg:'rgba(34,211,238,0.12)' };
+      if (feel < 24)  return { label:'쾌적',     color:'#22c55e', bg:'rgba(34,197,94,0.12)' };
+      if (feel < 27)  return { label:'다소 더움', color:'#eab308', bg:'rgba(234,179,8,0.12)' };
+      if (feel < 31)  return { label:'더움',     color:'#f97316', bg:'rgba(249,115,22,0.12)' };
+      return            { label:'매우 더움', color:'#ef4444', bg:'rgba(239,68,68,0.14)' };
+    }
+
+    // ============================================================
+    // 판정 (관리한계 일탈)
     // ============================================================
     function getLimits() {
       return {
@@ -739,6 +792,14 @@
         document.getElementById('curHumi').textContent=latest.humi.toFixed(1);
         document.getElementById('tempMeta').textContent='측정 '+fmtKstHM(latest.measured_at);
         document.getElementById('humiMeta').textContent='측정 '+fmtKstHM(latest.measured_at);
+        // 체감온도 + 쾌적도 단계
+        const feel = calcFeelsLike(latest.temp, latest.humi);
+        const comfort = comfortLevel(feel);
+        document.getElementById('curFeel').textContent = feel.toFixed(1);
+        const badge = document.getElementById('feelBadge');
+        badge.textContent = comfort.label;
+        badge.style.color = comfort.color;
+        badge.style.background = comfort.bg;
         document.getElementById('chartMeta').textContent=data.length+' 측정';
         txt.textContent=isStale?'신호 끊김 (3분 이상)':'연결됨';
         dot.classList.toggle('stale', isStale);
