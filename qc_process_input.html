@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.8</title>
+<title>공정검사 입력 v0.20</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -36,12 +36,14 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .toast.show{opacity:1}
 
 /* ── 서브 네비 ── */
-.sub-nav{display:flex;background:#162d4a;border-top:1px solid rgba(255,255,255,.1)}
+.sub-nav{display:flex;background:#162d4a;border-top:1px solid rgba(255,255,255,.1);position:sticky;top:var(--hdr-only-h,54px);z-index:100}
 .snav-btn{flex:1;padding:10px 0;border:none;background:transparent;color:rgba(255,255,255,.55);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
 .snav-btn.active{color:#fff;border-bottom-color:#60a5fa}
 
 /* ── 도면 모달 ── */
-.drawing-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f0f2f5;border-bottom:1px solid #e2e8f0;position:sticky;top:var(--spec-top,106px);z-index:98}
+/* 탭바+도면바 sticky 묶음 (헤더+서브네비 아래) */
+.sticky-group{position:sticky;top:var(--hdr-h,90px);z-index:99;background:#f0f2f5}
+.drawing-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f0f2f5;border-bottom:1px solid #e2e8f0}
 .drawing-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:8px;background:#fff;color:#1e40af;font-size:13px;font-weight:700;cursor:pointer}
 .drawing-btn:active{background:#eff6ff}
 .drawing-btn.no-drawing{border-color:#e2e8f0;color:#94a3b8;cursor:default}
@@ -151,7 +153,8 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .lsl-usl span{color:#1e3a5f;font-weight:600}
 
 /* 부품 탭바 (헤더 아래 고정) */
-.tab-bar{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:sticky;top:var(--hdr-h,64px);z-index:99;background:#f0f2f5;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.tab-bar{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#f0f2f5}
+.tab-bar::-webkit-scrollbar{display:none}
 .tab-bar::-webkit-scrollbar{display:none}
 .tab{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 13px;background:#e2e8f0;border-radius:9px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .tab.active{background:#1e3a5f;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
@@ -238,7 +241,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.17</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.20</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -255,10 +258,19 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
   <!-- ── 측정 탭 ── -->
   <div id="measure-screen" class="active">
-    <!-- 부품 탭바 (sticky) -->
-    <div class="tab-bar" id="tab-bar" style="display:none"></div>
+    <!-- 부품 탭바 + 도면바 (sticky 묶음) -->
+    <div class="sticky-group" id="sticky-group">
+      <div class="tab-bar" id="tab-bar" style="display:none"></div>
+      <!-- 도면 버튼 바 (탭 있을 때만 표시) -->
+      <div class="drawing-bar" id="drawing-bar" style="display:none">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
+        <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
+          📐 도면 보기
+        </button>
+      </div>
+    </div>
 
-    <!-- 부품 검색 (탭바 아래) -->
+    <!-- 부품 검색 -->
     <div class="card" id="part-card">
       <div class="card-title">부품 검색 → 탭 추가</div>
       <!-- 고객사 필터 -->
@@ -295,13 +307,6 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
     <!-- 검사 항목 -->
     <div id="specs-area" style="display:none">
-      <!-- 도면 버튼 바 -->
-      <div class="drawing-bar">
-        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
-        <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
-          📐 도면 보기
-        </button>
-      </div>
       <div id="specs-list" style="padding:8px 12px 0"></div>
     </div>
 
@@ -557,14 +562,12 @@ async function enterMain() {
 
   showScreen('main');
 
-  // 탭바 sticky 위치 = 실제 헤더+서브네비 높이
+  // sticky 높이: 헤더 + 서브네비 = sticky-group(탭바+도면바) top
   requestAnimationFrame(() => {
-    const hdrH = (document.querySelector('#main-screen .hdr')?.offsetHeight || 54)
-               + (document.querySelector('#main-screen .sub-nav')?.offsetHeight || 36);
-    document.documentElement.style.setProperty('--hdr-h', hdrH + 'px');
-    // drawing-bar는 탭바(약 44px) 아래
-    const tabH = document.getElementById('tab-bar')?.offsetHeight || 44;
-    document.documentElement.style.setProperty('--spec-top', (hdrH + tabH) + 'px');
+    const hdr = document.querySelector('#main-screen .hdr')?.offsetHeight || 54;
+    const nav = document.querySelector('#main-screen .sub-nav')?.offsetHeight || 36;
+    document.documentElement.style.setProperty('--hdr-only-h', hdr + 'px');
+    document.documentElement.style.setProperty('--hdr-h', (hdr + nav) + 'px');
   });
 
   // 고객사 목록 채우기 (중복 제거)
@@ -693,6 +696,7 @@ function switchTab(idx) {
   document.getElementById('insp-info-card').style.display = 'block';
   document.getElementById('specs-area').style.display = 'block';
   document.getElementById('save-area').style.display = 'block';
+  document.getElementById('drawing-bar').style.display = 'flex';
 
   renderTabBar();
   renderSpecs();
@@ -724,6 +728,7 @@ function closeTab(idx, ev) {
     document.getElementById('insp-info-card').style.display = 'none';
     document.getElementById('specs-area').style.display = 'none';
     document.getElementById('save-area').style.display = 'none';
+    document.getElementById('drawing-bar').style.display = 'none';
     renderTabBar();
     return;
   }
@@ -1161,9 +1166,9 @@ function closeDrawing() {
   document.body.style.overflow = '';
 }
 
-// 모달 배경 클릭으로 닫기
+// 모달 배경/여백 클릭으로 닫기 (이미지 자체 클릭은 제외)
 document.addEventListener('click', e => {
-  if (e.target.id === 'drawing-modal') closeDrawing();
+  if (e.target.id === 'drawing-modal' || e.target.id === 'drawing-img-wrap') closeDrawing();
 });
 
 // ══════════════════════════════════
