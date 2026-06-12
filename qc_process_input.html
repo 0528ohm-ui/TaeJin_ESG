@@ -40,7 +40,18 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .snav-btn{flex:1;padding:10px 0;border:none;background:transparent;color:rgba(255,255,255,.55);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
 .snav-btn.active{color:#fff;border-bottom-color:#60a5fa}
 
-/* ── 설정 화면 ── */
+/* ── 도면 모달 ── */
+.drawing-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f0f2f5;border-bottom:1px solid #e2e8f0;position:sticky;top:var(--spec-top,106px);z-index:98}
+.drawing-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:8px;background:#fff;color:#1e40af;font-size:13px;font-weight:700;cursor:pointer}
+.drawing-btn:active{background:#eff6ff}
+.drawing-btn.no-drawing{border-color:#e2e8f0;color:#94a3b8;cursor:default}
+.drawing-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column}
+.drawing-modal.open{display:flex}
+.drawing-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#fff}
+.drawing-modal-hdr span{font-size:14px;font-weight:700}
+.drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
+.drawing-img-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:8px;touch-action:pinch-zoom}
+.drawing-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
 #measure-screen{display:none}
 #measure-screen.active{display:block}
 #cfg-screen{display:none;padding-bottom:32px}
@@ -61,9 +72,17 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .cfg-field label{font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
 .cfg-field input,.cfg-field select{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none}
 .cfg-field input:focus,.cfg-field select:focus{border-color:#3b82f6}
-.cfg-save-btn{background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:100%}
-.cfg-save-btn:active{opacity:.7}
+.cfg-save-btn{background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
+.cfg-del-btn{background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:56px}
+.cfg-save-btn:active,.cfg-del-btn:active{opacity:.7}
 .cfg-saved{color:#16a34a;font-size:12px;font-weight:700;text-align:center;min-height:16px}
+.cfg-btn-row{display:flex;gap:8px}
+.cfg-add-btn{width:100%;padding:12px;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;margin:0 12px 8px;width:calc(100% - 24px)}
+.cfg-add-btn:active{background:#f1f5f9}
+/* 새 부품 등록 토글 */
+.cfg-new-toggle{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#3b82f6;cursor:pointer;margin-top:10px;padding:6px 0}
+.cfg-new-form{display:none;margin-top:10px;border-top:1px solid #f1f5f9;padding-top:12px}
+.cfg-new-form.open{display:block}
 
 /* ── 이력 화면 ── */
 #hist-screen{display:none;padding:20px 12px}
@@ -212,14 +231,14 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
     <button class="pin-btn del" onclick="pinDel()">⌫</button>
   </div>
   <div class="pin-err" id="pin-err"></div>
-  <button onclick="resetSetup()" style="margin-top:20px;background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;text-decoration:underline">설정 다시하기</button>
+  <button onclick="resetSetup()" style="margin-top:20px;background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;text-decoration:underline">인증 초기화</button>
 </div>
 
 <!-- ③ 메인 화면 -->
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.9</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.17</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -242,6 +261,13 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
     <!-- 부품 검색 (탭바 아래) -->
     <div class="card" id="part-card">
       <div class="card-title">부품 검색 → 탭 추가</div>
+      <!-- 고객사 필터 -->
+      <div style="margin-bottom:8px">
+        <label>고객사 필터 <span style="color:#94a3b8;font-weight:400">(선택)</span></label>
+        <select class="inp" id="customer-filter" onchange="filterParts(document.getElementById('part-search').value)" style="margin-top:4px">
+          <option value="">전체</option>
+        </select>
+      </div>
       <div class="part-search-wrap">
         <input class="inp" id="part-search" type="text" placeholder="부품번호 또는 부품명 검색…" oninput="filterParts(this.value)" onfocus="openDropdown()" onblur="setTimeout(closeDropdown,200)">
         <div class="part-dropdown" id="part-dropdown"></div>
@@ -251,7 +277,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
     <!-- 검사 정보 -->
     <div class="card" id="insp-info-card" style="display:none">
       <div class="card-title">② 검사 정보</div>
-      <div class="row2">
+      <div class="row2" style="margin-bottom:10px">
         <div>
           <label>검사일</label>
           <input class="inp" id="insp-date" type="date">
@@ -261,14 +287,31 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
           <input class="inp" id="insp-time" type="time">
         </div>
       </div>
+      <div>
+        <label>호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(직전 입력값 자동 적용)</span></label>
+        <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 1, 2, A …" style="margin-top:4px">
+      </div>
     </div>
 
     <!-- 검사 항목 -->
     <div id="specs-area" style="display:none">
-      <div style="padding:4px 12px 0;font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">
-        ③ 측정값 입력
+      <!-- 도면 버튼 바 -->
+      <div class="drawing-bar">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
+        <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
+          📐 도면 보기
+        </button>
       </div>
       <div id="specs-list" style="padding:8px 12px 0"></div>
+    </div>
+
+    <!-- 도면 모달 -->
+    <div class="drawing-modal" id="drawing-modal">
+      <div class="drawing-modal-hdr">
+        <span id="drawing-modal-title">도면</span>
+        <button class="drawing-close" onclick="closeDrawing()">✕</button>
+      </div>
+      <div class="drawing-img-wrap" id="drawing-img-wrap"></div>
     </div>
 
     <!-- 저장 -->
@@ -288,13 +331,34 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
   <!-- ── 설정 탭 ── -->
   <div id="cfg-screen">
     <div class="card" style="margin-top:12px">
-      <div class="card-title">⚙️ 부품 선택</div>
+      <div class="card-title">⚙️ 부품 선택 / 등록</div>
+      <!-- 기존 부품 검색 -->
       <div class="part-search-wrap">
         <input class="inp" id="cfg-part-search" type="text" placeholder="부품번호 또는 부품명 검색…"
           oninput="filterPartsCfg(this.value)" onfocus="openDropdownCfg()" onblur="setTimeout(closeDropdownCfg,200)">
         <div class="part-dropdown" id="cfg-part-dropdown"></div>
       </div>
-      <div id="cfg-selected-part" style="display:none;margin-top:8px;font-size:13px;font-weight:700;color:#1e40af"></div>
+      <div id="cfg-selected-part" style="display:none;margin-top:8px;display:none;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:13px;font-weight:700;color:#1e40af" id="cfg-selected-part-label"></div>
+        <button onclick="deletePartCfg()" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🗑 부품 삭제</button>
+      </div>
+      <!-- 새 부품 등록 토글 -->
+      <div class="cfg-new-toggle" onclick="toggleNewPart()">
+        <span id="cfg-new-icon">＋</span> 새 부품 직접 등록
+      </div>
+      <div class="cfg-new-form" id="cfg-new-form">
+        <div class="cfg-row2" style="margin-bottom:8px">
+          <div class="cfg-field"><label>부품번호 *</label><input type="text" class="inp" id="np-pn" placeholder="예) 1234-567-01"></div>
+          <div class="cfg-field"><label>부품명 *</label><input type="text" class="inp" id="np-name" placeholder="예) OutBoard Seal"></div>
+        </div>
+        <div class="cfg-row3" style="margin-bottom:10px">
+          <div class="cfg-field"><label>고객사</label><input type="text" class="inp" id="np-cust" placeholder="예) SKF SBC"></div>
+          <div class="cfg-field"><label>재질</label><input type="text" class="inp" id="np-mat" placeholder="예) SPCC t0.6"></div>
+          <div class="cfg-field"><label>기종(모델)</label><input type="text" class="inp" id="np-model" placeholder="예) ATC"></div>
+        </div>
+        <button class="cfg-save-btn" style="width:100%" onclick="addNewPart()">부품 등록</button>
+        <div class="cfg-saved" id="np-saved"></div>
+      </div>
     </div>
     <div id="cfg-spec-list" style="padding:0 12px 20px"></div>
     <div id="cfg-loading" class="loading" style="display:none">항목 불러오는 중…</div>
@@ -309,12 +373,13 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 // 상수 / 전역 상태
 // ══════════════════════════════════
 const SK = {
-  URL:  'QC_SB_URL',
-  KEY:  'QC_SB_KEY',
   AUTH: 'QC_PROCESS_AUTH'
 };
 
-let sbUrl = '', sbKey = '';
+// Supabase 연결 정보 (하드코딩 — anon 키는 RLS로 보호됨)
+const SB_URL = 'https://trhjeongphtendkounig.supabase.co';
+const SB_KEY = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
+let sbUrl = SB_URL, sbKey = SB_KEY;
 let auth = null;          // { name }
 let allParts = [];        // qc_part 전체
 
@@ -335,17 +400,11 @@ let pinBuf = '';
 // 초기화
 // ══════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  sbUrl = localStorage.getItem(SK.URL) || '';
-  sbKey = localStorage.getItem(SK.KEY) || '';
-
-  if (!sbUrl || !sbKey) { showScreen('setup'); return; }
-
-  // 저장된 인증 확인
+  // URL/키 하드코딩 — 설정 화면 건너뜀
   const saved = localStorage.getItem(SK.AUTH);
   if (saved) {
     try { auth = JSON.parse(saved); } catch(e) { auth = null; }
   }
-
   if (auth && auth.name) {
     await enterMain();
   } else {
@@ -370,10 +429,25 @@ async function sbFetch(path, opts = {}) {
     ...xh
   };
   if (prefer) h['Prefer'] = prefer;
-  const res = await fetch(`${sbUrl}/rest/v1/${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;   // 본문 없는 201/204 대응
+
+  // 10초 timeout
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/${path}`, {
+      method, headers: h,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('요청 시간 초과 (10초) — Supabase 연결 확인');
+    throw e;
+  }
 }
 
 async function sbAll(path, params = '') {
@@ -452,13 +526,11 @@ async function verifyPin() {
 }
 
 function resetSetup() {
-  localStorage.removeItem(SK.URL);
-  localStorage.removeItem(SK.KEY);
   localStorage.removeItem(SK.AUTH);
-  // 입력 필드 초기화
-  document.getElementById('sb-url').value = '';
-  document.getElementById('sb-key').value = '';
-  showScreen('setup');
+  auth = null;
+  pinBuf = '';
+  renderPinDots();
+  showScreen('pin');
 }
 
 function logout() {
@@ -485,15 +557,29 @@ async function enterMain() {
 
   showScreen('main');
 
-  // 탭바 sticky 위치 = 실제 헤더 높이
+  // 탭바 sticky 위치 = 실제 헤더+서브네비 높이
   requestAnimationFrame(() => {
-    const h = document.querySelector('#main-screen .hdr')?.offsetHeight || 64;
-    document.documentElement.style.setProperty('--hdr-h', h + 'px');
+    const hdrH = (document.querySelector('#main-screen .hdr')?.offsetHeight || 54)
+               + (document.querySelector('#main-screen .sub-nav')?.offsetHeight || 36);
+    document.documentElement.style.setProperty('--hdr-h', hdrH + 'px');
+    // drawing-bar는 탭바(약 44px) 아래
+    const tabH = document.getElementById('tab-bar')?.offsetHeight || 44;
+    document.documentElement.style.setProperty('--spec-top', (hdrH + tabH) + 'px');
   });
+
+  // 고객사 목록 채우기 (중복 제거)
+  const customers = [...new Set(allParts.map(p => p.customer).filter(Boolean))].sort();
+  const sel = document.getElementById('customer-filter');
+  sel.innerHTML = '<option value="">전체</option>'
+    + customers.map(c => `<option value="${c}">${c}</option>`).join('');
+
+  // 호기 직전값 복원
+  const lastHo = localStorage.getItem('QC_LAST_HO') || '';
+  document.getElementById('insp-ho').value = lastHo;
 
   // 부품 목록 로드
   try {
-    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material&order=part_number');
+    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path&order=part_number');
   } catch(e) {
     toast('부품 목록 로드 실패: ' + e.message);
   }
@@ -504,20 +590,21 @@ async function enterMain() {
 // ══════════════════════════════════
 function filterParts(q) {
   const dd = document.getElementById('part-dropdown');
-  if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
-  const kw = q.toLowerCase();
-  const matched = allParts.filter(p =>
-    p.part_number.toLowerCase().includes(kw) ||
-    (p.part_name || '').toLowerCase().includes(kw)
-  ).slice(0, 20);
-
+  const customer = document.getElementById('customer-filter')?.value || '';
+  const kw = (q || '').toLowerCase();
+  if (!kw && !customer) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
+  const matched = allParts.filter(p => {
+    if (customer && p.customer !== customer) return false;
+    if (!kw) return true;
+    return p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw);
+  }).slice(0, 20);
   if (!matched.length) {
     dd.innerHTML = '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
   } else {
     dd.innerHTML = matched.map(p => `
       <div class="part-opt" onmousedown="selectPart(${p.id})">
-        <div>${p.part_name || '—'}</div>
-        <div class="pno">${p.part_number}${p.material ? ' · ' + p.material : ''}</div>
+        <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+p.customer+'</span>' : ''}</div>
+        <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div>
       </div>`).join('');
   }
   dd.classList.add('open');
@@ -585,6 +672,7 @@ function stashActiveTab() {
   if (activeTabIdx < 0 || !tabs[activeTabIdx]) return;
   tabs[activeTabIdx].date = document.getElementById('insp-date').value;
   tabs[activeTabIdx].time = document.getElementById('insp-time').value;
+  tabs[activeTabIdx].ho   = document.getElementById('insp-ho').value;
   tabs[activeTabIdx].scrollY = window.scrollY;
 }
 
@@ -601,12 +689,16 @@ function switchTab(idx) {
 
   document.getElementById('insp-date').value = t.date;
   document.getElementById('insp-time').value = t.time;
+  document.getElementById('insp-ho').value   = t.ho ?? (localStorage.getItem('QC_LAST_HO') || '');
   document.getElementById('insp-info-card').style.display = 'block';
   document.getElementById('specs-area').style.display = 'block';
   document.getElementById('save-area').style.display = 'block';
 
   renderTabBar();
   renderSpecs();
+
+  // 도면 버튼 상태 업데이트
+  updateDrawingBtn(t.part);
 
   // 마지막으로 보던 위치로 복원 (새 탭은 0)
   window.scrollTo(0, t.scrollY || 0);
@@ -924,6 +1016,7 @@ function fillMinMax(minV, maxV, count = 5) {
 async function saveAll() {
   const date = document.getElementById('insp-date').value;
   const time = document.getElementById('insp-time').value;
+  const ho   = document.getElementById('insp-ho').value.trim();
 
   if (!date) { toast('검사일을 입력하세요'); return; }
 
@@ -945,10 +1038,14 @@ async function saveAll() {
         part_id: selectedPart.id,
         inspection_date: date,
         inspection_time: time || null,
+        ho: ho !== '' ? ho : null,
         inspector: auth.name
       }
     });
     const iid = inspRows[0].id;
+
+    // 호기 직전값 저장
+    if (ho !== '') localStorage.setItem('QC_LAST_HO', ho);
 
     // 2. 측정값 INSERT
     // PostgREST 일괄 INSERT는 모든 행의 키가 동일해야 함 (PGRST102 방지)
@@ -1025,6 +1122,51 @@ async function saveAll() {
 }
 
 // ══════════════════════════════════
+// 도면 조회
+// ══════════════════════════════════
+function updateDrawingBtn(part) {
+  const btn = document.getElementById('drawing-btn');
+  if (!btn) return;
+  const hasDrawing = part && part.drawing_path;
+  btn.classList.toggle('no-drawing', !hasDrawing);
+  btn.title = hasDrawing ? part.drawing_path : '도면 없음';
+}
+
+function openDrawing() {
+  if (!selectedPart || !selectedPart.drawing_path) {
+    toast('이 부품의 도면이 없습니다');
+    return;
+  }
+  const imgUrl = `${sbUrl}/storage/v1/object/public/qc-drawings/${selectedPart.drawing_path}`;
+  const wrap = document.getElementById('drawing-img-wrap');
+  wrap.innerHTML = '<div style="color:#94a3b8;font-size:14px">불러오는 중…</div>';
+
+  const img = new Image();
+  img.onload = () => {
+    wrap.innerHTML = '';
+    wrap.appendChild(img);
+  };
+  img.onerror = () => {
+    wrap.innerHTML = '<div style="color:#94a3b8;font-size:14px;text-align:center;padding:20px">도면 이미지를 불러올 수 없습니다<br><span style="font-size:11px">'+selectedPart.drawing_path+'</span></div>';
+  };
+  img.src = imgUrl;
+
+  document.getElementById('drawing-modal-title').textContent = `${selectedPart.part_number} 도면`;
+  document.getElementById('drawing-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrawing() {
+  document.getElementById('drawing-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// 모달 배경 클릭으로 닫기
+document.addEventListener('click', e => {
+  if (e.target.id === 'drawing-modal') closeDrawing();
+});
+
+// ══════════════════════════════════
 // 서브 네비 전환
 // ══════════════════════════════════
 const NAV_SCREENS = ['measure', 'hist', 'cfg'];
@@ -1066,8 +1208,8 @@ async function selectPartCfg(id) {
   document.getElementById('cfg-part-dropdown').classList.remove('open');
   cfgPart = allParts.find(p => p.id === id);
   if (!cfgPart) return;
-  document.getElementById('cfg-selected-part').style.display = 'block';
-  document.getElementById('cfg-selected-part').textContent = `${cfgPart.part_name} · ${cfgPart.part_number}`;
+  document.getElementById('cfg-selected-part').style.display = 'flex';
+  document.getElementById('cfg-selected-part-label').textContent = `${cfgPart.part_name} · ${cfgPart.part_number}`;
   document.getElementById('cfg-loading').style.display = 'block';
   document.getElementById('cfg-spec-list').innerHTML = '';
   try {
@@ -1084,7 +1226,7 @@ async function selectPartCfg(id) {
 // ── 설정 spec 렌더링 ──
 function renderCfgSpecs() {
   const el = document.getElementById('cfg-spec-list');
-  el.innerHTML = cfgSpecs.map(s => `
+  const rows = cfgSpecs.map((s, idx) => `
     <div class="cfg-spec-row" id="cfgrow-${s.id}">
       <div class="cfg-spec-hdr" onclick="toggleCfgEdit(${s.id})">
         <div class="cfg-no">${s.item_no??'—'}</div>
@@ -1092,58 +1234,248 @@ function renderCfgSpecs() {
           <div style="font-size:11px;color:#94a3b8;font-weight:400;margin-top:1px">${s.spec_text||''}</div>
         </div>
         <span class="cfg-badge ${s.process_type||'press'}">${s.process_type||'press'}</span>
-        <span style="font-size:16px;color:#94a3b8;margin-left:4px">›</span>
+        <!-- 순서 버튼 (이벤트 전파 막기) -->
+        <div style="display:flex;flex-direction:column;gap:2px;margin-left:4px" onclick="event.stopPropagation()">
+          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:10px;cursor:pointer;line-height:1"
+            onclick="moveSpec(${idx},-1)" ${idx===0?'disabled':''}>↑</button>
+          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:10px;cursor:pointer;line-height:1"
+            onclick="moveSpec(${idx},+1)" ${idx===cfgSpecs.length-1?'disabled':''}>↓</button>
+        </div>
+        <span style="font-size:16px;color:#94a3b8;margin-left:2px">›</span>
       </div>
       <div class="cfg-edit-panel" id="cfgedit-${s.id}">
         <div class="cfg-row2">
-          <div class="cfg-field">
-            <label>항목명</label>
-            <input type="text" id="cfgf-name-${s.id}" value="${s.item_name||''}">
-          </div>
-          <div class="cfg-field">
-            <label>측정기</label>
-            <input type="text" id="cfgf-method-${s.id}" value="${s.inspection_method||''}">
-          </div>
+          <div class="cfg-field"><label>항목명</label>
+            <input type="text" id="cfgf-name-${s.id}" value="${s.item_name||''}"></div>
+          <div class="cfg-field"><label>측정기</label>
+            <input type="text" id="cfgf-method-${s.id}" value="${s.inspection_method||''}"></div>
         </div>
-        <div class="cfg-field">
-          <label>규격 (spec_text)</label>
-          <input type="text" id="cfgf-spec-${s.id}" value="${s.spec_text||''}">
-        </div>
+        <div class="cfg-field"><label>규격 (spec_text)</label>
+          <input type="text" id="cfgf-spec-${s.id}" value="${s.spec_text||''}"></div>
         <div class="cfg-row3">
-          <div class="cfg-field">
-            <label>LSL</label>
-            <input type="text" inputmode="decimal" id="cfgf-lsl-${s.id}" value="${s.lsl??''}">
-          </div>
-          <div class="cfg-field">
-            <label>USL</label>
-            <input type="text" inputmode="decimal" id="cfgf-usl-${s.id}" value="${s.usl??''}">
-          </div>
-          <div class="cfg-field">
-            <label>측정칸수</label>
-            <input type="number" min="1" max="10" id="cfgf-pts-${s.id}" value="${s.measure_points??5}" ${s.is_visual?'disabled':''}>
-          </div>
+          <div class="cfg-field"><label>LSL</label>
+            <input type="text" inputmode="decimal" id="cfgf-lsl-${s.id}" value="${s.lsl??''}"></div>
+          <div class="cfg-field"><label>USL</label>
+            <input type="text" inputmode="decimal" id="cfgf-usl-${s.id}" value="${s.usl??''}"></div>
+          <div class="cfg-field"><label>측정칸수</label>
+            <input type="number" min="1" max="10" id="cfgf-pts-${s.id}" value="${s.measure_points??5}" ${s.is_visual?'disabled':''}></div>
         </div>
         <div class="cfg-row2">
-          <div class="cfg-field">
-            <label>공정 구분</label>
+          <div class="cfg-field"><label>공정 구분</label>
             <select id="cfgf-ptype-${s.id}">
               <option value="press" ${(s.process_type||'press')==='press'?'selected':''}>press</option>
               <option value="machining" ${s.process_type==='machining'?'selected':''}>machining</option>
               <option value="both" ${s.process_type==='both'?'selected':''}>both</option>
-            </select>
-          </div>
-          <div class="cfg-field">
-            <label>입력 방식</label>
+            </select></div>
+          <div class="cfg-field"><label>입력 방식</label>
             <select id="cfgf-mm-${s.id}" ${s.is_visual?'disabled':''}>
               <option value="0" ${!s.is_min_max?'selected':''}>포인트 입력</option>
               <option value="1" ${s.is_min_max?'selected':''}>최소/최대</option>
-            </select>
-          </div>
+            </select></div>
         </div>
-        <button class="cfg-save-btn" onclick="saveCfgSpec(${s.id})">저장</button>
+        <div class="cfg-btn-row">
+          <button class="cfg-save-btn" onclick="saveCfgSpec(${s.id})">저장</button>
+          <button class="cfg-del-btn" onclick="deleteCfgSpec(${s.id})">🗑</button>
+        </div>
         <div class="cfg-saved" id="cfgsaved-${s.id}"></div>
       </div>
     </div>`).join('');
+
+  // + 항목 추가 버튼
+  const addBtn = cfgPart ? `<button class="cfg-add-btn" onclick="openAddSpec()">＋ 항목 추가</button>` : '';
+  // 새 항목 입력 패널 (기본 숨김)
+  const addPanel = `
+    <div id="cfg-new-spec" style="display:none;background:#fff;border-radius:10px;border:2px dashed #3b82f6;padding:14px;margin:0 12px 8px">
+      <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:10px">새 항목 추가</div>
+      <div class="cfg-row2" style="margin-bottom:8px">
+        <div class="cfg-field"><label>항목 No.</label><input type="number" class="inp" id="ns-no" placeholder="예) 16"></div>
+        <div class="cfg-field"><label>항목명 *</label><input type="text" class="inp" id="ns-name" placeholder="예) 외경"></div>
+      </div>
+      <div class="cfg-row2" style="margin-bottom:8px">
+        <div class="cfg-field"><label>측정기</label><input type="text" class="inp" id="ns-method" placeholder="예) 3차원측정기"></div>
+        <div class="cfg-field"><label>규격</label><input type="text" class="inp" id="ns-spec" placeholder="예) ⌀76.2 ±0.03"></div>
+      </div>
+      <div class="cfg-row3" style="margin-bottom:8px">
+        <div class="cfg-field"><label>LSL</label><input type="text" inputmode="decimal" class="inp" id="ns-lsl"></div>
+        <div class="cfg-field"><label>USL</label><input type="text" inputmode="decimal" class="inp" id="ns-usl"></div>
+        <div class="cfg-field"><label>측정칸수</label><input type="number" class="inp" id="ns-pts" value="5" min="0" max="10"></div>
+      </div>
+      <div class="cfg-row2" style="margin-bottom:10px">
+        <div class="cfg-field"><label>공정 구분</label>
+          <select class="inp" id="ns-ptype">
+            <option value="press">press</option>
+            <option value="machining">machining</option>
+            <option value="both">both</option>
+          </select></div>
+        <div class="cfg-field"><label>외관 항목?</label>
+          <select class="inp" id="ns-visual">
+            <option value="0">치수 항목</option>
+            <option value="1">외관 항목</option>
+          </select></div>
+      </div>
+      <div class="cfg-btn-row">
+        <button class="cfg-save-btn" onclick="saveNewSpec()">추가</button>
+        <button class="cfg-del-btn" onclick="document.getElementById('cfg-new-spec').style.display='none'">✕</button>
+      </div>
+      <div class="cfg-saved" id="ns-saved"></div>
+    </div>`;
+
+  el.innerHTML = rows + addPanel + addBtn;
+}
+
+// ── 부품 삭제 ──
+async function deletePartCfg() {
+  if (!cfgPart) return;
+  const hasSpec = cfgSpecs.length > 0;
+  const msg = hasSpec
+    ? `"${cfgPart.part_number}" 부품과 연결된 검사항목 ${cfgSpecs.length}건이 함께 삭제됩니다.\n기존 검사 기록은 유지됩니다.\n\n정말 삭제하시겠습니까?`
+    : `"${cfgPart.part_number}" 부품을 삭제할까요?`;
+  if (!confirm(msg)) return;
+
+  try {
+    // spec 먼저 삭제 (cascade 설정 안 됐을 수도 있으니)
+    if (hasSpec) {
+      await sbFetch(`qc_part_spec?part_id=eq.${cfgPart.id}`, { method: 'DELETE' });
+    }
+    await sbFetch(`qc_part?id=eq.${cfgPart.id}`, { method: 'DELETE' });
+
+    // allParts에서 제거
+    const idx = allParts.findIndex(p => p.id === cfgPart.id);
+    if (idx >= 0) allParts.splice(idx, 1);
+
+    toast(`✅ ${cfgPart.part_number} 삭제 완료`);
+    // 설정 화면 초기화
+    cfgPart = null; cfgSpecs = [];
+    document.getElementById('cfg-selected-part').style.display = 'none';
+    document.getElementById('cfg-part-search').value = '';
+    document.getElementById('cfg-spec-list').innerHTML = '';
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+// ── 새 부품 등록 토글 ──
+function toggleNewPart() {
+  const f = document.getElementById('cfg-new-form');
+  const icon = document.getElementById('cfg-new-icon');
+  const open = f.classList.toggle('open');
+  icon.textContent = open ? '－' : '＋';
+}
+
+async function addNewPart() {
+  const pn   = document.getElementById('np-pn').value.trim();
+  const name = document.getElementById('np-name').value.trim();
+  if (!pn || !name) { toast('부품번호와 부품명은 필수'); return; }
+  const btn = document.querySelector('#cfg-new-form .cfg-save-btn');
+  btn.textContent = '등록 중…'; btn.disabled = true;
+  try {
+    const body = {
+      part_number: pn,
+      part_name:   name,
+      customer:    document.getElementById('np-cust').value.trim() || null,
+      material:    document.getElementById('np-mat').value.trim()  || null,
+      model:       document.getElementById('np-model').value.trim()|| null,
+      is_active:   true
+    };
+    const res = await sbFetch('qc_part', { method: 'POST', prefer: 'return=representation', body });
+    const newPart = res[0];
+    allParts.push(newPart);
+    allParts.sort((a,b) => a.part_number.localeCompare(b.part_number));
+    document.getElementById('np-saved').textContent = `✓ 등록됨 (id=${newPart.id})`;
+    ['np-pn','np-name','np-cust','np-mat','np-model'].forEach(id => document.getElementById(id).value = '');
+    toast(`✅ ${pn} 등록 완료 — 이제 위에서 검색해서 항목 추가`);
+  } catch(e) {
+    toast('등록 실패: ' + e.message);
+  } finally {
+    btn.textContent = '부품 등록'; btn.disabled = false;
+  }
+}
+
+// ── 항목 추가 패널 열기 ──
+function openAddSpec() {
+  const panel = document.getElementById('cfg-new-spec');
+  panel.style.display = 'block';
+  // 다음 item_no 자동 제안
+  const maxNo = cfgSpecs.reduce((m,s) => Math.max(m, s.item_no??0), -1);
+  document.getElementById('ns-no').value = maxNo + 1;
+  document.getElementById('ns-name').focus();
+}
+
+async function saveNewSpec() {
+  if (!cfgPart) { toast('부품을 먼저 선택하세요'); return; }
+  const name = document.getElementById('ns-name').value.trim();
+  if (!name) { toast('항목명은 필수'); return; }
+  const btn = document.querySelector('#cfg-new-spec .cfg-save-btn');
+  btn.textContent = '추가 중…'; btn.disabled = true;
+  try {
+    const lsl = document.getElementById('ns-lsl').value.trim();
+    const usl = document.getElementById('ns-usl').value.trim();
+    const isVis = document.getElementById('ns-visual').value === '1';
+    const body = {
+      part_id:          cfgPart.id,
+      item_no:          parseInt(document.getElementById('ns-no').value) || 0,
+      item_name:        name,
+      inspection_method:document.getElementById('ns-method').value.trim() || null,
+      spec_text:        document.getElementById('ns-spec').value.trim()   || null,
+      lsl:  lsl ? parseFloat(lsl) : null,
+      usl:  usl ? parseFloat(usl) : null,
+      measure_points:   isVis ? 0 : (parseInt(document.getElementById('ns-pts').value) || 5),
+      process_type:     document.getElementById('ns-ptype').value,
+      is_visual:        isVis,
+      is_min_max:       false
+    };
+    const res = await sbFetch('qc_part_spec', { method: 'POST', prefer: 'return=representation', body });
+    cfgSpecs.push(res[0]);
+    cfgSpecs.sort((a,b) => (a.item_no??0) - (b.item_no??0));
+    document.getElementById('cfg-new-spec').style.display = 'none';
+    renderCfgSpecs();
+    toast('✅ 항목 추가됨');
+  } catch(e) {
+    toast('추가 실패: ' + e.message);
+  } finally {
+    btn.textContent = '추가'; btn.disabled = false;
+  }
+}
+
+// ── 항목 순서 변경 (↑↓) ──
+async function moveSpec(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= cfgSpecs.length) return;
+  const a = cfgSpecs[idx], b = cfgSpecs[target];
+  const noA = a.item_no, noB = b.item_no;
+
+  // item_no 같으면 인덱스 기반으로 임시값 사용
+  const tmpA = noA === noB ? noA + 0.5 : noB;
+  const tmpB = noA === noB ? noB - 0.5 : noA;
+
+  try {
+    await Promise.all([
+      sbFetch(`qc_part_spec?id=eq.${a.id}`, { method: 'PATCH', body: { item_no: tmpA } }),
+      sbFetch(`qc_part_spec?id=eq.${b.id}`, { method: 'PATCH', body: { item_no: tmpB } })
+    ]);
+    a.item_no = tmpA; b.item_no = tmpB;
+    // 소수점이 생겼으면 정수로 재정렬
+    cfgSpecs.sort((x,y) => (x.item_no??0) - (y.item_no??0));
+    // item_no 순번 정리 (0,1,2,3... 또는 원래 간격 유지 중 선택 — 원래 값 유지)
+    renderCfgSpecs();
+  } catch(e) {
+    toast('순서 변경 실패: ' + e.message);
+  }
+}
+
+// ── 항목 삭제 ──
+async function deleteCfgSpec(id) {
+  const s = cfgSpecs.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`"${s.item_name}" 항목을 삭제할까요?\n(기존 측정값에는 영향 없음)`)) return;
+  try {
+    await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'DELETE' });
+    cfgSpecs = cfgSpecs.filter(x => x.id !== id);
+    renderCfgSpecs();
+    toast('항목 삭제됨');
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
 }
 
 function toggleCfgEdit(id) {
