@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.25</title>
+<title>공정검사 입력 v0.31</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -46,6 +46,15 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .drawing-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f0f2f5;border-bottom:1px solid #e2e8f0}
 /* variant(IW/OW) 토글 */
 .variant-toggle{display:flex;background:#e2e8f0;border-radius:7px;padding:3px;gap:2px}
+/* 금형호기 태그 버튼 */
+.mold-tag{padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
+.mold-tag.sel{border-color:#3b82f6;background:#3b82f6;color:#fff}
+.mold-tag:active{transform:scale(.96)}
+/* 프레스/가공 세그먼트 */
+.proc-seg{display:flex;background:#e2e8f0;border-radius:8px;padding:3px;gap:2px;margin:10px 12px 0}
+.proc-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.proc-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tab-mach-badge{font-size:9px;background:#7c3aed;color:#fff;padding:0 4px;border-radius:3px;margin-left:3px;vertical-align:middle}
 .vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
 .vrt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .vrt-btn .vrt-badge{display:inline-block;min-width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
@@ -214,6 +223,14 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .spec-card.ng{border-color:#fca5a5;background:#fff5f5}
 .spec-card.ok{border-color:#86efac}
 .spec-hdr{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
+/* 항목 메모 */
+.note-btn{padding:4px 7px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#94a3b8;line-height:1;flex-shrink:0;margin-top:1px}
+.note-btn.has{border-color:#f59e0b;color:#f59e0b;background:#fffbeb}
+.note-area{margin-top:6px;display:none}
+.note-area.open{display:block}
+.note-area textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;resize:none;outline:none;font-family:inherit;color:#1e293b;background:#fafafa}
+.note-area textarea:focus{border-color:#f59e0b;background:#fff}
+.note-area textarea::placeholder{color:#cbd5e1}
 .spec-no{min-width:28px;height:28px;border-radius:7px;background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .spec-info{flex:1}
 .spec-name{font-size:14px;font-weight:700;color:#1e293b}
@@ -326,7 +343,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.25</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.31</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -343,6 +360,11 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
   <!-- ── 측정 탭 ── -->
   <div id="measure-screen" class="active">
+    <!-- 프레스 / 가공 세그먼트 -->
+    <div class="proc-seg">
+      <button class="proc-btn sel" id="proc-press" onclick="switchProcMode('press')">🔩 프레스</button>
+      <button class="proc-btn" id="proc-mach" onclick="switchProcMode('machining')">⚙️ 가공</button>
+    </div>
     <!-- 부품 탭바 + 도면바 (sticky 묶음) -->
     <div class="sticky-group" id="sticky-group">
       <div class="tab-bar" id="tab-bar" style="display:none"></div>
@@ -373,6 +395,29 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
         <input class="inp" id="part-search" type="text" placeholder="부품번호 또는 부품명 검색…" oninput="filterParts(this.value)" onfocus="openDropdown()" onblur="setTimeout(closeDropdown,200)">
         <div class="part-dropdown" id="part-dropdown"></div>
       </div>
+      <!-- 선택된 부품 + 금형호기 태그 + 설비호기 + 추가 버튼 (선택 후 표시) -->
+      <div id="pending-add" style="display:none;margin-top:10px;padding:10px;background:#f0f7ff;border:1.5px solid #bfdbfe;border-radius:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <div id="pending-label" style="font-weight:700;font-size:13px;color:#1e40af"></div>
+            <div id="pending-pno" style="font-size:11px;color:#3b82f6;margin-top:2px"></div>
+          </div>
+          <button onclick="cancelPending()" style="border:none;background:#e2e8f0;color:#64748b;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">취소</button>
+        </div>
+        <!-- 금형호기 태그 (금형 2벌 이상일 때만 표시) -->
+        <div id="pending-mold-row" style="display:none;margin-bottom:8px">
+          <label style="display:block;margin-bottom:5px">금형호기</label>
+          <div id="pending-mold-tags" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(선택)</span></label>
+            <input class="inp" id="pending-equip" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px"
+              onkeydown="if(event.key==='Enter')confirmAddTab()">
+          </div>
+          <button class="btn" onclick="confirmAddTab()" style="display:inline-block;width:auto;white-space:nowrap;padding:11px 18px;flex-shrink:0">＋ 추가</button>
+        </div>
+      </div>
     </div>
 
     <!-- 검사 정보 -->
@@ -388,9 +433,25 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
           <input class="inp" id="insp-time" type="time">
         </div>
       </div>
+      <div class="row2" style="margin-bottom:10px" id="insp-ho-mold-row">
+        <div>
+          <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(직전값 자동)</span></label>
+          <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px">
+        </div>
+        <div>
+          <label>금형호기</label>
+          <input class="inp" id="insp-mold" type="text" placeholder="예) 1호기 …" style="margin-top:4px">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label>측정사유</label>
+        <select class="inp" id="insp-reason" style="margin-top:4px">
+          <option value="">선택 안 함</option>
+        </select>
+      </div>
       <div>
-        <label>호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(직전 입력값 자동 적용)</span></label>
-        <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 1, 2, A …" style="margin-top:4px">
+        <label>비고 <span style="color:#94a3b8;font-weight:400;font-size:11px">(선택)</span></label>
+        <input class="inp" id="insp-remark" type="text" placeholder="특이사항 입력…" style="margin-top:4px">
       </div>
     </div>
 
@@ -451,6 +512,21 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
           <input class="inp" id="hist-date-from" type="date" onchange="loadHistData()">
           <input class="inp" id="hist-date-to" type="date" onchange="loadHistData()">
         </div>
+        <!-- 설비호기 / 금형호기 필터 -->
+        <div class="hist-date-row" style="margin-top:8px">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">설비호기</label>
+            <select class="inp" id="hist-filter-ho" onchange="applyHistFilter()" style="margin-top:3px">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">금형호기</label>
+            <select class="inp" id="hist-filter-mold" onchange="applyHistFilter()" style="margin-top:3px">
+              <option value="">전체</option>
+            </select>
+          </div>
+        </div>
         <div class="hist-count" id="hist-count"></div>
       </div>
       <!-- 검사 기록 리스트 -->
@@ -505,6 +581,21 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
       <div id="cfg-selected-part" style="display:none;margin-top:8px;display:none;align-items:center;justify-content:space-between;gap:8px">
         <div style="font-size:13px;font-weight:700;color:#1e40af" id="cfg-selected-part-label"></div>
         <button onclick="deletePartCfg()" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🗑 부품 삭제</button>
+      </div>
+      <!-- 금형 본수 편집 (부품 선택 후 표시) -->
+      <div id="cfg-mold-edit" style="display:none;margin-top:10px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#64748b">금형 본수</label>
+            <div style="font-size:10px;color:#94a3b8;margin-top:1px">측정 시 금형호기(1~N호기) 선택 개수</div>
+          </div>
+          <div class="cnt-ctrl" style="display:flex;align-items:center;gap:10px">
+            <button class="cnt-btn" onclick="changeMoldCount(-1)">−</button>
+            <span class="cnt-num" id="cfg-mold-num" style="min-width:24px;text-align:center;font-size:16px;font-weight:800;color:#1e3a5f">1</span>
+            <button class="cnt-btn" onclick="changeMoldCount(1)">＋</button>
+          </div>
+        </div>
+        <div class="cfg-saved" id="cfg-mold-saved" style="margin-top:6px"></div>
       </div>
       <!-- 새 부품 등록 토글 -->
       <div class="cfg-new-toggle" onclick="toggleNewPart()">
@@ -609,11 +700,14 @@ const SB_KEY = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
 let sbUrl = SB_URL, sbKey = SB_KEY;
 let auth = null;          // { name }
 let allParts = [];        // qc_part 전체
+let reasons = [];         // qc_reason 측정사유 목록
 
 // ── 부품 탭 상태 ──
-// tabs[i] = { part, specs, inputs, date, time }
+// tabs[i] = { isGroup, label, mold, variants, activeVariant, date, time, ho, reason, remark }
 let tabs = [];
 let activeTabIdx = -1;
+let pendingSel = null;   // 추가 대기 중인 선택 { isGroup, ... }
+let procMode = 'press';  // 현재 공정 모드: 'press' | 'machining'
 
 // 기존 함수들이 참조하는 포인터 (active 탭 것을 가리킴)
 let selectedPart = null;
@@ -786,9 +880,19 @@ async function enterMain() {
 
   // 부품 목록 로드 (고객사 필터보다 먼저)
   try {
-    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path,part_group,part_variant&order=part_number');
+    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path,part_group,part_variant,mold_count&order=part_number');
   } catch(e) {
     toast('부품 목록 로드 실패: ' + e.message);
+  }
+
+  // 측정사유 목록 로드 + 드롭다운 채우기
+  try {
+    reasons = await sbAll('qc_reason', 'is_active=eq.true&order=sort_order&select=id,label,sort_order');
+    const rsel = document.getElementById('insp-reason');
+    rsel.innerHTML = '<option value="">선택 안 함</option>'
+      + reasons.map(r => `<option value="${r.label}">${r.label}</option>`).join('');
+  } catch(e) {
+    toast('측정사유 로드 실패: ' + e.message);
   }
 
   // sticky 높이: 헤더 + 서브네비 = sticky-group(탭바+도면바) top
@@ -875,17 +979,35 @@ function closeDropdown() {
   document.getElementById('part-dropdown').classList.remove('open');
 }
 
+// 프레스/가공 모드 전환
+function switchProcMode(mode) {
+  if (procMode === mode) return;
+  procMode = mode;
+  document.getElementById('proc-press').classList.toggle('sel', mode === 'press');
+  document.getElementById('proc-mach').classList.toggle('sel', mode === 'machining');
+
+  // 가공 모드: 설비호기/금형호기 행 숨김, 금형 태그 숨김
+  const hoRow = document.getElementById('insp-ho-mold-row');
+  if (hoRow) hoRow.style.display = mode === 'machining' ? 'none' : '';
+
+  // pending 창 열려있으면 닫기
+  cancelPending();
+
+  // 고객사 필터 유지, 탭은 유지 (혼재 허용)
+  // 현재 활성 탭이 다른 모드면 화면만 업데이트 (spec 재로드 불필요)
+}
+
 // spec 배열 → inputs 객체 빌드
 function buildInputs(loadedSpecs) {
   const inputs = {};
   loadedSpecs.forEach(s => {
     if (s.is_visual) {
-      inputs[s.id] = { type: 'visual', val: 'OK' };
+      inputs[s.id] = { type: 'visual', val: 'OK', note: '' };
     } else if (s.is_min_max) {
-      inputs[s.id] = { type: 'minmax', min: '', max: '' };
+      inputs[s.id] = { type: 'minmax', min: '', max: '', note: '' };
     } else {
       const n = s.measure_points || 5;
-      inputs[s.id] = { type: 'points', vals: Array(n).fill('') };
+      inputs[s.id] = { type: 'points', vals: Array(n).fill(''), note: '' };
     }
   });
   return inputs;
@@ -893,74 +1015,139 @@ function buildInputs(loadedSpecs) {
 
 // 한 부품의 spec 로드 → variant 객체 생성
 async function loadVariant(part) {
+  // 프레스: press + both / 가공: machining + both
+  const typeFilter = procMode === 'machining'
+    ? `process_type=in.("machining","both")`
+    : `process_type=in.("press","both")`;
   const loadedSpecs = await sbAll(
     'qc_part_spec',
-    `part_id=eq.${part.id}&process_type=in.("press","both")&order=item_no`
+    `part_id=eq.${part.id}&${typeFilter}&order=item_no`
   );
-  return { part, specs: loadedSpecs, inputs: buildInputs(loadedSpecs) };
+  return { part, specs: loadedSpecs, inputs: buildInputs(loadedSpecs), procMode };
 }
 
-// 부품 선택 → 탭 추가 (단일 부품, variant 1개)
-async function selectPart(id) {
+// 부품 선택 → 추가 대기 상태 (탭은 추가 버튼 누를 때 생성)
+function selectPart(id) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
-
-  const existing = tabs.findIndex(t => !t.isGroup && t.variants[0].part.id === id);
-  if (existing >= 0) { switchTab(existing); return; }
-
   const part = allParts.find(p => p.id === id);
   if (!part) return;
-
-  document.getElementById('main-loading').style.display = 'block';
-  try {
-    const v = await loadVariant(part);
-    const now = new Date();
-    const pad = n => String(n).padStart(2,'0');
-    tabs.push({
-      isGroup: false,
-      label: part.part_number,
-      variants: [v],
-      activeVariant: 0,
-      date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
-      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
-    });
-    document.getElementById('main-loading').style.display = 'none';
-    switchTab(tabs.length - 1);
-  } catch(e) {
-    document.getElementById('main-loading').style.display = 'none';
-    toast('항목 로드 실패: ' + e.message);
-  }
+  pendingSel = { isGroup: false, id, label: part.part_number, part, moldCount: part.mold_count || 1, moldNo: '' };
+  showPending(part.part_number, part.part_name + (part.material ? ' · ' + part.material : ''));
 }
 
-// 그룹 선택 → 탭 추가 (IW/OW 등 variant N개)
-async function selectGroup(group) {
+// 그룹 선택 → 추가 대기 상태
+function selectGroup(group) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
-
-  const existing = tabs.findIndex(t => t.isGroup && t.label === group);
-  if (existing >= 0) { switchTab(existing); return; }
-
   const groupParts = allParts.filter(p => p.part_group === group)
     .sort((a,b) => (a.part_variant||'').localeCompare(b.part_variant||''));
   if (!groupParts.length) return;
+  const rep = groupParts[0];
+  const vlabels = groupParts.map(x => x.part_variant).filter(Boolean).join('/');
+  // 그룹 내 금형 본수는 대표 부품 기준 (IW/OW는 같은 금형이라 동일해야 함)
+  const moldCount = Math.max(...groupParts.map(p => p.mold_count || 1));
+  pendingSel = { isGroup: true, group, label: group, parts: groupParts, moldCount, moldNo: '' };
+  showPending(`${rep.part_name || group} (${vlabels})`, group + (rep.material ? ' · ' + rep.material : ''));
+}
+
+// 추가 대기 UI 표시
+function showPending(label, pno) {
+  document.getElementById('pending-label').textContent = label;
+  document.getElementById('pending-pno').textContent = pno;
+  // 직전 설비호기 기본값 (다르면 수정 가능)
+  document.getElementById('pending-equip').value = localStorage.getItem('QC_LAST_HO') || '';
+  pendingSel.moldNo = '';
+
+  const moldRow = document.getElementById('pending-mold-row');
+  const tagsWrap = document.getElementById('pending-mold-tags');
+
+  // 가공 모드에선 금형호기 없음
+  if (procMode === 'machining' || pendingSel.moldCount < 2) {
+    moldRow.style.display = 'none';
+    tagsWrap.innerHTML = '';
+  } else {
+    // 금형 2벌 이상 → 금형호기 태그 표시
+    moldRow.style.display = 'block';
+    let tags = '';
+    for (let i = 1; i <= pendingSel.moldCount; i++) {
+      tags += `<button class="mold-tag" data-mold="${i}호기" onclick="selectPendingMold('${i}호기')">${i}호기</button>`;
+    }
+    tagsWrap.innerHTML = tags;
+  }
+
+  document.getElementById('pending-add').style.display = 'block';
+  // 금형 2벌 이상이면 태그 먼저 고르도록, 1벌이면 설비호기에 포커스
+  if (pendingSel.moldCount < 2) {
+    setTimeout(() => document.getElementById('pending-equip').focus(), 50);
+  }
+}
+
+// 금형호기 태그 선택
+function selectPendingMold(moldNo) {
+  if (!pendingSel) return;
+  pendingSel.moldNo = moldNo;
+  document.querySelectorAll('#pending-mold-tags .mold-tag').forEach(btn => {
+    btn.classList.toggle('sel', btn.dataset.mold === moldNo);
+  });
+}
+
+function cancelPending() {
+  pendingSel = null;
+  document.getElementById('pending-add').style.display = 'none';
+}
+
+// [추가] 버튼 → 탭 생성
+async function confirmAddTab() {
+  if (!pendingSel) return;
+  const equip = document.getElementById('pending-equip').value.trim();
+  const moldNo = pendingSel.moldNo;
+
+  // 금형 2벌 이상인데 금형호기 선택 안 했으면 막기 (프레스 모드만)
+  if (procMode === 'press' && pendingSel.moldCount >= 2 && !moldNo) {
+    toast('금형호기를 선택하세요');
+    return;
+  }
+
+  // 설비호기 직전값 저장 (다음 추가 시 기본값으로 사용)
+  if (equip !== '') localStorage.setItem('QC_LAST_HO', equip);
+
+  // 같은 부품+같은 금형호기+같은 설비호기 탭 중복 체크
+  const dupIdx = tabs.findIndex(t =>
+    t.label === pendingSel.label && (t.moldNo || '') === moldNo && (t.equip || '') === equip
+  );
+  if (dupIdx >= 0) {
+    cancelPending();
+    switchTab(dupIdx);
+    toast('이미 열린 탭으로 이동');
+    return;
+  }
 
   document.getElementById('main-loading').style.display = 'block';
   try {
-    const variants = [];
-    for (const part of groupParts) {
-      variants.push(await loadVariant(part));
+    let variants;
+    if (pendingSel.isGroup) {
+      variants = [];
+      for (const part of pendingSel.parts) variants.push(await loadVariant(part));
+    } else {
+      variants = [await loadVariant(pendingSel.part)];
     }
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     tabs.push({
-      isGroup: true,
-      label: group,
+      isGroup: pendingSel.isGroup,
+      label: pendingSel.label,
+      moldNo,                     // 금형호기 (1호기/2호기, 탭에 박힘)
+      equip,                      // 설비호기 (36/45)
+      moldCount: pendingSel.moldCount,
+      procMode,                   // 'press' | 'machining'
       variants,
       activeVariant: 0,
       date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
       time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
     });
     document.getElementById('main-loading').style.display = 'none';
+    cancelPending();
     switchTab(tabs.length - 1);
   } catch(e) {
     document.getElementById('main-loading').style.display = 'none';
@@ -971,10 +1158,17 @@ async function selectGroup(group) {
 // 현재 탭의 검사정보 input 값 + 스크롤 위치를 탭 상태에 보관
 function stashActiveTab() {
   if (activeTabIdx < 0 || !tabs[activeTabIdx]) return;
-  tabs[activeTabIdx].date = document.getElementById('insp-date').value;
-  tabs[activeTabIdx].time = document.getElementById('insp-time').value;
-  tabs[activeTabIdx].ho   = document.getElementById('insp-ho').value;
-  tabs[activeTabIdx].scrollY = window.scrollY;
+  const t = tabs[activeTabIdx];
+  t.date   = document.getElementById('insp-date').value;
+  t.time   = document.getElementById('insp-time').value;
+  t.equip  = document.getElementById('insp-ho').value;     // 설비호기
+  t.moldNo = document.getElementById('insp-mold').value;   // 금형호기
+  t.reason = document.getElementById('insp-reason').value;
+  t.remark = document.getElementById('insp-remark').value;
+  // 스크롤 위치는 현재 variant 단위로 저장 (IW/OW 길이 다름)
+  if (t.variants[t.activeVariant]) {
+    t.variants[t.activeVariant].scrollY = window.scrollY;
+  }
 }
 
 function switchTab(idx) {
@@ -983,19 +1177,30 @@ function switchTab(idx) {
   activeTabIdx = idx;
   const t = tabs[idx];
 
-  document.getElementById('insp-date').value = t.date;
-  document.getElementById('insp-time').value = t.time;
-  document.getElementById('insp-ho').value   = t.ho ?? (localStorage.getItem('QC_LAST_HO') || '');
+  document.getElementById('insp-date').value   = t.date;
+  document.getElementById('insp-time').value   = t.time;
+  document.getElementById('insp-ho').value     = t.equip ?? (localStorage.getItem('QC_LAST_HO') || '');  // 설비호기
+  document.getElementById('insp-mold').value   = t.moldNo ?? '';   // 금형호기
+  document.getElementById('insp-reason').value = t.reason ?? '';
+  document.getElementById('insp-remark').value = t.remark ?? '';
   document.getElementById('insp-info-card').style.display = 'block';
   document.getElementById('specs-area').style.display = 'block';
   document.getElementById('save-area').style.display = 'block';
   document.getElementById('drawing-bar').style.display = 'flex';
 
+  // 탭의 procMode로 세그먼트 UI 복원
+  const tabMode = t.procMode || 'press';
+  document.getElementById('proc-press').classList.toggle('sel', tabMode === 'press');
+  document.getElementById('proc-mach').classList.toggle('sel', tabMode === 'machining');
+  const hoRow = document.getElementById('insp-ho-mold-row');
+  if (hoRow) hoRow.style.display = tabMode === 'machining' ? 'none' : '';
+
   renderTabBar();
   applyVariant(t);   // 현재 활성 variant의 specs/inputs 적용 + variant 토글 렌더
 
-  // 마지막으로 보던 위치로 복원 (새 탭은 0)
-  window.scrollTo(0, t.scrollY || 0);
+  // 활성 variant가 마지막으로 보던 위치로 복원 (렌더 완료 후)
+  const targetY = t.variants[t.activeVariant]?.scrollY || 0;
+  requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, targetY)));
 }
 
 // 활성 variant의 specs/inputs를 포인터에 적용 + variant 토글 갱신
@@ -1027,13 +1232,17 @@ function renderVariantToggle(t) {
   }).join('');
 }
 
-// variant 전환 (같은 탭 내)
+// variant 전환 (같은 탭 내) — 스크롤 위치 variant별 유지
 function switchVariant(vi) {
   const t = tabs[activeTabIdx];
   if (!t || vi === t.activeVariant) return;
+  // 현재 variant 스크롤 저장
+  if (t.variants[t.activeVariant]) t.variants[t.activeVariant].scrollY = window.scrollY;
   t.activeVariant = vi;
   applyVariant(t);
-  window.scrollTo(0, 0);
+  // 렌더 직후엔 레이아웃 높이가 안 잡혀 scrollTo가 무시됨 → rAF 2번으로 렌더 완료 후 복원
+  const targetY = t.variants[vi]?.scrollY || 0;
+  requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, targetY)));
 }
 
 // variant에 입력값이 있는지
@@ -1079,8 +1288,16 @@ function renderTabBar() {
   bar.style.display = 'flex';
   bar.innerHTML = tabs.map((t, i) => {
     const grpMark = t.isGroup ? ' <span style="font-size:9px;opacity:.7">⊞</span>' : '';
+    const machMark = t.procMode === 'machining' ? '<span class="tab-mach-badge">가공</span>' : '';
+    // 설비호기 있으면 설비호기만, 없으면 금형호기만 표시
+    let hoMark = '';
+    if (t.equip) {
+      hoMark = ` <span style="font-size:10px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">설${t.equip}</span>`;
+    } else if (t.moldCount >= 2 && t.moldNo) {
+      hoMark = ` <span style="font-size:10px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">${t.moldNo}</span>`;
+    }
     return `<div class="tab ${i === activeTabIdx ? 'active' : ''}" onclick="switchTab(${i})">
-      ${t.label}${grpMark}
+      ${t.label}${machMark}${hoMark}${grpMark}
       <button class="tab-close" onclick="closeTab(${i}, event)">✕</button>
     </div>`;
   }).join('');
@@ -1174,6 +1391,12 @@ function renderSpecCard(s) {
           <div class="spec-method">${s.inspection_method || ''}</div>
         </div>
         <div class="spec-result ${resCls}" id="res-${s.id}">${resLabel}</div>
+        <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${s.id}"
+          onclick="toggleNote(${s.id})" title="메모">📝</button>
+      </div>
+      <div class="note-area ${inp.note ? 'open' : ''}" id="note-area-${s.id}">
+        <textarea rows="2" placeholder="특채 허용, 고객 요청 등 메모…"
+          oninput="setNote(${s.id},this.value)">${inp.note || ''}</textarea>
       </div>
       ${ctrlHtml}
       ${inputHtml}
@@ -1371,6 +1594,9 @@ async function saveAll() {
   const date = document.getElementById('insp-date').value;
   const time = document.getElementById('insp-time').value;
   const ho   = document.getElementById('insp-ho').value.trim();
+  const mold = document.getElementById('insp-mold').value.trim();
+  const reason = document.getElementById('insp-reason').value;
+  const remark = document.getElementById('insp-remark').value.trim();
 
   if (!date) { toast('검사일을 입력하세요'); return; }
 
@@ -1414,6 +1640,9 @@ async function saveAll() {
           inspection_date: date,
           inspection_time: time || null,
           ho: ho !== '' ? ho : null,
+          mold_no: mold !== '' ? mold : null,
+          reason: reason !== '' ? reason : null,
+          remark: remark !== '' ? remark : null,
           inspector: auth.name
         }
       });
@@ -1432,7 +1661,8 @@ async function saveAll() {
           spec_text: s.spec_text,
           visual_result: null,
           x1:null, x2:null, x3:null, x4:null, x5:null,
-          x6:null, x7:null, x8:null, x9:null, x10:null
+          x6:null, x7:null, x8:null, x9:null, x10:null,
+          note: inp.note && inp.note.trim() ? inp.note.trim() : null
         };
         if (s.is_visual) {
           row.visual_result = inp.val || 'OK';
@@ -1474,17 +1704,9 @@ async function saveAll() {
     }
 
     toast(`✅ 저장 완료! (${savedLabels.join(', ')})`);
-
-    // 저장한 variant들의 측정값 리셋
-    for (const v of targets) {
-      v.specs.forEach(s => {
-        const inp = v.inputs[s.id];
-        if (inp.type === 'visual') inp.val = 'OK';
-        else if (inp.type === 'minmax') { inp.min = ''; inp.max = ''; }
-        else inp.vals = inp.vals.map(() => '');
-      });
-    }
-    applyVariant(t);   // 현재 화면 갱신 + 토글 뱃지 리셋
+    // 저장 완료 후 현재 탭 닫기
+    const savedIdx = activeTabIdx;
+    setTimeout(() => closeTab(savedIdx), 500); // toast 잠깐 보여주고 닫기
 
   } catch(e) {
     toast('❌ 저장 실패: ' + e.message);
@@ -1648,6 +1870,8 @@ function clearHistPart() {
   document.getElementById('hist-list').innerHTML = '';
   document.getElementById('hist-empty').style.display = 'none';
   document.getElementById('hist-count').textContent = '';
+  document.getElementById('hist-filter-ho').innerHTML = '<option value="">전체</option>';
+  document.getElementById('hist-filter-mold').innerHTML = '<option value="">전체</option>';
   // SPC 리셋
   destroySpcCharts();
   document.getElementById('spc-xbar-wrap').style.display = 'none';
@@ -1667,17 +1891,20 @@ async function loadHistData() {
   document.getElementById('hist-empty').style.display = 'none';
 
   try {
-    // 검사 헤더 조회 (날짜 범위 + 부품)
-    let qs = `part_id=eq.${histPart.id}&inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,inspection_date,inspection_time,ho,inspector,result`;
+    // 검사 헤더 조회 (ho, mold_no, reason, remark 포함)
+    let qs = `part_id=eq.${histPart.id}&inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,inspection_date,inspection_time,ho,mold_no,reason,remark,inspector,result`;
     histInspections = await sbAll('qc_shipping_inspection', qs);
 
-    document.getElementById('hist-count').textContent = `${histInspections.length}건`;
+    // 필터 드롭다운 채우기 (존재하는 값만, ho는 integer일 수 있어 문자열화)
+    const hos = [...new Set(histInspections.map(i => i.ho).filter(v => v != null && v !== '').map(String))].sort();
+    const molds = [...new Set(histInspections.map(i => i.mold_no).filter(Boolean).map(String))].sort();
+    const hoSel = document.getElementById('hist-filter-ho');
+    const moldSel = document.getElementById('hist-filter-mold');
+    const prevHo = hoSel.value, prevMold = moldSel.value;
+    hoSel.innerHTML = '<option value="">전체</option>' + hos.map(v => `<option value="${v}"${v===prevHo?' selected':''}>${v}</option>`).join('');
+    moldSel.innerHTML = '<option value="">전체</option>' + molds.map(v => `<option value="${v}"${v===prevMold?' selected':''}>${v}</option>`).join('');
 
-    if (!histInspections.length) {
-      document.getElementById('hist-empty').style.display = 'block';
-    } else {
-      renderHistList();
-    }
+    applyHistFilter();
   } catch(e) {
     toast('이력 조회 실패: ' + e.message);
   } finally {
@@ -1685,9 +1912,30 @@ async function loadHistData() {
   }
 }
 
-function renderHistList() {
+// 필터 적용 (클라이언트 필터링 — DB 재조회 없음)
+function applyHistFilter() {
+  const filterHo = document.getElementById('hist-filter-ho').value;
+  const filterMold = document.getElementById('hist-filter-mold').value;
+  // ho는 DB에서 integer일 수 있어 String()으로 통일 비교
+  const filtered = histInspections.filter(i =>
+    (!filterHo || String(i.ho ?? '') === filterHo) &&
+    (!filterMold || String(i.mold_no ?? '') === filterMold)
+  );
+  document.getElementById('hist-count').textContent = `${filtered.length}건 (전체 ${histInspections.length}건)`;
+  if (!filtered.length) {
+    document.getElementById('hist-list').innerHTML = '';
+    document.getElementById('hist-empty').style.display = 'block';
+  } else {
+    document.getElementById('hist-empty').style.display = 'none';
+    renderHistList(filtered);
+  }
+}
+
+function renderHistList(inspList) {
   const list = document.getElementById('hist-list');
-  list.innerHTML = histInspections.map((insp, idx) => {
+  // inspList의 idx는 histInspections 원본 기준으로 맞춰야 toggleHistCard가 올바른 insp를 찾음
+  list.innerHTML = inspList.map(insp => {
+    const idx = histInspections.indexOf(insp);
     const d = insp.inspection_date || '';
     const dDisp = d ? d.replace(/-/g, '.') : '—';
     const tDisp = insp.inspection_time ? insp.inspection_time.substring(0, 5) : '';
@@ -1701,7 +1949,9 @@ function renderHistList() {
           ${tDisp ? `<div class="hist-date-time">${tDisp}</div>` : ''}
         </div>
         <div class="hist-meta">
-          ${insp.ho ? `<span class="hist-chip">호기 ${insp.ho}</span>` : ''}
+          ${insp.ho ? `<span class="hist-chip">설비 ${insp.ho}</span>` : ''}
+          ${insp.mold_no ? `<span class="hist-chip" style="background:#ede9fe;color:#7c3aed">금형 ${insp.mold_no}</span>` : ''}
+          ${insp.reason ? `<span class="hist-chip" style="background:#fef3c7;color:#92400e">${insp.reason}</span>` : ''}
           ${insp.inspector ? `<span class="hist-chip">${insp.inspector}</span>` : ''}
         </div>
         <span class="hist-result ${resCls}">${resLabel}</span>
@@ -1737,7 +1987,7 @@ async function toggleHistCard(idx) {
 
   // 측정값 로드 (id 포함)
   try {
-    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result`);
+    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result,note`);
     histMeasCache[insp.id] = rows || [];
     detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
   } catch(e) {
@@ -1791,7 +2041,7 @@ function buildMeasTable(rows, idx, editMode) {
 
   let html = '<div class="hist-meas-scroll"><table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
   for (let i = 1; i <= maxX; i++) html += `<th>X${i}</th>`;
-  html += '<th>판정</th></tr></thead><tbody>';
+  html += '<th>판정</th><th>메모</th></tr></thead><tbody>';
 
   rows.forEach((r, ri) => {
     const isVis = r.visual_result != null;
@@ -1820,7 +2070,11 @@ function buildMeasTable(rows, idx, editMode) {
         }
       }
     }
-    html += `<td class="${resCls}">${res}</td></tr>`;
+    html += `<td class="${resCls}">${res}</td>`;
+    // 메모
+    const noteVal = r.note || '';
+    html += `<td style="font-size:11px;color:#f59e0b;min-width:60px">${noteVal ? `📝 ${noteVal}` : ''}</td>`;
+    html += `</tr>`;
   });
 
   html += '</tbody></table></div>';
@@ -1935,6 +2189,19 @@ async function deleteHistInsp(idx) {
 }
 
 // 숫자 표시 (불필요한 소수점 0 제거)
+// ── 항목 메모 ──
+function toggleNote(id) {
+  const area = document.getElementById(`note-area-${id}`);
+  const isOpen = area.classList.toggle('open');
+  if (isOpen) area.querySelector('textarea').focus();
+}
+
+function setNote(id, val) {
+  if (specInputs[id]) specInputs[id].note = val;
+  const btn = document.getElementById(`note-btn-${id}`);
+  if (btn) btn.classList.toggle('has', val.trim() !== '');
+}
+
 function fmtNum(v) {
   if (v == null) return '';
   const n = Number(v);
@@ -2217,6 +2484,10 @@ async function selectPartCfg(id) {
   if (!cfgPart) return;
   document.getElementById('cfg-selected-part').style.display = 'flex';
   document.getElementById('cfg-selected-part-label').textContent = `${cfgPart.part_name} · ${cfgPart.part_number}`;
+  // 금형 본수 편집 표시
+  document.getElementById('cfg-mold-edit').style.display = 'block';
+  document.getElementById('cfg-mold-num').textContent = cfgPart.mold_count || 1;
+  document.getElementById('cfg-mold-saved').textContent = '';
   document.getElementById('cfg-loading').style.display = 'block';
   document.getElementById('cfg-spec-list').innerHTML = '';
   try {
@@ -2228,6 +2499,41 @@ async function selectPartCfg(id) {
     toast('로드 실패: ' + e.message);
   } finally {
     document.getElementById('cfg-loading').style.display = 'none';
+  }
+}
+
+// 금형 본수 변경 (1~10) → 즉시 DB 저장
+async function changeMoldCount(delta) {
+  if (!cfgPart) return;
+  const cur = cfgPart.mold_count || 1;
+  const next = Math.max(1, Math.min(10, cur + delta));
+  if (next === cur) return;
+
+  const savedEl = document.getElementById('cfg-mold-saved');
+  try {
+    // 그룹 부품(IW/OW)이면 같은 그룹 전체 동일하게 변경
+    let targetIds;
+    if (cfgPart.part_group) {
+      targetIds = allParts.filter(p => p.part_group === cfgPart.part_group).map(p => p.id);
+    } else {
+      targetIds = [cfgPart.id];
+    }
+
+    for (const tid of targetIds) {
+      await sbFetch(`qc_part?id=eq.${tid}`, { method: 'PATCH', body: { mold_count: next } });
+      // 로컬 allParts 갱신
+      const p = allParts.find(x => x.id === tid);
+      if (p) p.mold_count = next;
+    }
+
+    cfgPart.mold_count = next;
+    document.getElementById('cfg-mold-num').textContent = next;
+    const grpNote = cfgPart.part_group ? ` (그룹 ${targetIds.length}개 부품 적용)` : '';
+    savedEl.textContent = `✅ ${next}본 저장됨${grpNote}`;
+    savedEl.style.color = '#16a34a';
+  } catch(e) {
+    savedEl.textContent = '저장 실패: ' + e.message;
+    savedEl.style.color = '#dc2626';
   }
 }
 
@@ -2772,6 +3078,7 @@ async function deletePartCfg() {
     // 설정 화면 초기화
     cfgPart = null; cfgSpecs = [];
     document.getElementById('cfg-selected-part').style.display = 'none';
+    document.getElementById('cfg-mold-edit').style.display = 'none';
     document.getElementById('cfg-part-search').value = '';
     document.getElementById('cfg-spec-list').innerHTML = '';
     document.getElementById('cfg-drawing-card').style.display = 'none';
