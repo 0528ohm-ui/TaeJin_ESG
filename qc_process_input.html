@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.20</title>
+<title>공정검사 입력 v0.25</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -44,6 +44,12 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 /* 탭바+도면바 sticky 묶음 (헤더+서브네비 아래) */
 .sticky-group{position:sticky;top:var(--hdr-h,90px);z-index:99;background:#f0f2f5}
 .drawing-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f0f2f5;border-bottom:1px solid #e2e8f0}
+/* variant(IW/OW) 토글 */
+.variant-toggle{display:flex;background:#e2e8f0;border-radius:7px;padding:3px;gap:2px}
+.vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
+.vrt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.vrt-btn .vrt-badge{display:inline-block;min-width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
+.vrt-btn .vrt-badge.has{background:#16a34a}
 .drawing-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:8px;background:#fff;color:#1e40af;font-size:13px;font-weight:700;cursor:pointer}
 .drawing-btn:active{background:#eff6ff}
 .drawing-btn.no-drawing{border-color:#e2e8f0;color:#94a3b8;cursor:default}
@@ -52,7 +58,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .drawing-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#fff}
 .drawing-modal-hdr span{font-size:14px;font-weight:700}
 .drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
-.drawing-img-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:8px;touch-action:pinch-zoom}
+.drawing-img-wrap{flex:1;overflow:visible;display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pinch-zoom}
 .drawing-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
 #measure-screen{display:none}
 #measure-screen.active{display:block}
@@ -81,14 +87,91 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .cfg-btn-row{display:flex;gap:8px}
 .cfg-add-btn{width:100%;padding:12px;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;margin:0 12px 8px;width:calc(100% - 24px)}
 .cfg-add-btn:active{background:#f1f5f9}
+.align-btn{padding:5px 9px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap}
+.align-btn:active{background:#eff6ff;border-color:#3b82f6}
 /* 새 부품 등록 토글 */
 .cfg-new-toggle{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#3b82f6;cursor:pointer;margin-top:10px;padding:6px 0}
 .cfg-new-form{display:none;margin-top:10px;border-top:1px solid #f1f5f9;padding-top:12px}
 .cfg-new-form.open{display:block}
 
 /* ── 이력 화면 ── */
-#hist-screen{display:none;padding:20px 12px}
+#hist-screen{display:none;padding-bottom:32px}
 #hist-screen.active{display:block}
+.hist-filters{padding:12px}
+.hist-date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.hist-count{font-size:12px;color:#94a3b8;margin-top:8px;text-align:right}
+.hist-list{padding:0 12px 12px}
+.hist-card{background:#fff;border-radius:10px;margin-bottom:8px;border:1.5px solid #e2e8f0;overflow:hidden;transition:border-color .2s}
+.hist-card.expanded{border-color:#3b82f6}
+.hist-card-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+.hist-card-hdr:active{background:#f8fafc}
+.hist-date-col{min-width:70px}
+.hist-date-main{font-size:14px;font-weight:700;color:#1e293b}
+.hist-date-time{font-size:11px;color:#94a3b8;margin-top:1px}
+.hist-meta{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.hist-chip{font-size:11px;padding:2px 7px;border-radius:5px;font-weight:600;background:#f1f5f9;color:#64748b}
+.hist-result{font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap}
+.hist-result.ok{background:#dcfce7;color:#16a34a}
+.hist-result.ng{background:#fee2e2;color:#dc2626}
+.hist-result.null{background:#f1f5f9;color:#94a3b8}
+.hist-expand-icon{font-size:14px;color:#94a3b8;transition:transform .2s}
+.hist-card.expanded .hist-expand-icon{transform:rotate(180deg)}
+.hist-detail{display:none;border-top:1px solid #f1f5f9}
+.hist-card.expanded .hist-detail{display:block}
+.hist-meas-tbl{width:100%;font-size:12px;border-collapse:collapse}
+.hist-meas-tbl th{padding:8px 10px;text-align:left;font-weight:700;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.hist-meas-tbl td{padding:7px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
+.hist-meas-tbl tr:last-child td{border-bottom:none}
+.hist-meas-tbl .ng-val{color:#dc2626;font-weight:700}
+.hist-meas-tbl .ok-val{color:#16a34a}
+.hist-meas-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.hist-empty{text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px}
+.hist-toolbar{display:flex;gap:8px;padding:10px 14px;justify-content:flex-end;border-top:1px solid #f1f5f9}
+.hist-edit-btn{padding:7px 14px;border:1.5px solid #3b82f6;border-radius:7px;background:#fff;color:#1e40af;font-size:12px;font-weight:700;cursor:pointer}
+.hist-edit-btn:active{background:#eff6ff}
+.hist-del-btn{padding:7px 14px;border:1.5px solid #fca5a5;border-radius:7px;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer}
+.hist-del-btn:active{background:#fee2e2}
+.hist-save-btn{padding:7px 14px;border:none;border-radius:7px;background:#16a34a;color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.hist-save-btn:active{opacity:.7}
+.hist-cancel-btn{padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:7px;background:#fff;color:#64748b;font-size:12px;font-weight:700;cursor:pointer}
+.hist-cancel-btn:active{background:#f1f5f9}
+.hist-edit-hdr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px 14px;border-bottom:1px solid #f1f5f9}
+.hist-edit-hdr label{font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
+.hist-edit-hdr input{width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none}
+.hist-edit-hdr input:focus{border-color:#3b82f6}
+.hist-meas-tbl .edit-inp{width:68px;padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:12px;text-align:center;outline:none}
+.hist-meas-tbl .edit-inp:focus{border-color:#3b82f6}
+.hist-meas-tbl select.edit-sel{padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:12px;outline:none}
+.hist-meas-tbl select.edit-sel:focus{border-color:#3b82f6}
+
+/* ── 관리도 ── */
+.hist-sub-toggle{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px;margin:12px 12px 0}
+.hst-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:12px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.hst-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.spc-area{padding:12px}
+.spc-select-row{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px}
+.spc-select-row select{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;background:#fff}
+.spc-select-row select:focus{border-color:#3b82f6}
+.spc-chart-wrap{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1.5px solid #e2e8f0}
+.spc-chart-title{font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:8px}
+.spc-chart-box{position:relative;width:100%;height:220px}
+.spc-cpk-panel{background:#fff;border-radius:10px;padding:16px;border:1.5px solid #e2e8f0}
+.spc-cpk-title{font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:12px}
+.spc-cpk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.spc-cpk-item{text-align:center;padding:10px;background:#f8fafc;border-radius:8px}
+.spc-cpk-label{font-size:11px;color:#64748b;font-weight:600;margin-bottom:4px}
+.spc-cpk-val{font-size:20px;font-weight:800;color:#1e3a5f}
+.spc-cpk-val.good{color:#16a34a}
+.spc-cpk-val.warn{color:#f59e0b}
+.spc-cpk-val.bad{color:#dc2626}
+.spc-info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px}
+.spc-info-item{text-align:center;padding:6px;background:#f1f5f9;border-radius:6px}
+.spc-info-label{font-size:10px;color:#94a3b8;font-weight:600}
+.spc-info-val{font-size:13px;font-weight:700;color:#334155;margin-top:2px}
+.spc-judge{text-align:center;margin-top:12px;padding:10px;border-radius:8px;font-size:14px;font-weight:700}
+.spc-judge.good{background:#dcfce7;color:#16a34a}
+.spc-judge.warn{background:#fef3c7;color:#92400e}
+.spc-judge.bad{background:#fee2e2;color:#dc2626}
 
 #setup-screen h2{font-size:22px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
 #setup-screen p{font-size:13px;color:#64748b;margin-bottom:28px}
@@ -190,6 +273,8 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 /* 로딩 */
 .loading{text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
 </head>
 <body>
 
@@ -241,7 +326,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.20</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.25</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -263,7 +348,11 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
       <div class="tab-bar" id="tab-bar" style="display:none"></div>
       <!-- 도면 버튼 바 (탭 있을 때만 표시) -->
       <div class="drawing-bar" id="drawing-bar" style="display:none">
-        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
+          <!-- IW/OW 등 variant 토글 (그룹 부품일 때만 표시) -->
+          <div class="variant-toggle" id="variant-toggle" style="display:none"></div>
+        </div>
         <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
           📐 도면 보기
         </button>
@@ -330,7 +419,77 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
   <!-- ── 이력조회 탭 ── -->
   <div id="hist-screen">
-    <p style="color:#94a3b8;font-size:14px;text-align:center;padding-top:40px">이력조회 — 준비 중</p>
+    <!-- 부품 검색 -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">📋 이력조회</div>
+      <div class="part-search-wrap">
+        <input class="inp" id="hist-part-search" type="text" placeholder="부품번호 또는 부품명 검색…"
+          oninput="filterPartsHist(this.value)" onfocus="openDropdownHist()" onblur="setTimeout(closeDropdownHist,200)">
+        <div class="part-dropdown" id="hist-part-dropdown"></div>
+      </div>
+      <div id="hist-selected-part" style="display:none;margin-top:8px">
+        <div class="selected-part" style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div id="hist-sel-label" style="font-weight:700;font-size:13px;color:#1e40af"></div>
+            <div id="hist-sel-pno" class="pno" style="font-size:11px;color:#3b82f6;margin-top:2px"></div>
+          </div>
+          <button onclick="clearHistPart()" style="border:none;background:#f1f5f9;color:#64748b;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">변경</button>
+        </div>
+      </div>
+    </div>
+    <!-- 서브 토글 (부품 선택 후 표시) -->
+    <div class="hist-sub-toggle" id="hist-sub-toggle" style="display:none">
+      <button class="hst-btn sel" id="hst-list-btn" onclick="switchHistView('list')">📋 이력 목록</button>
+      <button class="hst-btn" id="hst-spc-btn" onclick="switchHistView('spc')">📊 관리도</button>
+    </div>
+    <!-- ── 이력 목록 뷰 ── -->
+    <div id="hist-list-view">
+      <!-- 날짜 필터 (부품 선택 후 표시) -->
+      <div class="hist-filters" id="hist-filter-area" style="display:none">
+        <label>검사일 범위</label>
+        <div class="hist-date-row">
+          <input class="inp" id="hist-date-from" type="date" onchange="loadHistData()">
+          <input class="inp" id="hist-date-to" type="date" onchange="loadHistData()">
+        </div>
+        <div class="hist-count" id="hist-count"></div>
+      </div>
+      <!-- 검사 기록 리스트 -->
+      <div class="hist-list" id="hist-list"></div>
+      <div class="hist-empty" id="hist-empty" style="display:none">검사 기록이 없습니다</div>
+      <div id="hist-loading" class="loading" style="display:none">기록 불러오는 중…</div>
+    </div>
+    <!-- ── 관리도 뷰 ── -->
+    <div id="hist-spc-view" style="display:none">
+      <div class="spc-area">
+        <!-- 항목 선택 -->
+        <div class="spc-select-row">
+          <select id="spc-spec-sel" onchange="loadSpcData()">
+            <option value="">항목 선택…</option>
+          </select>
+        </div>
+        <!-- Xbar 차트 -->
+        <div class="spc-chart-wrap" id="spc-xbar-wrap" style="display:none">
+          <div class="spc-chart-title">X̄ 관리도</div>
+          <div class="spc-chart-box"><canvas id="spc-xbar-canvas"></canvas></div>
+        </div>
+        <!-- R 차트 -->
+        <div class="spc-chart-wrap" id="spc-r-wrap" style="display:none">
+          <div class="spc-chart-title">R 관리도</div>
+          <div class="spc-chart-box"><canvas id="spc-r-canvas"></canvas></div>
+        </div>
+        <!-- 공정능력 패널 -->
+        <div class="spc-cpk-panel" id="spc-cpk-panel" style="display:none">
+          <div class="spc-cpk-title">공정능력 (Process Capability)</div>
+          <div class="spc-cpk-grid">
+            <div class="spc-cpk-item"><div class="spc-cpk-label">Cp</div><div class="spc-cpk-val" id="spc-cp">—</div></div>
+            <div class="spc-cpk-item"><div class="spc-cpk-label">Cpk</div><div class="spc-cpk-val" id="spc-cpk">—</div></div>
+          </div>
+          <div class="spc-info-grid" id="spc-info-grid"></div>
+          <div class="spc-judge" id="spc-judge" style="display:none"></div>
+        </div>
+        <div id="spc-empty" class="hist-empty" style="display:none">항목을 선택하세요</div>
+      </div>
+    </div>
   </div>
 
   <!-- ── 설정 탭 ── -->
@@ -365,6 +524,69 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
         <div class="cfg-saved" id="np-saved"></div>
       </div>
     </div>
+    <!-- 도면 관리 (부품 선택 후 표시) -->
+    <div class="card" id="cfg-drawing-card" style="margin-top:12px;display:none">
+      <div class="card-title">📐 도면 관리 / 측정부위 번호</div>
+      <div id="cfg-drawing-empty" style="display:none">
+        <div style="text-align:center;padding:24px;border:2px dashed #cbd5e1;border-radius:10px;color:#94a3b8">
+          <div style="font-size:28px;margin-bottom:8px">📂</div>
+          <div style="font-size:13px">등록된 도면이 없습니다</div>
+          <div style="font-size:11px;margin-top:4px">권장: 가로 1000px 이상 PNG/JPG</div>
+          <div style="font-size:11px;margin-top:6px;color:#3b82f6;font-weight:700">💡 캡처 후 Ctrl+V로 바로 붙여넣기 가능</div>
+        </div>
+        <label class="cfg-save-btn" style="display:block;text-align:center;margin-top:12px;cursor:pointer">
+          📤 도면 이미지 업로드
+          <input type="file" accept="image/png,image/jpeg" style="display:none" onchange="uploadDrawing(this.files[0])">
+        </label>
+        <div class="cfg-saved" id="cfg-drawing-upload-status"></div>
+      </div>
+
+      <div id="cfg-drawing-editor" style="display:none">
+        <div style="font-size:12px;color:#64748b;margin-bottom:8px">
+          항목 번호 칩을 누른 뒤 도면에서 위치를 클릭하면 마커가 찍힙니다.
+          <span id="cfg-active-marker" style="font-weight:700;color:#3b82f6"></span>
+        </div>
+        <!-- 항목 칩 목록 -->
+        <div id="cfg-marker-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <!-- 정렬 도구 -->
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;background:#f8fafc;border-radius:8px">
+          <span style="font-size:11px;font-weight:700;color:#64748b">정렬:</span>
+          <button class="align-btn" onclick="alignMarkers('left')">⬅ 좌</button>
+          <button class="align-btn" onclick="alignMarkers('hcenter')">↔ 가로중앙</button>
+          <button class="align-btn" onclick="alignMarkers('right')">우 ➡</button>
+          <button class="align-btn" onclick="alignMarkers('top')">⬆ 상</button>
+          <button class="align-btn" onclick="alignMarkers('vcenter')">↕ 세로중앙</button>
+          <button class="align-btn" onclick="alignMarkers('bottom')">하 ⬇</button>
+          <button class="align-btn" onclick="alignMarkers('hdist')">↔ 가로균등</button>
+          <button class="align-btn" onclick="alignMarkers('vdist')">↕ 세로균등</button>
+          <span id="align-sel-count" style="font-size:11px;color:#94a3b8;margin-left:auto">마커 클릭으로 선택(Shift=다중)</span>
+        </div>
+        <!-- 지우개 도구 -->
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;background:#fef9f9;border-radius:8px;border:1px solid #fecaca">
+          <span style="font-size:11px;font-weight:700;color:#64748b">🩹 흰색 지우개:</span>
+          <button class="align-btn" id="eraser-toggle" onclick="toggleEraser()" style="border-color:#fca5a5">지우개 끄기</button>
+          <span style="font-size:11px;color:#64748b">굵기</span>
+          <input type="range" id="eraser-size" min="8" max="60" value="20" style="width:90px">
+          <button class="align-btn" onclick="saveErasedDrawing()" style="background:#16a34a;color:#fff;border-color:#16a34a">지운 내용 저장</button>
+          <span id="eraser-status" style="font-size:11px;color:#94a3b8;margin-left:auto">지우개 켜고 드래그하면 흰색으로 칠해집니다</span>
+        </div>
+        <!-- 도면 + 마커 오버레이 -->
+        <div id="cfg-drawing-wrap" style="position:relative;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;cursor:crosshair;background:#f8fafc">
+          <img id="cfg-drawing-img" style="width:100%;height:auto;display:block" onclick="onDrawingClick(event)">
+          <canvas id="cfg-eraser-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none"></canvas>
+          <div id="cfg-marker-layer" style="position:absolute;inset:0;pointer-events:none"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <label class="cfg-save-btn" style="flex:1;text-align:center;cursor:pointer">
+            🔄 도면 교체
+            <input type="file" accept="image/png,image/jpeg" style="display:none" onchange="uploadDrawing(this.files[0])">
+          </label>
+          <button class="cfg-del-btn" style="width:auto;padding:10px 14px" onclick="clearAllMarkers()">마커 전체 삭제</button>
+        </div>
+        <div class="cfg-saved" id="cfg-drawing-status"></div>
+      </div>
+    </div>
+
     <div id="cfg-spec-list" style="padding:0 12px 20px"></div>
     <div id="cfg-loading" class="loading" style="display:none">항목 불러오는 중…</div>
   </div>
@@ -562,6 +784,13 @@ async function enterMain() {
 
   showScreen('main');
 
+  // 부품 목록 로드 (고객사 필터보다 먼저)
+  try {
+    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path,part_group,part_variant&order=part_number');
+  } catch(e) {
+    toast('부품 목록 로드 실패: ' + e.message);
+  }
+
   // sticky 높이: 헤더 + 서브네비 = sticky-group(탭바+도면바) top
   requestAnimationFrame(() => {
     const hdr = document.querySelector('#main-screen .hdr')?.offsetHeight || 54;
@@ -579,13 +808,6 @@ async function enterMain() {
   // 호기 직전값 복원
   const lastHo = localStorage.getItem('QC_LAST_HO') || '';
   document.getElementById('insp-ho').value = lastHo;
-
-  // 부품 목록 로드
-  try {
-    allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path&order=part_number');
-  } catch(e) {
-    toast('부품 목록 로드 실패: ' + e.message);
-  }
 }
 
 // ══════════════════════════════════
@@ -596,19 +818,51 @@ function filterParts(q) {
   const customer = document.getElementById('customer-filter')?.value || '';
   const kw = (q || '').toLowerCase();
   if (!kw && !customer) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
+
+  // 1차 필터
   const matched = allParts.filter(p => {
     if (customer && p.customer !== customer) return false;
     if (!kw) return true;
-    return p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw);
-  }).slice(0, 20);
-  if (!matched.length) {
+    return p.part_number.toLowerCase().includes(kw)
+        || (p.part_name||'').toLowerCase().includes(kw)
+        || (p.part_group||'').toLowerCase().includes(kw);
+  });
+
+  // 그룹 부품은 part_group 단위로 묶기, 일반 부품은 그대로
+  const groupSeen = new Set();
+  const items = [];   // { isGroup, group?, part?, parts? }
+  for (const p of matched) {
+    if (p.part_group) {
+      if (groupSeen.has(p.part_group)) continue;
+      groupSeen.add(p.part_group);
+      const variants = allParts.filter(x => x.part_group === p.part_group);
+      items.push({ isGroup: true, group: p.part_group, parts: variants });
+    } else {
+      items.push({ isGroup: false, part: p });
+    }
+  }
+  const shown = items.slice(0, 20);
+
+  if (!shown.length) {
     dd.innerHTML = '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
   } else {
-    dd.innerHTML = matched.map(p => `
-      <div class="part-opt" onmousedown="selectPart(${p.id})">
-        <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+p.customer+'</span>' : ''}</div>
-        <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div>
-      </div>`).join('');
+    dd.innerHTML = shown.map(it => {
+      if (it.isGroup) {
+        const rep = it.parts[0];
+        const vlabels = it.parts.map(x => x.part_variant).filter(Boolean).join('/');
+        return `<div class="part-opt" onmousedown="selectGroup('${it.group.replace(/'/g,"\\'")}')">
+          <div>${rep.part_name||'—'} <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${vlabels}</span>
+            ${rep.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+rep.customer+'</span>' : ''}</div>
+          <div class="pno">${it.group}${rep.material ? ' · '+rep.material : ''}</div>
+        </div>`;
+      } else {
+        const p = it.part;
+        return `<div class="part-opt" onmousedown="selectPart(${p.id})">
+          <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+p.customer+'</span>' : ''}</div>
+          <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div>
+        </div>`;
+      }
+    }).join('');
   }
   dd.classList.add('open');
 }
@@ -621,47 +875,91 @@ function closeDropdown() {
   document.getElementById('part-dropdown').classList.remove('open');
 }
 
-// 부품 선택 → 탭 추가 (이미 열려있으면 그 탭으로 전환)
+// spec 배열 → inputs 객체 빌드
+function buildInputs(loadedSpecs) {
+  const inputs = {};
+  loadedSpecs.forEach(s => {
+    if (s.is_visual) {
+      inputs[s.id] = { type: 'visual', val: 'OK' };
+    } else if (s.is_min_max) {
+      inputs[s.id] = { type: 'minmax', min: '', max: '' };
+    } else {
+      const n = s.measure_points || 5;
+      inputs[s.id] = { type: 'points', vals: Array(n).fill('') };
+    }
+  });
+  return inputs;
+}
+
+// 한 부품의 spec 로드 → variant 객체 생성
+async function loadVariant(part) {
+  const loadedSpecs = await sbAll(
+    'qc_part_spec',
+    `part_id=eq.${part.id}&process_type=in.("press","both")&order=item_no`
+  );
+  return { part, specs: loadedSpecs, inputs: buildInputs(loadedSpecs) };
+}
+
+// 부품 선택 → 탭 추가 (단일 부품, variant 1개)
 async function selectPart(id) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
 
-  const existing = tabs.findIndex(t => t.part.id === id);
+  const existing = tabs.findIndex(t => !t.isGroup && t.variants[0].part.id === id);
   if (existing >= 0) { switchTab(existing); return; }
 
   const part = allParts.find(p => p.id === id);
   if (!part) return;
 
   document.getElementById('main-loading').style.display = 'block';
-
   try {
-    const loadedSpecs = await sbAll(
-      'qc_part_spec',
-      `part_id=eq.${id}&process_type=in.("press","both")&order=item_no`
-    );
-    const inputs = {};
-    loadedSpecs.forEach(s => {
-      if (s.is_visual) {
-        inputs[s.id] = { type: 'visual', val: 'OK' };
-      } else if (s.is_min_max) {
-        inputs[s.id] = { type: 'minmax', min: '', max: '' };
-      } else {
-        const n = s.measure_points || 5;
-        inputs[s.id] = { type: 'points', vals: Array(n).fill('') };
-      }
-    });
-
-    // 새 탭의 검사일/시간 기본값 = 현재
+    const v = await loadVariant(part);
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     tabs.push({
-      part,
-      specs: loadedSpecs,
-      inputs,
+      isGroup: false,
+      label: part.part_number,
+      variants: [v],
+      activeVariant: 0,
       date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
       time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
     });
+    document.getElementById('main-loading').style.display = 'none';
+    switchTab(tabs.length - 1);
+  } catch(e) {
+    document.getElementById('main-loading').style.display = 'none';
+    toast('항목 로드 실패: ' + e.message);
+  }
+}
 
+// 그룹 선택 → 탭 추가 (IW/OW 등 variant N개)
+async function selectGroup(group) {
+  document.getElementById('part-search').value = '';
+  document.getElementById('part-dropdown').classList.remove('open');
+
+  const existing = tabs.findIndex(t => t.isGroup && t.label === group);
+  if (existing >= 0) { switchTab(existing); return; }
+
+  const groupParts = allParts.filter(p => p.part_group === group)
+    .sort((a,b) => (a.part_variant||'').localeCompare(b.part_variant||''));
+  if (!groupParts.length) return;
+
+  document.getElementById('main-loading').style.display = 'block';
+  try {
+    const variants = [];
+    for (const part of groupParts) {
+      variants.push(await loadVariant(part));
+    }
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    tabs.push({
+      isGroup: true,
+      label: group,
+      variants,
+      activeVariant: 0,
+      date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
+      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
+    });
     document.getElementById('main-loading').style.display = 'none';
     switchTab(tabs.length - 1);
   } catch(e) {
@@ -685,11 +983,6 @@ function switchTab(idx) {
   activeTabIdx = idx;
   const t = tabs[idx];
 
-  // 포인터 스왑 → 기존 함수들 그대로 동작
-  selectedPart = t.part;
-  specs = t.specs;
-  specInputs = t.inputs;
-
   document.getElementById('insp-date').value = t.date;
   document.getElementById('insp-time').value = t.time;
   document.getElementById('insp-ho').value   = t.ho ?? (localStorage.getItem('QC_LAST_HO') || '');
@@ -699,27 +992,67 @@ function switchTab(idx) {
   document.getElementById('drawing-bar').style.display = 'flex';
 
   renderTabBar();
-  renderSpecs();
-
-  // 도면 버튼 상태 업데이트
-  updateDrawingBtn(t.part);
+  applyVariant(t);   // 현재 활성 variant의 specs/inputs 적용 + variant 토글 렌더
 
   // 마지막으로 보던 위치로 복원 (새 탭은 0)
   window.scrollTo(0, t.scrollY || 0);
 }
 
+// 활성 variant의 specs/inputs를 포인터에 적용 + variant 토글 갱신
+function applyVariant(t) {
+  const v = t.variants[t.activeVariant];
+  selectedPart = v.part;
+  specs = v.specs;
+  specInputs = v.inputs;
+
+  renderVariantToggle(t);
+  renderSpecs();
+  updateDrawingBtn(v.part);
+}
+
+// IW/OW 토글 렌더 (그룹 탭일 때만)
+function renderVariantToggle(t) {
+  const wrap = document.getElementById('variant-toggle');
+  if (!t.isGroup || t.variants.length < 2) {
+    wrap.style.display = 'none';
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = t.variants.map((v, i) => {
+    const label = v.part.part_variant || v.part.part_number;
+    const sel = i === t.activeVariant ? 'sel' : '';
+    const has = variantHasInput(v) ? 'has' : '';
+    return `<button class="vrt-btn ${sel}" onclick="switchVariant(${i})">${label}<span class="vrt-badge ${has}"></span></button>`;
+  }).join('');
+}
+
+// variant 전환 (같은 탭 내)
+function switchVariant(vi) {
+  const t = tabs[activeTabIdx];
+  if (!t || vi === t.activeVariant) return;
+  t.activeVariant = vi;
+  applyVariant(t);
+  window.scrollTo(0, 0);
+}
+
+// variant에 입력값이 있는지
+function variantHasInput(v) {
+  return v.specs.some(s => {
+    const inp = v.inputs[s.id];
+    if (!inp) return false;
+    if (inp.type === 'minmax') return inp.min !== '' || inp.max !== '';
+    if (inp.type === 'points') return inp.vals.some(x => x !== '');
+    return false;  // visual은 기본 OK라 입력으로 안 침
+  });
+}
+
 function closeTab(idx, ev) {
   if (ev) ev.stopPropagation();
   const t = tabs[idx];
-  // 입력값 있으면 확인
-  const hasInput = t.specs.some(s => {
-    const inp = t.inputs[s.id];
-    if (!inp) return false;
-    if (inp.type === 'minmax') return inp.min !== '' || inp.max !== '';
-    if (inp.type === 'points') return inp.vals.some(v => v !== '');
-    return false;
-  });
-  if (hasInput && !confirm(`${t.part.part_number} 탭에 입력값이 있습니다. 닫을까요?`)) return;
+  // 입력값 있으면 확인 (모든 variant 검사)
+  const hasInput = t.variants.some(variantHasInput);
+  if (hasInput && !confirm(`${t.label} 탭에 입력값이 있습니다. 닫을까요?`)) return;
 
   tabs.splice(idx, 1);
   if (tabs.length === 0) {
@@ -729,6 +1062,7 @@ function closeTab(idx, ev) {
     document.getElementById('specs-area').style.display = 'none';
     document.getElementById('save-area').style.display = 'none';
     document.getElementById('drawing-bar').style.display = 'none';
+    document.getElementById('variant-toggle').style.display = 'none';
     renderTabBar();
     return;
   }
@@ -743,11 +1077,13 @@ function renderTabBar() {
   const bar = document.getElementById('tab-bar');
   if (!tabs.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = 'flex';
-  bar.innerHTML = tabs.map((t, i) => `
-    <div class="tab ${i === activeTabIdx ? 'active' : ''}" onclick="switchTab(${i})">
-      ${t.part.part_number}
+  bar.innerHTML = tabs.map((t, i) => {
+    const grpMark = t.isGroup ? ' <span style="font-size:9px;opacity:.7">⊞</span>' : '';
+    return `<div class="tab ${i === activeTabIdx ? 'active' : ''}" onclick="switchTab(${i})">
+      ${t.label}${grpMark}
       <button class="tab-close" onclick="closeTab(${i}, event)">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ══════════════════════════════════
@@ -986,6 +1322,16 @@ function updateSummary() {
   } else {
     sumEl.style.display = 'none';
   }
+  // 그룹 탭이면 현재 variant 토글의 입력 뱃지 갱신
+  const t = tabs[activeTabIdx];
+  if (t && t.isGroup) {
+    const wrap = document.getElementById('variant-toggle');
+    const btns = wrap.querySelectorAll('.vrt-btn');
+    t.variants.forEach((v, i) => {
+      const badge = btns[i]?.querySelector('.vrt-badge');
+      if (badge) badge.classList.toggle('has', variantHasInput(v));
+    });
+  }
 }
 
 // ══════════════════════════════════
@@ -1019,104 +1365,126 @@ function fillMinMax(minV, maxV, count = 5) {
 // 저장
 // ══════════════════════════════════
 async function saveAll() {
+  const t = tabs[activeTabIdx];
+  if (!t) return;
+
   const date = document.getElementById('insp-date').value;
   const time = document.getElementById('insp-time').value;
   const ho   = document.getElementById('insp-ho').value.trim();
 
   if (!date) { toast('검사일을 입력하세요'); return; }
 
-  // 미입력 확인
-  const emptySpecs = specs.filter(s => calcResult(s, specInputs[s.id]) === null);
-  if (emptySpecs.length > 0) {
-    if (!confirm(`미입력 항목이 ${emptySpecs.length}개 있습니다. 그래도 저장하시겠습니까?`)) return;
+  // 저장 대상 variant 결정
+  // - 단일 부품: variant 1개
+  // - 그룹: 입력값 있는 variant만 (전부 비어있으면 현재 variant)
+  let targets;
+  if (t.isGroup) {
+    targets = t.variants.filter(variantHasInput);
+    if (!targets.length) targets = [t.variants[t.activeVariant]];
+  } else {
+    targets = [t.variants[0]];
+  }
+
+  // 미입력 확인 (대상 variant들의 미입력 항목 합산)
+  let totalEmpty = 0;
+  targets.forEach(v => {
+    totalEmpty += v.specs.filter(s => calcResult(s, v.inputs[s.id]) === null).length;
+  });
+  if (totalEmpty > 0) {
+    const vtxt = t.isGroup ? `${targets.map(v=>v.part.part_variant||v.part.part_number).join('/')} 합계 ` : '';
+    if (!confirm(`${vtxt}미입력 항목이 ${totalEmpty}개 있습니다. 그래도 저장하시겠습니까?`)) return;
   }
 
   const btn = document.querySelector('#save-area .btn');
   btn.textContent = '저장 중…'; btn.disabled = true;
 
   try {
-    // 1. 헤더 INSERT
-    const inspRows = await sbFetch('qc_shipping_inspection', {
-      method: 'POST',
-      prefer: 'return=representation',
-      body: {
-        part_id: selectedPart.id,
-        inspection_date: date,
-        inspection_time: time || null,
-        ho: ho !== '' ? ho : null,
-        inspector: auth.name
-      }
-    });
-    const iid = inspRows[0].id;
-
     // 호기 직전값 저장
     if (ho !== '') localStorage.setItem('QC_LAST_HO', ho);
 
-    // 2. 측정값 INSERT
-    // PostgREST 일괄 INSERT는 모든 행의 키가 동일해야 함 (PGRST102 방지)
-    const mRows = [];
-    for (const s of specs) {
-      const inp = specInputs[s.id];
-      const row = {
-        inspection_id: iid,
-        spec_id: s.id,
-        item_no: s.item_no,
-        item_name: s.item_name,
-        inspection_method: s.inspection_method,
-        spec_text: s.spec_text,
-        visual_result: null,
-        x1:null, x2:null, x3:null, x4:null, x5:null,
-        x6:null, x7:null, x8:null, x9:null, x10:null
-      };
-      if (s.is_visual) {
-        row.visual_result = inp.val || 'OK';
-      } else if (inp.type === 'minmax') {
-        const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
-        if (!isNaN(mn) && !isNaN(mx)) {
-          const pts = fillMinMax(mn, mx, s.measure_points || 5);
-          pts.forEach((v, i) => { row[`x${i+1}`] = v; });
+    const savedLabels = [];
+    // variant 별로 inspection + measurement 생성
+    for (const v of targets) {
+      // 1. 헤더 INSERT
+      const inspRows = await sbFetch('qc_shipping_inspection', {
+        method: 'POST',
+        prefer: 'return=representation',
+        body: {
+          part_id: v.part.id,
+          inspection_date: date,
+          inspection_time: time || null,
+          ho: ho !== '' ? ho : null,
+          inspector: auth.name
         }
-      } else {
-        inp.vals.forEach((v, i) => {
-          if (v !== '' && !isNaN(parseFloat(v))) row[`x${i+1}`] = parseFloat(v);
-        });
+      });
+      const iid = inspRows[0].id;
+
+      // 2. 측정값 INSERT (모든 행 키 동일 → PGRST102 방지)
+      const mRows = [];
+      for (const s of v.specs) {
+        const inp = v.inputs[s.id];
+        const row = {
+          inspection_id: iid,
+          spec_id: s.id,
+          item_no: s.item_no,
+          item_name: s.item_name,
+          inspection_method: s.inspection_method,
+          spec_text: s.spec_text,
+          visual_result: null,
+          x1:null, x2:null, x3:null, x4:null, x5:null,
+          x6:null, x7:null, x8:null, x9:null, x10:null
+        };
+        if (s.is_visual) {
+          row.visual_result = inp.val || 'OK';
+        } else if (inp.type === 'minmax') {
+          const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+          if (!isNaN(mn) && !isNaN(mx)) {
+            const pts = fillMinMax(mn, mx, s.measure_points || 5);
+            pts.forEach((val, i) => { row[`x${i+1}`] = val; });
+          }
+        } else {
+          inp.vals.forEach((val, i) => {
+            if (val !== '' && !isNaN(parseFloat(val))) row[`x${i+1}`] = parseFloat(val);
+          });
+        }
+        mRows.push(row);
       }
-      mRows.push(row);
+      await sbFetch('qc_shipping_measurement', { method: 'POST', body: mRows });
+
+      // 3. 칸 수 / 모드 변경분을 spec 에 반영
+      for (const s of v.specs) {
+        const inp = v.inputs[s.id];
+        if (s.is_visual) continue;
+        let patch = null;
+        if (inp.type === 'minmax') {
+          if (!s.is_min_max) patch = { is_min_max: true };
+        } else {
+          const n = inp.vals.length;
+          if (s.is_min_max || n !== s.measure_points) {
+            patch = { is_min_max: false, measure_points: n };
+          }
+        }
+        if (patch) {
+          await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: patch });
+          Object.assign(s, patch);
+        }
+      }
+
+      savedLabels.push(v.part.part_variant || v.part.part_number);
     }
 
-    await sbFetch('qc_shipping_measurement', {
-      method: 'POST',
-      body: mRows
-    });
+    toast(`✅ 저장 완료! (${savedLabels.join(', ')})`);
 
-    // 3. 칸 수 / 모드 변경분을 spec 에 반영 → 다음에 열 때 그대로 유지
-    for (const s of specs) {
-      const inp = specInputs[s.id];
-      if (s.is_visual) continue;
-      let patch = null;
-      if (inp.type === 'minmax') {
-        if (!s.is_min_max) patch = { is_min_max: true };
-      } else {
-        const n = inp.vals.length;
-        if (s.is_min_max || n !== s.measure_points) {
-          patch = { is_min_max: false, measure_points: n };
-        }
-      }
-      if (patch) {
-        await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: patch });
-        Object.assign(s, patch);   // 로컬도 갱신
-      }
+    // 저장한 variant들의 측정값 리셋
+    for (const v of targets) {
+      v.specs.forEach(s => {
+        const inp = v.inputs[s.id];
+        if (inp.type === 'visual') inp.val = 'OK';
+        else if (inp.type === 'minmax') { inp.min = ''; inp.max = ''; }
+        else inp.vals = inp.vals.map(() => '');
+      });
     }
-
-    toast('✅ 저장 완료!');
-    // 측정값만 리셋 (같은 부품으로 다음 검사 가능)
-    specs.forEach(s => {
-      const inp = specInputs[s.id];
-      if (inp.type === 'visual') inp.val = 'OK';
-      else if (inp.type === 'minmax') { inp.min = ''; inp.max = ''; }
-      else inp.vals = inp.vals.map(() => '');
-    });
-    renderSpecs();
+    applyVariant(t);   // 현재 화면 갱신 + 토글 뱃지 리셋
 
   } catch(e) {
     toast('❌ 저장 실패: ' + e.message);
@@ -1149,7 +1517,25 @@ function openDrawing() {
   const img = new Image();
   img.onload = () => {
     wrap.innerHTML = '';
-    wrap.appendChild(img);
+    // 이미지 + 마커를 감싸는 relative 컨테이너
+    const box = document.createElement('div');
+    box.style.cssText = 'position:relative;display:inline-block;max-width:100%;max-height:100%';
+    img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:6px';
+    box.appendChild(img);
+    // 마커 오버레이
+    const markers = specs.filter(s => s.marker_x != null && s.marker_y != null);
+    markers.forEach(s => {
+      const m = document.createElement('div');
+      m.textContent = s.item_no;
+      const big = String(s.item_no).length >= 2;
+      const sz = big ? 26 : 22;
+      const fs = big ? 11 : 11;
+      m.style.cssText = `position:absolute;left:${s.marker_x*100}%;top:${s.marker_y*100}%;transform:translate(-50%,-50%);
+        width:${sz}px;height:${sz}px;border-radius:50%;background:#dc2626;color:#fff;font-size:${fs}px;font-weight:700;
+        display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)`;
+      box.appendChild(m);
+    });
+    wrap.appendChild(box);
   };
   img.onerror = () => {
     wrap.innerHTML = '<div style="color:#94a3b8;font-size:14px;text-align:center;padding:20px">도면 이미지를 불러올 수 없습니다<br><span style="font-size:11px">'+selectedPart.drawing_path+'</span></div>';
@@ -1182,6 +1568,622 @@ function switchNav(name) {
   });
   // 탭바는 측정 탭일 때만 sticky 동작
   document.getElementById('tab-bar').style.position = name === 'measure' ? '' : 'static';
+}
+
+// ══════════════════════════════════
+// 이력조회 탭
+// ══════════════════════════════════
+let histPart = null;        // 현재 선택된 부품
+let histInspections = [];   // 검사 헤더 목록
+let histMeasCache = {};     // inspection_id → 측정값 배열 캐시
+let histSpecs = [];         // 선택된 부품의 치수 spec 목록 (SPC용)
+let spcXbarChart = null, spcRChart = null; // Chart.js 인스턴스
+
+function filterPartsHist(q) {
+  const dd = document.getElementById('hist-part-dropdown');
+  if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
+  const kw = q.toLowerCase();
+  const matched = allParts.filter(p =>
+    p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw)
+  ).slice(0, 20);
+  dd.innerHTML = matched.length
+    ? matched.map(p => `<div class="part-opt" onmousedown="selectPartHist(${p.id})">
+        <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">· '+p.customer+'</span>' : ''}</div>
+        <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div></div>`).join('')
+    : '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
+  dd.classList.add('open');
+}
+function openDropdownHist() {
+  if (document.getElementById('hist-part-dropdown').innerHTML)
+    document.getElementById('hist-part-dropdown').classList.add('open');
+}
+function closeDropdownHist() { document.getElementById('hist-part-dropdown').classList.remove('open'); }
+
+async function selectPartHist(id) {
+  document.getElementById('hist-part-search').value = '';
+  document.getElementById('hist-part-dropdown').classList.remove('open');
+  histPart = allParts.find(p => p.id === id);
+  if (!histPart) return;
+
+  // 선택 표시
+  document.getElementById('hist-sel-label').textContent = histPart.part_name || '—';
+  document.getElementById('hist-sel-pno').textContent = histPart.part_number + (histPart.material ? ' · ' + histPart.material : '');
+  document.getElementById('hist-selected-part').style.display = 'block';
+
+  // 서브 토글 표시
+  document.getElementById('hist-sub-toggle').style.display = 'flex';
+  switchHistView('list');
+
+  // 날짜 필터 기본값: 최근 6개월
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('hist-date-to').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const from = new Date(now);
+  from.setMonth(from.getMonth() - 6);
+  document.getElementById('hist-date-from').value = `${from.getFullYear()}-${pad(from.getMonth()+1)}-${pad(from.getDate())}`;
+  document.getElementById('hist-filter-area').style.display = 'block';
+
+  histMeasCache = {};
+  await loadHistData();
+
+  // SPC용 spec 항목 로드 (치수 항목만)
+  try {
+    histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=item_no&select=id,item_no,item_name,spec_text,lsl,usl,measure_points`);
+    const sel = document.getElementById('spc-spec-sel');
+    sel.innerHTML = '<option value="">항목 선택…</option>'
+      + histSpecs.map(s => `<option value="${s.id}">${s.item_no}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
+  } catch(e) {
+    toast('항목 로드 실패: ' + e.message);
+  }
+}
+
+function clearHistPart() {
+  histPart = null;
+  histInspections = [];
+  histMeasCache = {};
+  histSpecs = [];
+  document.getElementById('hist-selected-part').style.display = 'none';
+  document.getElementById('hist-sub-toggle').style.display = 'none';
+  document.getElementById('hist-filter-area').style.display = 'none';
+  document.getElementById('hist-list').innerHTML = '';
+  document.getElementById('hist-empty').style.display = 'none';
+  document.getElementById('hist-count').textContent = '';
+  // SPC 리셋
+  destroySpcCharts();
+  document.getElementById('spc-xbar-wrap').style.display = 'none';
+  document.getElementById('spc-r-wrap').style.display = 'none';
+  document.getElementById('spc-cpk-panel').style.display = 'none';
+  document.getElementById('spc-spec-sel').innerHTML = '<option value="">항목 선택…</option>';
+}
+
+async function loadHistData() {
+  if (!histPart) return;
+  const dateFrom = document.getElementById('hist-date-from').value;
+  const dateTo = document.getElementById('hist-date-to').value;
+  if (!dateFrom || !dateTo) return;
+
+  document.getElementById('hist-loading').style.display = 'block';
+  document.getElementById('hist-list').innerHTML = '';
+  document.getElementById('hist-empty').style.display = 'none';
+
+  try {
+    // 검사 헤더 조회 (날짜 범위 + 부품)
+    let qs = `part_id=eq.${histPart.id}&inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,inspection_date,inspection_time,ho,inspector,result`;
+    histInspections = await sbAll('qc_shipping_inspection', qs);
+
+    document.getElementById('hist-count').textContent = `${histInspections.length}건`;
+
+    if (!histInspections.length) {
+      document.getElementById('hist-empty').style.display = 'block';
+    } else {
+      renderHistList();
+    }
+  } catch(e) {
+    toast('이력 조회 실패: ' + e.message);
+  } finally {
+    document.getElementById('hist-loading').style.display = 'none';
+  }
+}
+
+function renderHistList() {
+  const list = document.getElementById('hist-list');
+  list.innerHTML = histInspections.map((insp, idx) => {
+    const d = insp.inspection_date || '';
+    const dDisp = d ? d.replace(/-/g, '.') : '—';
+    const tDisp = insp.inspection_time ? insp.inspection_time.substring(0, 5) : '';
+    const res = insp.result;
+    const resCls = res === 'OK' ? 'ok' : res === 'NG' ? 'ng' : 'null';
+    const resLabel = res || '—';
+    return `<div class="hist-card" id="hcard-${idx}">
+      <div class="hist-card-hdr" onclick="toggleHistCard(${idx})">
+        <div class="hist-date-col">
+          <div class="hist-date-main">${dDisp}</div>
+          ${tDisp ? `<div class="hist-date-time">${tDisp}</div>` : ''}
+        </div>
+        <div class="hist-meta">
+          ${insp.ho ? `<span class="hist-chip">호기 ${insp.ho}</span>` : ''}
+          ${insp.inspector ? `<span class="hist-chip">${insp.inspector}</span>` : ''}
+        </div>
+        <span class="hist-result ${resCls}">${resLabel}</span>
+        <span class="hist-expand-icon">▾</span>
+      </div>
+      <div class="hist-detail" id="hdetail-${idx}">
+        <div style="padding:12px;color:#94a3b8;font-size:12px;text-align:center">불러오는 중…</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleHistCard(idx) {
+  const card = document.getElementById(`hcard-${idx}`);
+  const isOpen = card.classList.contains('expanded');
+
+  // 닫기
+  if (isOpen) {
+    card.classList.remove('expanded');
+    return;
+  }
+
+  // 열기
+  card.classList.add('expanded');
+  const insp = histInspections[idx];
+  const detail = document.getElementById(`hdetail-${idx}`);
+
+  // 캐시 확인
+  if (histMeasCache[insp.id]) {
+    detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
+    return;
+  }
+
+  // 측정값 로드 (id 포함)
+  try {
+    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result`);
+    histMeasCache[insp.id] = rows || [];
+    detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
+  } catch(e) {
+    detail.innerHTML = `<div style="padding:12px;color:#dc2626;font-size:12px;text-align:center">로드 실패: ${e.message}</div>`;
+  }
+}
+
+// ── 상세 영역 전체 빌드 (보기 / 수정 모드) ──
+function buildMeasDetail(rows, idx, editMode) {
+  let html = '';
+  const insp = histInspections[idx];
+
+  // 수정 모드: 헤더 편집 필드
+  if (editMode) {
+    html += `<div class="hist-edit-hdr">
+      <div><label>검사일</label><input type="date" id="he-date-${idx}" value="${insp.inspection_date || ''}"></div>
+      <div><label>검사시간</label><input type="time" id="he-time-${idx}" value="${(insp.inspection_time || '').substring(0,5)}"></div>
+      <div><label>호기</label><input type="text" id="he-ho-${idx}" value="${insp.ho || ''}" inputmode="numeric"></div>
+    </div>`;
+  }
+
+  // 측정 테이블
+  html += buildMeasTable(rows, idx, editMode);
+
+  // 툴바
+  if (editMode) {
+    html += `<div class="hist-toolbar">
+      <button class="hist-cancel-btn" onclick="cancelHistEdit(${idx})">취소</button>
+      <button class="hist-save-btn" onclick="saveHistEdit(${idx})">💾 저장</button>
+    </div>`;
+  } else {
+    html += `<div class="hist-toolbar">
+      <button class="hist-del-btn" onclick="deleteHistInsp(${idx})">🗑 삭제</button>
+      <button class="hist-edit-btn" onclick="enterHistEdit(${idx})">✏️ 수정</button>
+    </div>`;
+  }
+  return html;
+}
+
+function buildMeasTable(rows, idx, editMode) {
+  if (!rows.length) return '<div style="padding:12px;color:#94a3b8;font-size:12px;text-align:center">측정 데이터 없음</div>';
+
+  // x1~x10 중 사용된 최대 칸 파악
+  let maxX = 0;
+  rows.forEach(r => {
+    for (let i = 10; i >= 1; i--) {
+      if (r[`x${i}`] != null) { if (i > maxX) maxX = i; break; }
+    }
+  });
+  if (maxX === 0) maxX = 5;
+
+  let html = '<div class="hist-meas-scroll"><table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
+  for (let i = 1; i <= maxX; i++) html += `<th>X${i}</th>`;
+  html += '<th>판정</th></tr></thead><tbody>';
+
+  rows.forEach((r, ri) => {
+    const isVis = r.visual_result != null;
+    const res = isVis ? r.visual_result : (r.result || '—');
+    const resCls = res === 'OK' ? 'ok-val' : res === 'NG' ? 'ng-val' : '';
+
+    html += `<tr><td>${r.item_no ?? ''}</td><td>${r.item_name || ''}</td><td style="font-size:11px;color:#3b82f6">${r.spec_text || ''}</td>`;
+
+    if (isVis) {
+      if (editMode) {
+        html += `<td colspan="${maxX}" style="text-align:center">
+          <select class="edit-sel" id="he-vis-${idx}-${ri}">
+            <option value="OK"${r.visual_result === 'OK' ? ' selected' : ''}>OK</option>
+            <option value="NG"${r.visual_result === 'NG' ? ' selected' : ''}>NG</option>
+          </select></td>`;
+      } else {
+        html += `<td colspan="${maxX}" style="text-align:center;color:#64748b;font-size:11px">${r.visual_result}</td>`;
+      }
+    } else {
+      for (let i = 1; i <= maxX; i++) {
+        const v = r[`x${i}`];
+        if (editMode) {
+          html += `<td><input class="edit-inp" type="text" inputmode="decimal" id="he-x-${idx}-${ri}-${i}" value="${v != null ? fmtNum(v) : ''}"></td>`;
+        } else {
+          html += `<td>${v != null ? fmtNum(v) : ''}</td>`;
+        }
+      }
+    }
+    html += `<td class="${resCls}">${res}</td></tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// ── 수정 모드 진입 ──
+function enterHistEdit(idx) {
+  const insp = histInspections[idx];
+  const detail = document.getElementById(`hdetail-${idx}`);
+  detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, true);
+}
+
+// ── 수정 취소 ──
+function cancelHistEdit(idx) {
+  const insp = histInspections[idx];
+  const detail = document.getElementById(`hdetail-${idx}`);
+  detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
+}
+
+// ── 수정 저장 ──
+async function saveHistEdit(idx) {
+  const insp = histInspections[idx];
+  const rows = histMeasCache[insp.id];
+  if (!rows) return;
+
+  // 헤더 수정값
+  const newDate = document.getElementById(`he-date-${idx}`).value;
+  const newTime = document.getElementById(`he-time-${idx}`).value;
+  const newHo = document.getElementById(`he-ho-${idx}`).value.trim();
+
+  // x1~x10 최대칸 재계산
+  let maxX = 0;
+  rows.forEach(r => {
+    for (let i = 10; i >= 1; i--) {
+      if (r[`x${i}`] != null) { if (i > maxX) maxX = i; break; }
+    }
+  });
+  if (maxX === 0) maxX = 5;
+
+  try {
+    // 1) inspection 헤더 PATCH
+    const hdrPatch = {};
+    if (newDate && newDate !== insp.inspection_date) hdrPatch.inspection_date = newDate;
+    if (newTime !== (insp.inspection_time || '').substring(0,5)) hdrPatch.inspection_time = newTime || null;
+    if (newHo !== (insp.ho || '')) hdrPatch.ho = newHo || null;
+
+    if (Object.keys(hdrPatch).length) {
+      await sbFetch(`qc_shipping_inspection?id=eq.${insp.id}`, { method: 'PATCH', body: hdrPatch });
+      // 로컬 캐시 반영
+      if (hdrPatch.inspection_date) insp.inspection_date = hdrPatch.inspection_date;
+      if ('inspection_time' in hdrPatch) insp.inspection_time = hdrPatch.inspection_time;
+      if ('ho' in hdrPatch) insp.ho = hdrPatch.ho;
+    }
+
+    // 2) measurement 각 행 PATCH
+    for (let ri = 0; ri < rows.length; ri++) {
+      const r = rows[ri];
+      const isVis = r.visual_result != null;
+      const patch = {};
+
+      if (isVis) {
+        const newVis = document.getElementById(`he-vis-${idx}-${ri}`).value;
+        if (newVis !== r.visual_result) patch.visual_result = newVis;
+      } else {
+        for (let i = 1; i <= maxX; i++) {
+          const el = document.getElementById(`he-x-${idx}-${ri}-${i}`);
+          if (!el) continue;
+          const raw = el.value.trim();
+          const newVal = raw === '' ? null : Number(raw);
+          const oldVal = r[`x${i}`];
+          if (newVal !== oldVal) patch[`x${i}`] = newVal;
+        }
+      }
+
+      if (Object.keys(patch).length) {
+        await sbFetch(`qc_shipping_measurement?id=eq.${r.id}`, { method: 'PATCH', body: patch });
+        // 로컬 캐시 반영
+        Object.assign(r, patch);
+      }
+    }
+
+    // 카드 헤더 업데이트 (날짜/시간/호기/판정 변경 반영)
+    toast('✅ 수정 완료');
+    // 전체 다시 조회 (트리거가 result 재계산할 수 있으므로)
+    delete histMeasCache[insp.id];
+    await loadHistData();
+
+  } catch(e) {
+    toast('수정 실패: ' + e.message);
+  }
+}
+
+// ── 검사 기록 삭제 ──
+async function deleteHistInsp(idx) {
+  const insp = histInspections[idx];
+  const d = (insp.inspection_date || '').replace(/-/g, '.');
+  if (!confirm(`${d} 검사 기록을 삭제합니다.\n측정값도 함께 삭제됩니다. 계속?`)) return;
+
+  try {
+    // measurement 먼저 삭제
+    await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}`, { method: 'DELETE' });
+    // inspection 삭제
+    await sbFetch(`qc_shipping_inspection?id=eq.${insp.id}`, { method: 'DELETE' });
+
+    delete histMeasCache[insp.id];
+    toast('🗑 삭제 완료');
+    await loadHistData();
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+// 숫자 표시 (불필요한 소수점 0 제거)
+function fmtNum(v) {
+  if (v == null) return '';
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  return parseFloat(n.toFixed(4)).toString();
+}
+
+// ══════════════════════════════════
+// 관리도 (SPC Xbar-R + Cp/Cpk)
+// ══════════════════════════════════
+
+// 이력목록 ↔ 관리도 뷰 전환
+function switchHistView(view) {
+  document.getElementById('hist-list-view').style.display = view === 'list' ? 'block' : 'none';
+  document.getElementById('hist-spc-view').style.display = view === 'spc' ? 'block' : 'none';
+  document.getElementById('hst-list-btn').classList.toggle('sel', view === 'list');
+  document.getElementById('hst-spc-btn').classList.toggle('sel', view === 'spc');
+}
+
+function destroySpcCharts() {
+  if (spcXbarChart) { spcXbarChart.destroy(); spcXbarChart = null; }
+  if (spcRChart) { spcRChart.destroy(); spcRChart = null; }
+}
+
+// SPC 계수표 (n=2~10)
+const SPC_CONST = {
+  2:  { d2:1.128, A2:1.880, D3:0, D4:3.267 },
+  3:  { d2:1.693, A2:1.023, D3:0, D4:2.574 },
+  4:  { d2:2.059, A2:0.729, D3:0, D4:2.282 },
+  5:  { d2:2.326, A2:0.577, D3:0, D4:2.114 },
+  6:  { d2:2.534, A2:0.483, D3:0, D4:2.004 },
+  7:  { d2:2.704, A2:0.419, D3:0.076, D4:1.924 },
+  8:  { d2:2.847, A2:0.373, D3:0.136, D4:1.864 },
+  9:  { d2:2.970, A2:0.337, D3:0.184, D4:1.816 },
+  10: { d2:3.078, A2:0.308, D3:0.223, D4:1.777 }
+};
+
+async function loadSpcData() {
+  const specId = document.getElementById('spc-spec-sel').value;
+  destroySpcCharts();
+  document.getElementById('spc-xbar-wrap').style.display = 'none';
+  document.getElementById('spc-r-wrap').style.display = 'none';
+  document.getElementById('spc-cpk-panel').style.display = 'none';
+  document.getElementById('spc-empty').style.display = 'none';
+
+  if (!specId || !histPart) {
+    document.getElementById('spc-empty').style.display = 'block';
+    return;
+  }
+
+  const spec = histSpecs.find(s => s.id === Number(specId));
+  if (!spec) return;
+
+  try {
+    // 해당 부품의 모든 검사에서 이 항목 측정값 가져오기 (최근 25건)
+    // inspection 테이블 조인 (날짜 가져오기)
+    const mRows = await sbAll('qc_shipping_measurement',
+      `spec_id=eq.${specId}&select=inspection_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,inspection:qc_shipping_inspection(inspection_date,part_id)&order=inspection_id.desc`);
+
+    // part_id 필터 + 날짜순 정렬 + 최근 25건
+    const filtered = mRows
+      .filter(r => r.inspection?.part_id === histPart.id)
+      .reverse()           // 오래된 순
+      .slice(-25);         // 최근 25건
+
+    if (!filtered.length) {
+      document.getElementById('spc-empty').textContent = '이 항목의 측정 데이터가 없습니다';
+      document.getElementById('spc-empty').style.display = 'block';
+      return;
+    }
+
+    // 서브그룹 구성: 각 행의 x1~xn 에서 null 아닌 값 추출
+    const subgroups = [];
+    const labels = [];
+    filtered.forEach(r => {
+      const vals = [];
+      for (let i = 1; i <= 10; i++) {
+        if (r[`x${i}`] != null) vals.push(Number(r[`x${i}`]));
+      }
+      if (vals.length >= 2) {
+        subgroups.push(vals);
+        labels.push((r.inspection?.inspection_date || '').substring(5).replace('-', '/')); // MM/DD
+      }
+    });
+
+    if (subgroups.length < 2) {
+      document.getElementById('spc-empty').textContent = '관리도 작성에 데이터가 부족합니다 (최소 2건)';
+      document.getElementById('spc-empty').style.display = 'block';
+      return;
+    }
+
+    // 서브그룹 크기 n (최빈값 사용)
+    const nCounts = {};
+    subgroups.forEach(s => { nCounts[s.length] = (nCounts[s.length] || 0) + 1; });
+    const n = Number(Object.entries(nCounts).sort((a,b) => b[1] - a[1])[0][0]);
+    const C = SPC_CONST[n] || SPC_CONST[5];
+
+    // Xbar, R 계산
+    const xbars = subgroups.map(s => s.reduce((a,b) => a+b, 0) / s.length);
+    const ranges = subgroups.map(s => Math.max(...s) - Math.min(...s));
+
+    const xbarBar = xbars.reduce((a,b) => a+b, 0) / xbars.length;  // X̿
+    const rBar = ranges.reduce((a,b) => a+b, 0) / ranges.length;    // R̄
+
+    // 관리선
+    const xUCL = xbarBar + C.A2 * rBar;
+    const xCL  = xbarBar;
+    const xLCL = xbarBar - C.A2 * rBar;
+    const rUCL = C.D4 * rBar;
+    const rCL  = rBar;
+    const rLCL = C.D3 * rBar;
+
+    // 차트 렌더링
+    renderSpcChart('xbar', labels, xbars, xUCL, xCL, xLCL, 'X̄');
+    renderSpcChart('r', labels, ranges, rUCL, rCL, rLCL, 'R');
+    document.getElementById('spc-xbar-wrap').style.display = 'block';
+    document.getElementById('spc-r-wrap').style.display = 'block';
+
+    // 공정능력 계산
+    const USL = spec.usl;
+    const LSL = spec.lsl;
+    const sigma = rBar / C.d2;
+
+    const cpkPanel = document.getElementById('spc-cpk-panel');
+    const infoGrid = document.getElementById('spc-info-grid');
+    const judgeEl = document.getElementById('spc-judge');
+
+    if (USL != null && LSL != null && sigma > 0) {
+      const Cp = (USL - LSL) / (6 * sigma);
+      const K = Math.abs(USL + LSL - 2 * xbarBar) / (USL - LSL);
+      const Cpk = (1 - K) * Cp;
+
+      // 색상 분류
+      const cpCls = Cp >= 1.33 ? 'good' : Cp >= 1.0 ? 'warn' : 'bad';
+      const cpkCls = Cpk >= 1.33 ? 'good' : Cpk >= 1.0 ? 'warn' : 'bad';
+
+      document.getElementById('spc-cp').textContent = Cp.toFixed(3);
+      document.getElementById('spc-cp').className = 'spc-cpk-val ' + cpCls;
+      document.getElementById('spc-cpk').textContent = Cpk.toFixed(3);
+      document.getElementById('spc-cpk').className = 'spc-cpk-val ' + cpkCls;
+
+      infoGrid.innerHTML = [
+        ['X̿', xbarBar.toFixed(4)],
+        ['R̄', rBar.toFixed(4)],
+        ['σ', sigma.toFixed(4)],
+        ['USL', USL],
+        ['LSL', LSL],
+        ['n', n]
+      ].map(([l,v]) => `<div class="spc-info-item"><div class="spc-info-label">${l}</div><div class="spc-info-val">${v}</div></div>`).join('');
+
+      // 판정
+      const judgeTxt = Cpk >= 1.33 ? '✅ 공정능력 충분 (Cpk ≥ 1.33)'
+                     : Cpk >= 1.0  ? '⚠️ 공정능력 보통 (1.0 ≤ Cpk < 1.33)'
+                     : '❌ 공정능력 부족 (Cpk < 1.0)';
+      const judgeCls = Cpk >= 1.33 ? 'good' : Cpk >= 1.0 ? 'warn' : 'bad';
+      judgeEl.textContent = judgeTxt;
+      judgeEl.className = 'spc-judge ' + judgeCls;
+      judgeEl.style.display = 'block';
+
+      cpkPanel.style.display = 'block';
+    } else {
+      // LSL/USL 없으면 Cp/Cpk 계산 불가 — 기본정보만
+      document.getElementById('spc-cp').textContent = '—';
+      document.getElementById('spc-cp').className = 'spc-cpk-val';
+      document.getElementById('spc-cpk').textContent = '—';
+      document.getElementById('spc-cpk').className = 'spc-cpk-val';
+      infoGrid.innerHTML = [
+        ['X̿', xbarBar.toFixed(4)],
+        ['R̄', rBar.toFixed(4)],
+        ['σ', sigma > 0 ? sigma.toFixed(4) : '—'],
+        ['USL', USL ?? '미설정'],
+        ['LSL', LSL ?? '미설정'],
+        ['n', n]
+      ].map(([l,v]) => `<div class="spc-info-item"><div class="spc-info-label">${l}</div><div class="spc-info-val">${v}</div></div>`).join('');
+      judgeEl.style.display = 'none';
+      cpkPanel.style.display = 'block';
+    }
+
+  } catch(e) {
+    toast('관리도 데이터 조회 실패: ' + e.message);
+    document.getElementById('spc-empty').textContent = '데이터 조회 실패: ' + e.message;
+    document.getElementById('spc-empty').style.display = 'block';
+  }
+}
+
+function renderSpcChart(type, labels, data, ucl, cl, lcl, prefix) {
+  const canvasId = type === 'xbar' ? 'spc-xbar-canvas' : 'spc-r-canvas';
+  const ctx = document.getElementById(canvasId).getContext('2d');
+
+  // 데이터 범위에 약간의 여유
+  const allVals = [...data, ucl, cl, lcl].filter(v => v != null && isFinite(v));
+  const yMin = Math.min(...allVals);
+  const yMax = Math.max(...allVals);
+  const margin = (yMax - yMin) * 0.15 || 0.01;
+
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: prefix,
+        data,
+        borderColor: '#1e3a5f',
+        backgroundColor: '#1e3a5f',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: data.map(v =>
+          (v > ucl || v < lcl) ? '#dc2626' : '#1e3a5f'
+        ),
+        pointBorderColor: data.map(v =>
+          (v > ucl || v < lcl) ? '#dc2626' : '#1e3a5f'
+        ),
+        pointRadius: data.map(v =>
+          (v > ucl || v < lcl) ? 5 : 3
+        ),
+        tension: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          min: yMin - margin,
+          max: yMax + margin,
+          ticks: { font: { size: 10 } }
+        },
+        x: {
+          ticks: { font: { size: 10 }, maxRotation: 45 }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        annotation: {
+          annotations: {
+            uclLine: { type: 'line', yMin: ucl, yMax: ucl, borderColor: '#dc2626', borderWidth: 1.5, borderDash: [6,3],
+              label: { display: true, content: `UCL ${fmtNum(ucl)}`, position: 'start', font: { size: 10 }, color: '#dc2626', backgroundColor: 'transparent' }},
+            clLine: { type: 'line', yMin: cl, yMax: cl, borderColor: '#16a34a', borderWidth: 1.5,
+              label: { display: true, content: `CL ${fmtNum(cl)}`, position: 'start', font: { size: 10 }, color: '#16a34a', backgroundColor: 'transparent' }},
+            lclLine: { type: 'line', yMin: lcl, yMax: lcl, borderColor: '#dc2626', borderWidth: 1.5, borderDash: [6,3],
+              label: { display: true, content: `LCL ${fmtNum(lcl)}`, position: 'start', font: { size: 10 }, color: '#dc2626', backgroundColor: 'transparent' }}
+          }
+        }
+      }
+    }
+  });
+
+  if (type === 'xbar') spcXbarChart = chart;
+  else spcRChart = chart;
 }
 
 // ══════════════════════════════════
@@ -1221,10 +2223,428 @@ async function selectPartCfg(id) {
     // 설정 탭은 전체 spec (process_type 구분 없이)
     cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=item_no`);
     renderCfgSpecs();
+    renderCfgDrawing();   // 도면 관리 카드 렌더
   } catch(e) {
     toast('로드 실패: ' + e.message);
   } finally {
     document.getElementById('cfg-loading').style.display = 'none';
+  }
+}
+
+// ══════════════════════════════════
+// 설정 탭 — 도면 관리 / 마커
+// ══════════════════════════════════
+let activeMarkerSpecId = null;   // 현재 배치 대기 중인 spec id
+
+function renderCfgDrawing() {
+  const card = document.getElementById('cfg-drawing-card');
+  card.style.display = 'block';
+  activeMarkerSpecId = null;
+  selectedMarkers.clear();
+  selectedMarkerId = null;
+  document.getElementById('cfg-active-marker').textContent = '';
+
+  // 지우개 상태 초기화
+  eraserOn = false; eraserDrawing = false; eraserCtx = null;
+  const cv = document.getElementById('cfg-eraser-canvas');
+  if (cv) { cv.style.display = 'none'; cv.style.pointerEvents = 'none'; }
+  const etBtn = document.getElementById('eraser-toggle');
+  if (etBtn) { etBtn.textContent = '지우개 끄기'; etBtn.style.background = '#fff'; etBtn.style.color = '#475569'; }
+
+  const hasDrawing = cfgPart && cfgPart.drawing_path;
+  document.getElementById('cfg-drawing-empty').style.display = hasDrawing ? 'none' : 'block';
+  document.getElementById('cfg-drawing-editor').style.display = hasDrawing ? 'block' : 'none';
+
+  if (hasDrawing) {
+    const img = document.getElementById('cfg-drawing-img');
+    img.crossOrigin = 'anonymous';   // canvas 저장 위해 CORS 허용
+    img.style.visibility = 'visible';
+    img.onload = () => { renderMarkers(); bindEraserEvents(); };
+    img.src = `${sbUrl}/storage/v1/object/public/qc-drawings/${cfgPart.drawing_path}?t=${Date.now()}`;
+    renderMarkerChips();
+  }
+}
+
+// 항목 번호 칩 렌더
+function renderMarkerChips() {
+  const wrap = document.getElementById('cfg-marker-chips');
+  wrap.innerHTML = cfgSpecs.filter(s => !s.is_visual).map(s => {
+    const placed = (s.marker_x != null && s.marker_y != null);
+    const active = s.id === activeMarkerSpecId;
+    return `<button onclick="pickMarker(${s.id})"
+      style="padding:6px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid ${active?'#3b82f6':(placed?'#86efac':'#e2e8f0')};
+      background:${active?'#3b82f6':(placed?'#dcfce7':'#fff')};color:${active?'#fff':(placed?'#16a34a':'#64748b')}">
+      ${s.item_no} ${placed?'✓':''}
+    </button>`;
+  }).join('');
+}
+
+function pickMarker(specId) {
+  activeMarkerSpecId = (activeMarkerSpecId === specId) ? null : specId;
+  const s = cfgSpecs.find(x => x.id === specId);
+  document.getElementById('cfg-active-marker').textContent =
+    activeMarkerSpecId ? `→ ${s.item_no}번 (${s.item_name}) 위치 클릭` : '';
+  renderMarkerChips();
+}
+
+// 도면 클릭 → 마커 배치
+async function onDrawingClick(e) {
+  if (!activeMarkerSpecId) { toast('먼저 항목 번호를 선택하세요'); return; }
+  const img = document.getElementById('cfg-drawing-img');
+  const rect = img.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+
+  const s = cfgSpecs.find(x2 => x2.id === activeMarkerSpecId);
+  s.marker_x = Math.round(x * 1000) / 1000;
+  s.marker_y = Math.round(y * 1000) / 1000;
+
+  try {
+    await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: { marker_x: s.marker_x, marker_y: s.marker_y } });
+    document.getElementById('cfg-drawing-status').textContent = `✓ ${s.item_no}번 마커 저장됨`;
+    setTimeout(() => { document.getElementById('cfg-drawing-status').textContent = ''; }, 1500);
+    activeMarkerSpecId = null;
+    document.getElementById('cfg-active-marker').textContent = '';
+    renderMarkerChips();
+    renderMarkers();
+  } catch(err) {
+    toast('마커 저장 실패: ' + err.message);
+  }
+}
+
+// 마커 오버레이 렌더 (드래그로 미세조정 가능)
+let selectedMarkers = new Set();   // 다중 선택
+let selectedMarkerId = null;       // 방향키용 (마지막 선택)
+let dragState = null;
+
+function renderMarkers() {
+  const layer = document.getElementById('cfg-marker-layer');
+  const placed = cfgSpecs.filter(s => s.marker_x != null && s.marker_y != null);
+  layer.innerHTML = placed.map(s => {
+    const big = String(s.item_no).length >= 2;
+    const sz = big ? 28 : 24;
+    const fs = big ? 12 : 13;
+    const sel = selectedMarkers.has(s.id);
+    return `<div class="cfg-marker" data-spec="${s.id}"
+      style="position:absolute;left:${s.marker_x*100}%;top:${s.marker_y*100}%;transform:translate(-50%,-50%);
+      width:${sz}px;height:${sz}px;border-radius:50%;background:${sel?'#2563eb':'#dc2626'};color:#fff;font-size:${fs}px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);
+      cursor:grab;pointer-events:auto;${sel?'outline:2px solid #93c5fd;outline-offset:2px':''}">${s.item_no}</div>`;
+  }).join('');
+
+  // 드래그 + 선택 바인딩
+  layer.querySelectorAll('.cfg-marker').forEach(el => {
+    el.addEventListener('mousedown', startMarkerDrag);
+  });
+}
+
+// ── 마커 선택/드래그/방향키 미세조정 ──
+function startMarkerDrag(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const specId = parseInt(e.currentTarget.dataset.spec);
+
+  if (e.shiftKey) {
+    // Shift: 다중 선택 토글
+    if (selectedMarkers.has(specId)) selectedMarkers.delete(specId);
+    else selectedMarkers.add(specId);
+  } else {
+    // 단일 선택 (이미 선택된 것 중 하나면 유지 → 그룹 드래그 가능)
+    if (!selectedMarkers.has(specId)) {
+      selectedMarkers.clear();
+      selectedMarkers.add(specId);
+    }
+  }
+  selectedMarkerId = specId;
+  activeMarkerSpecId = null;
+  document.getElementById('cfg-active-marker').textContent = '';
+  updateAlignCount();
+  renderMarkerChips();
+
+  const img = document.getElementById('cfg-drawing-img');
+  const rect = img.getBoundingClientRect();
+  // 그룹 드래그용: 시작 좌표 기록
+  const startPos = {};
+  selectedMarkers.forEach(id => {
+    const s = cfgSpecs.find(x => x.id === id);
+    startPos[id] = { x: s.marker_x, y: s.marker_y };
+  });
+  dragState = { specId, rect, moved: false, startMouse: { x: e.clientX, y: e.clientY }, startPos };
+  renderMarkers();
+
+  document.addEventListener('mousemove', onMarkerDrag);
+  document.addEventListener('mouseup', endMarkerDrag);
+}
+
+function onMarkerDrag(e) {
+  if (!dragState) return;
+  dragState.moved = true;
+  const { rect, startMouse, startPos } = dragState;
+  const dx = (e.clientX - startMouse.x) / rect.width;
+  const dy = (e.clientY - startMouse.y) / rect.height;
+  // 선택된 모든 마커를 같이 이동
+  selectedMarkers.forEach(id => {
+    const s = cfgSpecs.find(x => x.id === id);
+    s.marker_x = Math.min(1, Math.max(0, Math.round((startPos[id].x + dx)*1000)/1000));
+    s.marker_y = Math.min(1, Math.max(0, Math.round((startPos[id].y + dy)*1000)/1000));
+  });
+  renderMarkers();
+}
+
+async function endMarkerDrag(e) {
+  document.removeEventListener('mousemove', onMarkerDrag);
+  document.removeEventListener('mouseup', endMarkerDrag);
+  if (!dragState) return;
+  const ds = dragState; dragState = null;
+  if (ds.moved) await saveMarkers([...selectedMarkers]);
+}
+
+function updateAlignCount() {
+  const el = document.getElementById('align-sel-count');
+  if (el) el.textContent = selectedMarkers.size > 0
+    ? `${selectedMarkers.size}개 선택됨`
+    : '마커 클릭으로 선택(Shift=다중)';
+}
+
+// ── 정렬 ──
+async function alignMarkers(mode) {
+  const sel = [...selectedMarkers].map(id => cfgSpecs.find(s => s.id === id)).filter(Boolean);
+  if (sel.length < 2) { toast('마커를 2개 이상 선택하세요 (Shift+클릭)'); return; }
+
+  if (mode === 'left')    { const v = Math.min(...sel.map(s=>s.marker_x)); sel.forEach(s=>s.marker_x=v); }
+  if (mode === 'right')   { const v = Math.max(...sel.map(s=>s.marker_x)); sel.forEach(s=>s.marker_x=v); }
+  if (mode === 'hcenter') { const v = sel.reduce((a,s)=>a+s.marker_x,0)/sel.length; sel.forEach(s=>s.marker_x=Math.round(v*1000)/1000); }
+  if (mode === 'top')     { const v = Math.min(...sel.map(s=>s.marker_y)); sel.forEach(s=>s.marker_y=v); }
+  if (mode === 'bottom')  { const v = Math.max(...sel.map(s=>s.marker_y)); sel.forEach(s=>s.marker_y=v); }
+  if (mode === 'vcenter') { const v = sel.reduce((a,s)=>a+s.marker_y,0)/sel.length; sel.forEach(s=>s.marker_y=Math.round(v*1000)/1000); }
+  if (mode === 'hdist') {
+    const sorted = [...sel].sort((a,b)=>a.marker_x-b.marker_x);
+    const min = sorted[0].marker_x, max = sorted[sorted.length-1].marker_x;
+    const step = (max-min)/(sorted.length-1);
+    sorted.forEach((s,i)=>s.marker_x = Math.round((min+step*i)*1000)/1000);
+  }
+  if (mode === 'vdist') {
+    const sorted = [...sel].sort((a,b)=>a.marker_y-b.marker_y);
+    const min = sorted[0].marker_y, max = sorted[sorted.length-1].marker_y;
+    const step = (max-min)/(sorted.length-1);
+    sorted.forEach((s,i)=>s.marker_y = Math.round((min+step*i)*1000)/1000);
+  }
+  renderMarkers();
+  await saveMarkers(sel.map(s=>s.id));
+}
+
+// 방향키로 1px씩 미세조정 (선택된 모든 마커 함께)
+document.addEventListener('keydown', e => {
+  if (selectedMarkers.size === 0) return;
+  if (document.getElementById('cfg-screen')?.style.display === 'none') return;
+  const map = { ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1] };
+  if (!map[e.key]) return;
+  e.preventDefault();
+  const img = document.getElementById('cfg-drawing-img');
+  if (!img || !img.width) return;
+  const step = e.shiftKey ? 5 : 1;  // shift = 5px
+  selectedMarkers.forEach(id => {
+    const s = cfgSpecs.find(x => x.id === id);
+    if (!s) return;
+    s.marker_x = Math.round(Math.min(1, Math.max(0, s.marker_x + map[e.key][0]*step/img.width))*1000)/1000;
+    s.marker_y = Math.round(Math.min(1, Math.max(0, s.marker_y + map[e.key][1]*step/img.height))*1000)/1000;
+  });
+  renderMarkers();
+  clearTimeout(window._markerSaveTimer);
+  window._markerSaveTimer = setTimeout(() => saveMarkers([...selectedMarkers]), 400);
+});
+
+async function saveMarker(specId) {
+  return saveMarkers([specId]);
+}
+
+// 여러 마커 좌표 일괄 저장
+async function saveMarkers(specIds) {
+  try {
+    await Promise.all(specIds.map(id => {
+      const s = cfgSpecs.find(x => x.id === id);
+      if (!s) return Promise.resolve();
+      return sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: { marker_x: s.marker_x, marker_y: s.marker_y } });
+    }));
+    const st = document.getElementById('cfg-drawing-status');
+    st.textContent = specIds.length > 1 ? `✓ ${specIds.length}개 위치 저장됨` : `✓ 위치 저장됨`;
+    setTimeout(() => { st.textContent = ''; }, 1200);
+  } catch(e) {
+    toast('저장 실패: ' + e.message);
+  }
+}
+
+// 클립보드 이미지 붙여넣기 (Ctrl+V) → 설정탭에서 부품 선택돼 있을 때만
+document.addEventListener('paste', e => {
+  if (!cfgPart) return;
+  if (document.getElementById('cfg-screen')?.style.display === 'none') return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type.indexOf('image') === 0) {
+      const blob = it.getAsFile();
+      if (blob) {
+        e.preventDefault();
+        // 붙여넣은 이미지는 png로 처리
+        const file = new File([blob], `paste.png`, { type: blob.type || 'image/png' });
+        uploadDrawing(file);
+        toast('📋 클립보드 이미지 업로드 중…');
+      }
+      break;
+    }
+  }
+});
+
+// ══════════════════════════════════
+// 흰색 지우개
+// ══════════════════════════════════
+let eraserOn = false;
+let eraserDrawing = false;
+let eraserCtx = null;
+
+function setupEraserCanvas() {
+  const img = document.getElementById('cfg-drawing-img');
+  const cv = document.getElementById('cfg-eraser-canvas');
+  if (!img.naturalWidth) return;
+  // 캔버스 해상도 = 원본 이미지 해상도 (저장 시 화질 유지)
+  cv.width = img.naturalWidth;
+  cv.height = img.naturalHeight;
+  eraserCtx = cv.getContext('2d');
+  // 원본 이미지를 캔버스에 그림 (이후 흰색 칠하기는 이 위에)
+  eraserCtx.drawImage(img, 0, 0, cv.width, cv.height);
+}
+
+function toggleEraser() {
+  eraserOn = !eraserOn;
+  const cv = document.getElementById('cfg-eraser-canvas');
+  const btn = document.getElementById('eraser-toggle');
+  const img = document.getElementById('cfg-drawing-img');
+  if (eraserOn) {
+    setupEraserCanvas();
+    cv.style.display = 'block';
+    cv.style.pointerEvents = 'auto';
+    img.style.visibility = 'hidden';   // 캔버스가 대신 표시
+    btn.textContent = '지우개 켜짐';
+    btn.style.background = '#dc2626'; btn.style.color = '#fff';
+    document.getElementById('cfg-drawing-wrap').style.cursor = 'cell';
+  } else {
+    cv.style.pointerEvents = 'none';
+    img.style.visibility = 'visible';
+    btn.textContent = '지우개 끄기';
+    btn.style.background = '#fff'; btn.style.color = '#475569';
+    document.getElementById('cfg-drawing-wrap').style.cursor = 'crosshair';
+  }
+}
+
+function eraserDraw(e) {
+  if (!eraserOn || !eraserDrawing || !eraserCtx) return;
+  const cv = document.getElementById('cfg-eraser-canvas');
+  const rect = cv.getBoundingClientRect();
+  const scaleX = cv.width / rect.width;
+  const scaleY = cv.height / rect.height;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+  const size = parseInt(document.getElementById('eraser-size').value) * scaleX;
+  eraserCtx.fillStyle = '#fff';
+  eraserCtx.beginPath();
+  eraserCtx.arc(x, y, size, 0, Math.PI*2);
+  eraserCtx.fill();
+}
+
+// 캔버스 이벤트 바인딩 (한 번만)
+function bindEraserEvents() {
+  const cv = document.getElementById('cfg-eraser-canvas');
+  if (cv._bound) return;
+  cv._bound = true;
+  cv.addEventListener('mousedown', e => { if(eraserOn){ eraserDrawing = true; eraserDraw(e); }});
+  cv.addEventListener('mousemove', eraserDraw);
+  document.addEventListener('mouseup', () => { eraserDrawing = false; });
+}
+
+async function saveErasedDrawing() {
+  if (!eraserCtx || !cfgPart) { toast('지우개를 먼저 사용하세요'); return; }
+  const st = document.getElementById('eraser-status');
+  st.textContent = '저장 중…';
+  const cv = document.getElementById('cfg-eraser-canvas');
+  try {
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    const ext = (cfgPart.drawing_path || '').split('.').pop() || 'png';
+    const path = `parts/${cfgPart.part_number}.png`;  // 지우개 결과는 png로
+    const res = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'x-upsert': 'true' },
+      body: blob
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    await sbFetch(`qc_part?id=eq.${cfgPart.id}`, { method: 'PATCH', body: { drawing_path: path } });
+    cfgPart.drawing_path = path;
+    const ap = allParts.find(p => p.id === cfgPart.id);
+    if (ap) ap.drawing_path = path;
+    st.textContent = '✓ 저장 완료';
+    // 지우개 끄고 새 이미지 반영
+    eraserOn = true; toggleEraser();
+    renderCfgDrawing();
+  } catch(e) {
+    st.textContent = '';
+    toast('저장 실패: ' + e.message);
+  }
+}
+
+// 마커 전체 삭제
+async function clearAllMarkers() {
+  if (!confirm('이 부품의 모든 마커를 삭제할까요?')) return;
+  try {
+    await sbFetch(`qc_part_spec?part_id=eq.${cfgPart.id}`, { method: 'PATCH', body: { marker_x: null, marker_y: null } });
+    cfgSpecs.forEach(s => { s.marker_x = null; s.marker_y = null; });
+    renderMarkerChips();
+    renderMarkers();
+    toast('마커 전체 삭제됨');
+  } catch(e) {
+    toast('삭제 실패: ' + e.message);
+  }
+}
+
+// 도면 업로드
+async function uploadDrawing(file) {
+  if (!file || !cfgPart) return;
+  const status = document.getElementById(cfgPart.drawing_path ? 'cfg-drawing-status' : 'cfg-drawing-upload-status');
+  status.textContent = '업로드 중…';
+
+  // 해상도 확인
+  const dims = await new Promise(res => {
+    const i = new Image();
+    i.onload = () => res({ w: i.width, h: i.height });
+    i.onerror = () => res(null);
+    i.src = URL.createObjectURL(file);
+  });
+  if (dims && dims.w < 800) {
+    if (!confirm(`이미지 가로 해상도가 ${dims.w}px로 낮습니다.\n확대 시 흐릴 수 있습니다. 계속할까요?`)) {
+      status.textContent = ''; return;
+    }
+  }
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const path = `parts/${cfgPart.part_number}.${ext}`;
+  try {
+    const res = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${path}`, {
+      method: 'POST',
+      headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'x-upsert': 'true' },
+      body: file
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+
+    // qc_part.drawing_path 갱신
+    await sbFetch(`qc_part?id=eq.${cfgPart.id}`, { method: 'PATCH', body: { drawing_path: path } });
+    cfgPart.drawing_path = path;
+    // allParts에도 반영
+    const ap = allParts.find(p => p.id === cfgPart.id);
+    if (ap) ap.drawing_path = path;
+
+    status.textContent = '✓ 업로드 완료';
+    renderCfgDrawing();
+  } catch(e) {
+    status.textContent = '';
+    toast('업로드 실패: ' + e.message);
   }
 }
 
@@ -1354,6 +2774,7 @@ async function deletePartCfg() {
     document.getElementById('cfg-selected-part').style.display = 'none';
     document.getElementById('cfg-part-search').value = '';
     document.getElementById('cfg-spec-list').innerHTML = '';
+    document.getElementById('cfg-drawing-card').style.display = 'none';
   } catch(e) {
     toast('삭제 실패: ' + e.message);
   }
