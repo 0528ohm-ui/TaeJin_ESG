@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.31</title>
+<title>공정검사 입력 v0.36</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -55,6 +55,14 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .proc-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
 .proc-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .tab-mach-badge{font-size:9px;background:#7c3aed;color:#fff;padding:0 4px;border-radius:3px;margin-left:3px;vertical-align:middle}
+/* 연동 그룹 카드 */
+.linked-card{border-color:#ddd6fe}
+.linked-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px}
+.linked-grid{width:100%;border-collapse:collapse;font-size:13px}
+.linked-grid th{padding:6px 4px;font-size:11px;font-weight:700;color:#64748b;background:#f5f3ff;border-bottom:1.5px solid #ddd6fe;white-space:nowrap;text-align:center}
+.linked-grid td{padding:4px;border-bottom:1px solid #f1f5f9}
+.linked-grid tr:last-child td{border-bottom:none}
+.linked-grid .pt-inp{margin:0;text-align:center;padding:8px 4px}
 .vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
 .vrt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .vrt-btn .vrt-badge{display:inline-block;min-width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
@@ -343,7 +351,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.31</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.36</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -570,6 +578,25 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
   <!-- ── 설정 탭 ── -->
   <div id="cfg-screen">
+    <!-- 측정사유 관리 (전역 설정, 접이식) -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleReasonMgr()">
+        <span>🏷️ 측정사유 관리</span>
+        <span id="reason-mgr-arrow" style="font-size:14px;color:#94a3b8;transition:transform .2s">▾</span>
+      </div>
+      <div id="reason-mgr-body" style="display:none;margin-top:10px">
+        <div id="reason-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <label>새 사유 추가</label>
+            <input class="inp" id="reason-new" type="text" placeholder="예) 정기검사" style="margin-top:4px"
+              onkeydown="if(event.key==='Enter')addReason()">
+          </div>
+          <button class="btn" onclick="addReason()" style="display:inline-block;width:auto;padding:11px 18px;flex-shrink:0">＋ 추가</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card" style="margin-top:12px">
       <div class="card-title">⚙️ 부품 선택 / 등록</div>
       <!-- 기존 부품 검색 -->
@@ -708,6 +735,22 @@ let tabs = [];
 let activeTabIdx = -1;
 let pendingSel = null;   // 추가 대기 중인 선택 { isGroup, ... }
 let procMode = 'press';  // 현재 공정 모드: 'press' | 'machining'
+
+// 부품별 직전 설비호기 저장/조회 (localStorage: 부품번호→설비호기 맵)
+function getLastHo(partNo) {
+  try {
+    const map = JSON.parse(localStorage.getItem('QC_LAST_HO_MAP') || '{}');
+    return map[partNo] || '';
+  } catch(e) { return ''; }
+}
+function setLastHo(partNo, ho) {
+  if (!partNo) return;
+  try {
+    const map = JSON.parse(localStorage.getItem('QC_LAST_HO_MAP') || '{}');
+    map[partNo] = ho;
+    localStorage.setItem('QC_LAST_HO_MAP', JSON.stringify(map));
+  } catch(e) {}
+}
 
 // 기존 함수들이 참조하는 포인터 (active 탭 것을 가리킴)
 let selectedPart = null;
@@ -909,9 +952,7 @@ async function enterMain() {
   sel.innerHTML = '<option value="">전체</option>'
     + customers.map(c => `<option value="${c}">${c}</option>`).join('');
 
-  // 호기 직전값 복원
-  const lastHo = localStorage.getItem('QC_LAST_HO') || '';
-  document.getElementById('insp-ho').value = lastHo;
+  // 설비호기는 부품 추가 시 부품별로 자동 복원됨 (여기선 비워둠)
 }
 
 // ══════════════════════════════════
@@ -1021,22 +1062,26 @@ async function loadVariant(part) {
     : `process_type=in.("press","both")`;
   const loadedSpecs = await sbAll(
     'qc_part_spec',
-    `part_id=eq.${part.id}&${typeFilter}&order=item_no`
+    `part_id=eq.${part.id}&${typeFilter}&order=sort_order&select=*`
   );
   return { part, specs: loadedSpecs, inputs: buildInputs(loadedSpecs), procMode };
 }
 
-// 부품 선택 → 추가 대기 상태 (탭은 추가 버튼 누를 때 생성)
+// 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
 function selectPart(id) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
   const part = allParts.find(p => p.id === id);
   if (!part) return;
   pendingSel = { isGroup: false, id, label: part.part_number, part, moldCount: part.mold_count || 1, moldNo: '' };
-  showPending(part.part_number, part.part_name + (part.material ? ' · ' + part.material : ''));
+  if (procMode === 'machining') {
+    confirmAddTab();
+  } else {
+    showPending(part.part_number, part.part_name + (part.material ? ' · ' + part.material : ''));
+  }
 }
 
-// 그룹 선택 → 추가 대기 상태
+// 그룹 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
 function selectGroup(group) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
@@ -1045,18 +1090,22 @@ function selectGroup(group) {
   if (!groupParts.length) return;
   const rep = groupParts[0];
   const vlabels = groupParts.map(x => x.part_variant).filter(Boolean).join('/');
-  // 그룹 내 금형 본수는 대표 부품 기준 (IW/OW는 같은 금형이라 동일해야 함)
   const moldCount = Math.max(...groupParts.map(p => p.mold_count || 1));
   pendingSel = { isGroup: true, group, label: group, parts: groupParts, moldCount, moldNo: '' };
-  showPending(`${rep.part_name || group} (${vlabels})`, group + (rep.material ? ' · ' + rep.material : ''));
+  if (procMode === 'machining') {
+    confirmAddTab();
+  } else {
+    showPending(`${rep.part_name || group} (${vlabels})`, group + (rep.material ? ' · ' + rep.material : ''));
+  }
 }
 
 // 추가 대기 UI 표시
 function showPending(label, pno) {
   document.getElementById('pending-label').textContent = label;
   document.getElementById('pending-pno').textContent = pno;
-  // 직전 설비호기 기본값 (다르면 수정 가능)
-  document.getElementById('pending-equip').value = localStorage.getItem('QC_LAST_HO') || '';
+  // 직전 설비호기 기본값 — 이 부품에서 마지막으로 쓴 호기 (부품별 저장)
+  const partNoForHo = pendingSel.isGroup ? pendingSel.label : pendingSel.part.part_number;
+  document.getElementById('pending-equip').value = getLastHo(partNoForHo);
   pendingSel.moldNo = '';
 
   const moldRow = document.getElementById('pending-mold-row');
@@ -1100,7 +1149,8 @@ function cancelPending() {
 // [추가] 버튼 → 탭 생성
 async function confirmAddTab() {
   if (!pendingSel) return;
-  const equip = document.getElementById('pending-equip').value.trim();
+  // 가공 모드는 설비호기 없음, 프레스만 pending-equip 읽기
+  const equip = procMode === 'machining' ? '' : document.getElementById('pending-equip').value.trim();
   const moldNo = pendingSel.moldNo;
 
   // 금형 2벌 이상인데 금형호기 선택 안 했으면 막기 (프레스 모드만)
@@ -1109,12 +1159,13 @@ async function confirmAddTab() {
     return;
   }
 
-  // 설비호기 직전값 저장 (다음 추가 시 기본값으로 사용)
-  if (equip !== '') localStorage.setItem('QC_LAST_HO', equip);
+  // 설비호기 직전값을 부품별로 저장 (다음에 같은 부품 추가 시 기본값)
+  if (equip !== '') setLastHo(pendingSel.label, equip);
 
-  // 같은 부품+같은 금형호기+같은 설비호기 탭 중복 체크
+  // 같은 부품+같은 금형호기+같은 설비호기+같은 공정모드 탭 중복 체크
   const dupIdx = tabs.findIndex(t =>
-    t.label === pendingSel.label && (t.moldNo || '') === moldNo && (t.equip || '') === equip
+    t.label === pendingSel.label && (t.moldNo || '') === moldNo
+    && (t.equip || '') === equip && (t.procMode || 'press') === procMode
   );
   if (dupIdx >= 0) {
     cancelPending();
@@ -1179,7 +1230,7 @@ function switchTab(idx) {
 
   document.getElementById('insp-date').value   = t.date;
   document.getElementById('insp-time').value   = t.time;
-  document.getElementById('insp-ho').value     = t.equip ?? (localStorage.getItem('QC_LAST_HO') || '');  // 설비호기
+  document.getElementById('insp-ho').value     = t.equip ?? getLastHo(t.label);  // 설비호기
   document.getElementById('insp-mold').value   = t.moldNo ?? '';   // 금형호기
   document.getElementById('insp-reason').value = t.reason ?? '';
   document.getElementById('insp-remark').value = t.remark ?? '';
@@ -1188,8 +1239,9 @@ function switchTab(idx) {
   document.getElementById('save-area').style.display = 'block';
   document.getElementById('drawing-bar').style.display = 'flex';
 
-  // 탭의 procMode로 세그먼트 UI 복원
+  // 탭의 procMode로 세그먼트 UI 복원 + 전역 모드 동기화
   const tabMode = t.procMode || 'press';
+  procMode = tabMode;   // 전역 모드 동기화 (탭 클릭 전환 시 누락 방지)
   document.getElementById('proc-press').classList.toggle('sel', tabMode === 'press');
   document.getElementById('proc-mach').classList.toggle('sel', tabMode === 'machining');
   const hoRow = document.getElementById('insp-ho-mold-row');
@@ -1308,8 +1360,130 @@ function renderTabBar() {
 // ══════════════════════════════════
 function renderSpecs() {
   const list = document.getElementById('specs-list');
-  list.innerHTML = specs.map(s => renderSpecCard(s)).join('');
+  const rendered = new Set();
+  const html = [];
+  for (const s of specs) {
+    if (s.link_group) {
+      if (rendered.has(s.link_group)) continue;  // 이미 그룹으로 렌더됨
+      rendered.add(s.link_group);
+      html.push(renderLinkedCard(s.link_group));
+    } else {
+      html.push(renderSpecCard(s));
+    }
+  }
+  list.innerHTML = html.join('');
   updateSummary();
+}
+
+// 연동 그룹 카드 렌더 — 패턴 분기
+function renderLinkedCard(linkGroup) {
+  const members = specs.filter(s => s.link_group === linkGroup);
+  const isGrid = members.some(s => s.link_role === 'grid');
+  if (isGrid) return renderGridCard(linkGroup, members);
+  return renderRowColCard(linkGroup, members);
+}
+
+// 패턴 B (형상측정기): 항목 여러 개가 모두 N포인트, 같은 i포인트끼리 한 행
+function renderGridCard(linkGroup, members) {
+  const cols = members.sort((a,b)=>a.item_no-b.item_no);
+  // 행 수 = 최대 포인트 수 (각 항목 measure_points 기준)
+  const N = Math.max(...cols.map(c => specInputs[c.id]?.vals?.length || c.measure_points || 4));
+
+  const nos = cols.map(c => `No.${c.item_no}`).join(', ');
+  const headerCols = [`<th style="text-align:left">포인트</th>`];
+  cols.forEach(c => headerCols.push(`<th><span style="font-size:10px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+
+  let bodyRows = '';
+  for (let i = 0; i < N; i++) {
+    let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${i+1}</td>`;
+    cols.forEach(cs => {
+      const cInp = specInputs[cs.id];
+      const cVal = cInp.vals[i] ?? '';
+      const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
+      cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" style="width:100%;box-sizing:border-box"></td>`;
+    });
+    bodyRows += `<tr>${cells}</tr>`;
+  }
+
+  const specLines = cols.map(c => `${c.item_name}: ${c.spec_text || ''}`);
+
+  return `
+    <div class="spec-card linked-card">
+      <div class="spec-hdr">
+        <div class="spec-no" style="background:#7c3aed">🔗</div>
+        <div class="spec-info">
+          <div class="spec-name">${cols.map(c=>`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join('  ')} <span style="font-size:10px;color:#7c3aed;font-weight:700">형상연동</span></div>
+          <div class="spec-text">${specLines.join(' / ')}</div>
+        </div>
+      </div>
+      <div class="linked-grid-wrap">
+        <table class="linked-grid">
+          <thead><tr>${headerCols.join('')}</tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// 패턴 A (외경+진원도): 기준 항목 N개(각 1포인트) + 연동 항목(N포인트)
+function renderRowColCard(linkGroup, members) {
+  const rowSpecs = members.filter(s => s.link_role === 'row').sort((a,b)=>a.item_no-b.item_no);
+  const colSpecs = members.filter(s => s.link_role === 'col').sort((a,b)=>a.item_no-b.item_no);
+  const N = rowSpecs.length;  // 행 수 = 기준 항목 개수
+
+  // 헤더: 기준 항목명(대표) + 연동 항목명들
+  const rowName = rowSpecs[0]?.item_name?.replace(/\[.*?\]/,'').trim() || '기준';
+  const rowNos = rowSpecs.map(r=>`No.${r.item_no}`).join('~');
+  const headerCols = [`<th style="text-align:left">위치</th>`, `<th><span style="font-size:10px;color:#a78bfa;font-weight:600">${rowNos}</span><br>${rowName}</th>`];
+  colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:10px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+
+  // 각 행 렌더
+  let bodyRows = '';
+  for (let i = 0; i < N; i++) {
+    const rs = rowSpecs[i];
+    const rInp = specInputs[rs.id];
+    // 기준 항목은 포인트 1개 (vals[0])
+    const rVal = rInp.vals[0] ?? '';
+    const rCls = getValClass(parseFloat(rVal), rs.lsl, rs.usl);
+    // 행 라벨: 기준 항목명의 [xxx] 부분 추출
+    const posLabel = (rs.item_name.match(/\[(.*?)\]/) || [])[1] || `${i+1}`;
+
+    let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${posLabel}</td>`;
+    cells += `<td><input class="pt-inp ${rCls}" type="text" inputmode="decimal" id="pt-${rs.id}-0"
+      value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" style="width:100%;box-sizing:border-box"></td>`;
+    // 연동 항목들의 i번째 포인트
+    colSpecs.forEach(cs => {
+      const cInp = specInputs[cs.id];
+      const cVal = cInp.vals[i] ?? '';
+      const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
+      cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" style="width:100%;box-sizing:border-box"></td>`;
+    });
+    bodyRows += `<tr>${cells}</tr>`;
+  }
+
+  // 규격 정보 (기준 + 연동)
+  const specLines = [];
+  if (rowSpecs[0]) specLines.push(`${rowName}: ${rowSpecs[0].spec_text || ''}`);
+  colSpecs.forEach(c => specLines.push(`${c.item_name}: ${c.spec_text || ''}`));
+
+  return `
+    <div class="spec-card linked-card">
+      <div class="spec-hdr">
+        <div class="spec-no" style="background:#7c3aed">🔗</div>
+        <div class="spec-info">
+          <div class="spec-name"><span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join(', ')} <span style="font-size:10px;color:#7c3aed;font-weight:700">연동</span></div>
+          <div class="spec-text">${specLines.join(' / ')}</div>
+        </div>
+      </div>
+      <div class="linked-grid-wrap">
+        <table class="linked-grid">
+          <thead><tr>${headerCols.join('')}</tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function renderSpecCard(s) {
@@ -1625,8 +1799,8 @@ async function saveAll() {
   btn.textContent = '저장 중…'; btn.disabled = true;
 
   try {
-    // 호기 직전값 저장
-    if (ho !== '') localStorage.setItem('QC_LAST_HO', ho);
+    // 설비호기 직전값을 부품별로 저장
+    if (ho !== '') setLastHo(t.label, ho);
 
     const savedLabels = [];
     // variant 별로 inspection + measurement 생성
@@ -1850,7 +2024,7 @@ async function selectPartHist(id) {
 
   // SPC용 spec 항목 로드 (치수 항목만)
   try {
-    histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=item_no&select=id,item_no,item_name,spec_text,lsl,usl,measure_points`);
+    histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=sort_order&select=id,item_no,item_name,spec_text,lsl,usl,measure_points,sort_order`);
     const sel = document.getElementById('spc-spec-sel');
     sel.innerHTML = '<option value="">항목 선택…</option>'
       + histSpecs.map(s => `<option value="${s.id}">${s.item_no}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
@@ -1953,6 +2127,7 @@ function renderHistList(inspList) {
           ${insp.mold_no ? `<span class="hist-chip" style="background:#ede9fe;color:#7c3aed">금형 ${insp.mold_no}</span>` : ''}
           ${insp.reason ? `<span class="hist-chip" style="background:#fef3c7;color:#92400e">${insp.reason}</span>` : ''}
           ${insp.inspector ? `<span class="hist-chip">${insp.inspector}</span>` : ''}
+          ${insp.remark ? `<span class="hist-chip" style="background:#f1f5f9;color:#475569">📝 ${insp.remark}</span>` : ''}
         </div>
         <span class="hist-result ${resCls}">${resLabel}</span>
         <span class="hist-expand-icon">▾</span>
@@ -2190,6 +2365,87 @@ async function deleteHistInsp(idx) {
 
 // 숫자 표시 (불필요한 소수점 0 제거)
 // ── 항목 메모 ──
+// ── 측정사유 관리 ──
+function toggleReasonMgr() {
+  const body = document.getElementById('reason-mgr-body');
+  const arrow = document.getElementById('reason-mgr-arrow');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  arrow.style.transform = open ? 'rotate(180deg)' : '';
+  if (open) renderReasonList();
+}
+
+function renderReasonList() {
+  const el = document.getElementById('reason-list');
+  if (!reasons.length) {
+    el.innerHTML = '<div style="font-size:12px;color:#94a3b8">등록된 사유 없음</div>';
+    return;
+  }
+  el.innerHTML = reasons.map(r => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border-radius:7px;border:1px solid #e2e8f0">
+      <input type="text" value="${r.label}" id="reason-edit-${r.id}"
+        style="flex:1;border:none;background:transparent;font-size:13px;outline:none;color:#1e293b"
+        onblur="updateReason(${r.id}, this.value)">
+      <button onclick="deleteReason(${r.id})" style="border:none;background:#fee2e2;color:#dc2626;width:26px;height:26px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>
+    </div>`).join('');
+}
+
+async function addReason() {
+  const inp = document.getElementById('reason-new');
+  const label = inp.value.trim();
+  if (!label) return;
+  if (reasons.some(r => r.label === label)) { toast('이미 있는 사유입니다'); return; }
+  try {
+    const maxSort = reasons.length ? Math.max(...reasons.map(r => r.sort_order || 0)) : 0;
+    const rows = await sbFetch('qc_reason', {
+      method: 'POST', prefer: 'return=representation',
+      body: { label, sort_order: maxSort + 1, is_active: true }
+    });
+    reasons.push(rows[0]);
+    inp.value = '';
+    renderReasonList();
+    refreshReasonDropdown();
+    toast('✅ 사유 추가됨');
+  } catch(e) { toast('추가 실패: ' + e.message); }
+}
+
+async function updateReason(id, newLabel) {
+  newLabel = newLabel.trim();
+  const r = reasons.find(x => x.id === id);
+  if (!r || newLabel === r.label || !newLabel) {
+    if (!newLabel) renderReasonList(); // 빈 값이면 원복
+    return;
+  }
+  try {
+    await sbFetch(`qc_reason?id=eq.${id}`, { method: 'PATCH', body: { label: newLabel } });
+    r.label = newLabel;
+    refreshReasonDropdown();
+    toast('✅ 수정됨');
+  } catch(e) { toast('수정 실패: ' + e.message); renderReasonList(); }
+}
+
+async function deleteReason(id) {
+  const r = reasons.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`"${r.label}" 사유를 삭제할까요?\n(기존 검사 기록의 사유 값은 유지됩니다)`)) return;
+  try {
+    await sbFetch(`qc_reason?id=eq.${id}`, { method: 'DELETE' });
+    reasons = reasons.filter(x => x.id !== id);
+    renderReasonList();
+    refreshReasonDropdown();
+    toast('삭제됨');
+  } catch(e) { toast('삭제 실패: ' + e.message); }
+}
+
+// 측정 탭의 사유 드롭다운 갱신
+function refreshReasonDropdown() {
+  const rsel = document.getElementById('insp-reason');
+  if (!rsel) return;
+  const cur = rsel.value;
+  rsel.innerHTML = '<option value="">선택 안 함</option>'
+    + reasons.map(r => `<option value="${r.label}"${r.label===cur?' selected':''}>${r.label}</option>`).join('');
+}
+
 function toggleNote(id) {
   const area = document.getElementById(`note-area-${id}`);
   const isOpen = area.classList.toggle('open');
@@ -2492,7 +2748,7 @@ async function selectPartCfg(id) {
   document.getElementById('cfg-spec-list').innerHTML = '';
   try {
     // 설정 탭은 전체 spec (process_type 구분 없이)
-    cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=item_no`);
+    cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=sort_order`);
     renderCfgSpecs();
     renderCfgDrawing();   // 도면 관리 카드 렌더
   } catch(e) {
@@ -2957,6 +3213,7 @@ async function uploadDrawing(file) {
 // ── 설정 spec 렌더링 ──
 function renderCfgSpecs() {
   const el = document.getElementById('cfg-spec-list');
+  const linkHtml = renderLinkManager();
   const rows = cfgSpecs.map((s, idx) => `
     <div class="cfg-spec-row" id="cfgrow-${s.id}">
       <div class="cfg-spec-hdr" onclick="toggleCfgEdit(${s.id})">
@@ -3051,7 +3308,185 @@ function renderCfgSpecs() {
       <div class="cfg-saved" id="ns-saved"></div>
     </div>`;
 
-  el.innerHTML = rows + addPanel + addBtn;
+  el.innerHTML = linkHtml + rows + addPanel + addBtn;
+}
+
+// ── 연동 그룹 관리 ──
+function renderLinkManager() {
+  if (!cfgPart) return '';
+  // 현재 부품의 연동 그룹 수집
+  const groups = {};
+  cfgSpecs.forEach(s => {
+    if (s.link_group) {
+      (groups[s.link_group] = groups[s.link_group] || []).push(s);
+    }
+  });
+  const groupKeys = Object.keys(groups);
+
+  let groupsHtml = '';
+  if (groupKeys.length === 0) {
+    groupsHtml = `<div style="font-size:12px;color:#94a3b8;padding:8px 0">아직 연동 그룹이 없습니다</div>`;
+  } else {
+    groupsHtml = groupKeys.map(gk => {
+      const mem = groups[gk].sort((a,b)=>a.item_no-b.item_no);
+      const isGrid = mem.some(s => s.link_role === 'grid');
+      const ptn = isGrid ? '형상형' : '외경형';
+      const nos = mem.map(s => `No.${s.item_no} ${s.item_name}`).join(', ');
+      return `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="flex:1">
+            <span style="font-size:10px;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700">${ptn}</span>
+            <span style="font-size:12px;color:#5b21b6;margin-left:6px">${mem.length}개 항목</span>
+          </div>
+          <button onclick="unlinkGroup('${gk.replace(/'/g,"\\'")}')" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">연동 해제</button>
+        </div>
+        <div style="font-size:11px;color:#7c3aed;margin-top:6px">${nos}</div>
+      </div>`;
+    }).join('');
+  }
+
+  return `
+    <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px;margin:0 12px 12px">
+      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:4px">🔗 연동 그룹 관리</div>
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">한 번에 측정되는 항목들을 묶어서 입력 화면에서 그리드로 표시</div>
+      ${groupsHtml}
+      <button onclick="openLinkCreator()" style="width:100%;border:1.5px dashed #7c3aed;background:#faf5ff;color:#7c3aed;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">＋ 새 연동 만들기</button>
+      <div id="link-creator" style="display:none;margin-top:10px;padding:12px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px"></div>
+    </div>`;
+}
+
+// 연동 만들기 패널 열기
+function openLinkCreator() {
+  const panel = document.getElementById('link-creator');
+  // 아직 연동 안 된 항목 + 외관 제외
+  const avail = cfgSpecs.filter(s => !s.link_group && !s.is_visual);
+  if (avail.length < 2) {
+    toast('연동 가능한 항목이 2개 이상 필요합니다');
+    return;
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:8px">묶을 항목 선택</div>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:10px">
+      ${avail.map(s => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:4px">
+          <input type="checkbox" class="link-chk" value="${s.id}" style="width:16px;height:16px">
+          <span style="font-weight:700;color:#7c3aed">No.${s.item_no}</span>
+          <span>${s.item_name}</span>
+          <span style="color:#94a3b8;font-size:11px">(${s.measure_points||0}P)</span>
+        </label>`).join('')}
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:6px">연동 방식</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer">
+        <input type="radio" name="link-pattern" value="grid" checked style="margin-top:2px">
+        <span><b>형상형</b> — 묶은 항목이 모두 같은 포인트 수. 같은 포인트끼리 한 행<br><span style="color:#94a3b8">예: 형상측정기로 한 번에 거리/R/각도 측정</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer">
+        <input type="radio" name="link-pattern" value="rowcol" style="margin-top:2px">
+        <span><b>외경형</b> — 항목 여러 개(각 1포인트)가 기준, 1개 항목이 따라붙음<br><span style="color:#94a3b8">예: 외경 4항목 + 진원도 4포인트</span></span>
+      </label>
+    </div>
+    <div id="link-rowcol-opt" style="display:none;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
+      <div style="font-size:11px;color:#5b21b6;margin-bottom:6px">따라붙는 항목(연동) 1개 선택:</div>
+      <select id="link-col-sel" class="inp" style="font-size:12px"></select>
+    </div>
+    <div class="cfg-btn-row">
+      <button class="cfg-save-btn" onclick="createLinkGroup()">연동 생성</button>
+      <button class="cfg-del-btn" onclick="document.getElementById('link-creator').style.display='none'">✕</button>
+    </div>
+    <div class="cfg-saved" id="link-saved"></div>`;
+
+  // 패턴 라디오 변경 시 외경형 옵션 토글
+  panel.querySelectorAll('input[name="link-pattern"]').forEach(r => {
+    r.onchange = () => {
+      const isRowcol = panel.querySelector('input[name="link-pattern"]:checked').value === 'rowcol';
+      document.getElementById('link-rowcol-opt').style.display = isRowcol ? 'block' : 'none';
+      if (isRowcol) updateColSelector();
+    };
+  });
+  // 체크박스 변경 시 외경형 col 선택지 갱신
+  panel.querySelectorAll('.link-chk').forEach(c => {
+    c.onchange = () => {
+      const isRowcol = panel.querySelector('input[name="link-pattern"]:checked').value === 'rowcol';
+      if (isRowcol) updateColSelector();
+    };
+  });
+}
+
+// 외경형: 체크된 항목 중 "따라붙는(col)" 선택지 갱신
+function updateColSelector() {
+  const checked = [...document.querySelectorAll('.link-chk:checked')].map(c => Number(c.value));
+  const sel = document.getElementById('link-col-sel');
+  const opts = checked.map(id => {
+    const s = cfgSpecs.find(x => x.id === id);
+    return `<option value="${id}">No.${s.item_no} ${s.item_name} (${s.measure_points||0}P)</option>`;
+  });
+  sel.innerHTML = opts.join('');
+}
+
+// 연동 그룹 생성
+async function createLinkGroup() {
+  const checked = [...document.querySelectorAll('.link-chk:checked')].map(c => Number(c.value));
+  const savedEl = document.getElementById('link-saved');
+  if (checked.length < 2) {
+    savedEl.textContent = '2개 이상 선택하세요';
+    savedEl.style.color = '#dc2626';
+    return;
+  }
+  const pattern = document.querySelector('input[name="link-pattern"]:checked').value;
+  const groupId = 'grp_' + Date.now().toString(36);
+
+  try {
+    if (pattern === 'grid') {
+      // 형상형: 모두 grid 역할, 포인트 수는 최댓값으로 통일
+      const members = checked.map(id => cfgSpecs.find(x => x.id === id));
+      const maxP = Math.max(...members.map(s => s.measure_points || 4));
+      for (const s of members) {
+        const patch = { link_group: groupId, link_role: 'grid' };
+        if ((s.measure_points || 0) !== maxP) patch.measure_points = maxP;
+        await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: patch });
+        Object.assign(s, patch);
+      }
+    } else {
+      // 외경형: 선택된 col 1개 = col, 나머지 = row
+      const colId = Number(document.getElementById('link-col-sel').value);
+      const rowIds = checked.filter(id => id !== colId);
+      // row 항목들은 각 1포인트로, col 항목은 row 개수만큼 포인트로 맞춤
+      for (const id of rowIds) {
+        const s = cfgSpecs.find(x => x.id === id);
+        const patch = { link_group: groupId, link_role: 'row' };
+        if ((s.measure_points || 0) !== 1) patch.measure_points = 1;
+        await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch });
+        Object.assign(s, patch);
+      }
+      const colSpec = cfgSpecs.find(x => x.id === colId);
+      const colPatch = { link_group: groupId, link_role: 'col', measure_points: rowIds.length };
+      await sbFetch(`qc_part_spec?id=eq.${colId}`, { method: 'PATCH', body: colPatch });
+      Object.assign(colSpec, colPatch);
+    }
+    toast('✅ 연동 그룹 생성됨');
+    renderCfgSpecs();
+  } catch(e) {
+    savedEl.textContent = '생성 실패: ' + e.message;
+    savedEl.style.color = '#dc2626';
+  }
+}
+
+// 연동 해제
+async function unlinkGroup(groupId) {
+  if (!confirm('이 연동 그룹을 해제할까요?\n(항목 자체는 유지, 묶음만 풀림)')) return;
+  try {
+    const members = cfgSpecs.filter(s => s.link_group === groupId);
+    for (const s of members) {
+      await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: { link_group: null, link_role: null } });
+      s.link_group = null; s.link_role = null;
+    }
+    toast('연동 해제됨');
+    renderCfgSpecs();
+  } catch(e) {
+    toast('해제 실패: ' + e.message);
+  }
 }
 
 // ── 부품 삭제 ──
@@ -3144,9 +3579,12 @@ async function saveNewSpec() {
     const lsl = document.getElementById('ns-lsl').value.trim();
     const usl = document.getElementById('ns-usl').value.trim();
     const isVis = document.getElementById('ns-visual').value === '1';
+    // sort_order는 현재 맨 끝 + 1 (item_no는 영구 ID라 위치와 무관)
+    const maxSort = cfgSpecs.reduce((m,s) => Math.max(m, s.sort_order ?? -1), -1);
     const body = {
       part_id:          cfgPart.id,
       item_no:          parseInt(document.getElementById('ns-no').value) || 0,
+      sort_order:       maxSort + 1,
       item_name:        name,
       inspection_method:document.getElementById('ns-method').value.trim() || null,
       spec_text:        document.getElementById('ns-spec').value.trim()   || null,
@@ -3159,7 +3597,7 @@ async function saveNewSpec() {
     };
     const res = await sbFetch('qc_part_spec', { method: 'POST', prefer: 'return=representation', body });
     cfgSpecs.push(res[0]);
-    cfgSpecs.sort((a,b) => (a.item_no??0) - (b.item_no??0));
+    cfgSpecs.sort((a,b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     document.getElementById('cfg-new-spec').style.display = 'none';
     renderCfgSpecs();
     toast('✅ 항목 추가됨');
@@ -3170,26 +3608,26 @@ async function saveNewSpec() {
   }
 }
 
-// ── 항목 순서 변경 (↑↓) ──
+// ── 항목 순서 변경 (↑↓) : sort_order만 교환, item_no는 영구 고정 ──
 async function moveSpec(idx, dir) {
   const target = idx + dir;
   if (target < 0 || target >= cfgSpecs.length) return;
   const a = cfgSpecs[idx], b = cfgSpecs[target];
-  const noA = a.item_no, noB = b.item_no;
+  // sort_order가 비어있으면 item_no로 폴백 (구데이터 안전장치)
+  const soA = a.sort_order ?? a.item_no ?? idx;
+  const soB = b.sort_order ?? b.item_no ?? target;
 
-  // item_no 같으면 인덱스 기반으로 임시값 사용
-  const tmpA = noA === noB ? noA + 0.5 : noB;
-  const tmpB = noA === noB ? noB - 0.5 : noA;
+  // 값이 같으면(구데이터 등) 인덱스 기반 임시값으로 분리
+  const tmpA = soA === soB ? soA + 0.5 : soB;
+  const tmpB = soA === soB ? soB - 0.5 : soA;
 
   try {
     await Promise.all([
-      sbFetch(`qc_part_spec?id=eq.${a.id}`, { method: 'PATCH', body: { item_no: tmpA } }),
-      sbFetch(`qc_part_spec?id=eq.${b.id}`, { method: 'PATCH', body: { item_no: tmpB } })
+      sbFetch(`qc_part_spec?id=eq.${a.id}`, { method: 'PATCH', body: { sort_order: tmpA } }),
+      sbFetch(`qc_part_spec?id=eq.${b.id}`, { method: 'PATCH', body: { sort_order: tmpB } })
     ]);
-    a.item_no = tmpA; b.item_no = tmpB;
-    // 소수점이 생겼으면 정수로 재정렬
-    cfgSpecs.sort((x,y) => (x.item_no??0) - (y.item_no??0));
-    // item_no 순번 정리 (0,1,2,3... 또는 원래 간격 유지 중 선택 — 원래 값 유지)
+    a.sort_order = tmpA; b.sort_order = tmpB;
+    cfgSpecs.sort((x,y) => (x.sort_order ?? 0) - (y.sort_order ?? 0));
     renderCfgSpecs();
   } catch(e) {
     toast('순서 변경 실패: ' + e.message);
