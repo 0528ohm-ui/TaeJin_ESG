@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.36</title>
+<title>공정검사 입력 v0.39</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -76,6 +76,27 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .drawing-modal-hdr span{font-size:14px;font-weight:700}
 .drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
 .drawing-img-wrap{flex:1;overflow:visible;display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pinch-zoom}
+
+/* [v0.38] 마우스 조절 패널 — PC 전사용 빠른 값 조정 */
+input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;background:#eff6ff}
+.adj-panel{display:none;position:fixed;right:18px;bottom:18px;width:300px;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:300;overflow:hidden;border:1px solid #e2e8f0}
+.adj-panel.open{display:block}
+.adj-panel-hdr{background:#1e3a5f;color:#fff;padding:10px 14px;font-size:12px}
+.adj-panel-hdr .adj-item{font-size:13px;font-weight:700}
+.adj-panel-hdr .adj-pos{opacity:.75;font-size:11px}
+.adj-panel-val{text-align:center;font-size:26px;font-weight:800;color:#0f172a;padding:14px 0 8px;letter-spacing:.5px}
+.adj-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:0 12px}
+.adj-grid button{border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:700;cursor:pointer}
+.adj-grid button.plus{background:#fde7c8;color:#9a5b13}
+.adj-grid button.plus:active{background:#fbd49a}
+.adj-grid button.minus{background:#c8f3f0;color:#0f6b63}
+.adj-grid button.minus:active{background:#a6e8e3}
+.adj-panel-footer{display:flex;gap:8px;padding:12px}
+.adj-panel-footer button{flex:1;border:none;border-radius:8px;padding:11px 0;font-size:13px;font-weight:800;cursor:pointer}
+.adj-btn-confirm{background:#16a34a;color:#fff}
+.adj-btn-confirm:active{background:#15803d}
+.adj-btn-close{background:#e2e8f0;color:#475569}
+.adj-btn-close:active{background:#cbd5e1}
 .drawing-img-wrap img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
 #measure-screen{display:none}
 #measure-screen.active{display:block}
@@ -351,7 +372,7 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.36</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.39</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -475,6 +496,31 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
         <button class="drawing-close" onclick="closeDrawing()">✕</button>
       </div>
       <div class="drawing-img-wrap" id="drawing-img-wrap"></div>
+    </div>
+
+    <!-- [v0.38] 마우스 조절 패널 -->
+    <div class="adj-panel" id="adj-panel">
+      <div class="adj-panel-hdr">
+        <div class="adj-item" id="adj-item-name">—</div>
+        <div class="adj-pos" id="adj-pos-label">—</div>
+      </div>
+      <div class="adj-panel-val" id="adj-panel-val">—</div>
+      <div class="adj-grid">
+        <button class="plus" onclick="bumpAdjust(0.01)">+0.01</button>
+        <button class="plus" onclick="bumpAdjust(0.02)">+0.02</button>
+        <button class="plus" onclick="bumpAdjust(0.03)">+0.03</button>
+        <button class="plus" onclick="bumpAdjust(0.04)">+0.04</button>
+        <button class="plus" onclick="bumpAdjust(0.05)">+0.05</button>
+        <button class="minus" onclick="bumpAdjust(-0.01)">−0.01</button>
+        <button class="minus" onclick="bumpAdjust(-0.02)">−0.02</button>
+        <button class="minus" onclick="bumpAdjust(-0.03)">−0.03</button>
+        <button class="minus" onclick="bumpAdjust(-0.04)">−0.04</button>
+        <button class="minus" onclick="bumpAdjust(-0.05)">−0.05</button>
+      </div>
+      <div class="adj-panel-footer">
+        <button class="adj-btn-confirm" onclick="adjConfirmNext()">✓ 확인 (다음으로)</button>
+        <button class="adj-btn-close" onclick="closeAdjustPanel()">닫기</button>
+      </div>
     </div>
 
     <!-- 저장 -->
@@ -1054,6 +1100,45 @@ function buildInputs(loadedSpecs) {
   return inputs;
 }
 
+// [v0.38] 직전(가장 최근) 검사 측정값을 기본값으로 채움 — PC 마우스 조절 입력 전제.
+//   같은 부품의 최신 inspection 1건을 가져와 spec_id 기준으로 매칭, 칸별로 prefill.
+//   실패해도 입력 자체엔 영향 없도록 조용히 무시.
+async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
+  try {
+    const lastInsp = await sbAll('qc_shipping_inspection',
+      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id`);
+    if (!lastInsp.length) return;
+    const lastRows = await sbAll('qc_shipping_measurement',
+      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,visual_result`);
+    const bySpec = {};
+    lastRows.forEach(r => { bySpec[r.spec_id] = r; });
+    loadedSpecs.forEach(s => {
+      const r = bySpec[s.id];
+      if (!r) return;
+      const inp = inputs[s.id];
+      if (!inp) return;
+      if (s.is_visual) {
+        if (r.visual_result) inp.val = r.visual_result;
+        return;
+      }
+      const xs = [r.x1, r.x2, r.x3, r.x4, r.x5, r.x6, r.x7, r.x8, r.x9, r.x10];
+      if (inp.type === 'minmax') {
+        const nonNull = xs.filter(v => v != null);
+        if (nonNull.length >= 2) {
+          inp.min = String(nonNull[0]);
+          inp.max = String(nonNull[nonNull.length - 1]);
+        }
+      } else {
+        for (let i = 0; i < inp.vals.length; i++) {
+          if (xs[i] != null) inp.vals[i] = String(xs[i]);
+        }
+      }
+    });
+  } catch(e) {
+    console.warn('기본값 로드 실패:', e);
+  }
+}
+
 // 한 부품의 spec 로드 → variant 객체 생성
 async function loadVariant(part) {
   // 프레스: press + both / 가공: machining + both
@@ -1064,7 +1149,9 @@ async function loadVariant(part) {
     'qc_part_spec',
     `part_id=eq.${part.id}&${typeFilter}&order=sort_order&select=*`
   );
-  return { part, specs: loadedSpecs, inputs: buildInputs(loadedSpecs), procMode };
+  const inputs = buildInputs(loadedSpecs);
+  await fillDefaultsFromHistory(part, loadedSpecs, inputs);   // [v0.38]
+  return { part, specs: loadedSpecs, inputs, procMode };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1359,6 +1446,7 @@ function renderTabBar() {
 // spec 렌더링
 // ══════════════════════════════════
 function renderSpecs() {
+  closeAdjustPanel();   // [v0.38] 탭/variant 전환 시 이전 패널 참조 끊기
   const list = document.getElementById('specs-list');
   const rendered = new Set();
   const html = [];
@@ -1401,7 +1489,7 @@ function renderGridCard(linkGroup, members) {
       const cVal = cInp.vals[i] ?? '';
       const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
       cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
-        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" style="width:100%;box-sizing:border-box"></td>`;
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
     });
     bodyRows += `<tr>${cells}</tr>`;
   }
@@ -1451,14 +1539,14 @@ function renderRowColCard(linkGroup, members) {
 
     let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${posLabel}</td>`;
     cells += `<td><input class="pt-inp ${rCls}" type="text" inputmode="decimal" id="pt-${rs.id}-0"
-      value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" style="width:100%;box-sizing:border-box"></td>`;
+      value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
     // 연동 항목들의 i번째 포인트
     colSpecs.forEach(cs => {
       const cInp = specInputs[cs.id];
       const cVal = cInp.vals[i] ?? '';
       const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
       cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
-        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" style="width:100%;box-sizing:border-box"></td>`;
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
     });
     bodyRows += `<tr>${cells}</tr>`;
   }
@@ -1529,13 +1617,13 @@ function renderSpecCard(s) {
             <label>최솟값</label>
             <input class="pt-inp" type="text" inputmode="decimal" id="mm-min-${s.id}"
               value="${inp.min}" placeholder="—"
-              oninput="setMinMax(${s.id},'min',this)">
+              oninput="setMinMax(${s.id},'min',this)" onfocus="openAdjustPanel(this)">
           </div>
           <div>
             <label>최댓값</label>
             <input class="pt-inp" type="text" inputmode="decimal" id="mm-max-${s.id}"
               value="${inp.max}" placeholder="—"
-              oninput="setMinMax(${s.id},'max',this)">
+              oninput="setMinMax(${s.id},'max',this)" onfocus="openAdjustPanel(this)">
           </div>
         </div>
         ${lsuStr}`;
@@ -1548,7 +1636,7 @@ function renderSpecCard(s) {
           <span class="pt-label">X${i+1}</span>
           <input class="pt-inp ${cls}" type="text" inputmode="decimal" id="pt-${s.id}-${i}"
             value="${v}" placeholder="—"
-            oninput="setPt(${s.id},${i},this)">
+            oninput="setPt(${s.id},${i},this)" onfocus="openAdjustPanel(this)">
         </div>`;
       }).join('');
       inputHtml = `<div class="pts-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>${lsuStr}`;
@@ -1625,6 +1713,80 @@ function setPt(id, idx, el) {
   updateCardState(id);
 }
 
+// ══════════════════════════════════
+// [v0.38] 마우스 조절 패널 (PC 전사용)
+//   - 입력칸에 focus 되면 패널이 열리고, +/- 버튼으로 그 칸 값을 즉시 조절
+//   - 패널 자체는 별도 상태를 안 갖고, focus 중인 실제 <input> 엘리먼트를 직접 조작 (단일 진실 소스)
+// ══════════════════════════════════
+let activeAdjEl = null;
+
+// id="pt-{specId}-{idx}" 또는 id="mm-min-{specId}" / "mm-max-{specId}" 파싱
+function parseAdjSlot(el) {
+  if (!el || !el.id) return null;
+  const mm = el.id.match(/^mm-(min|max)-(\d+)$/);
+  if (mm) return { kind: mm[1], specId: parseInt(mm[2]) };
+  const pt = el.id.match(/^pt-(\d+)-(\d+)$/);
+  if (pt) return { kind: 'pt', specId: parseInt(pt[1]), idx: parseInt(pt[2]) };
+  return null;
+}
+
+function openAdjustPanel(el) {
+  const slot = parseAdjSlot(el);
+  if (!slot) return;
+  const s = specs.find(x => x.id === slot.specId);
+  if (!s) return;
+
+  if (activeAdjEl && activeAdjEl !== el) activeAdjEl.classList.remove('adj-active');
+  activeAdjEl = el;
+  el.classList.add('adj-active');
+
+  const posLabel = slot.kind === 'min' ? '최솟값' : slot.kind === 'max' ? '최댓값' : `X${slot.idx + 1}`;
+  document.getElementById('adj-item-name').textContent = `No.${s.item_no ?? '—'} ${s.item_name || ''}`;
+  document.getElementById('adj-pos-label').textContent = posLabel;
+  document.getElementById('adj-panel-val').textContent = el.value !== '' ? el.value : '—';
+  document.getElementById('adj-panel').classList.add('open');
+}
+
+function closeAdjustPanel() {
+  document.getElementById('adj-panel').classList.remove('open');
+  if (activeAdjEl) activeAdjEl.classList.remove('adj-active');
+  activeAdjEl = null;
+}
+
+// el 의 종류에 따라 기존 setPt/setMinMax 로직 그대로 재사용 (판정색·결과뱃지 등 일관성 유지)
+function applyAdjUpdate(el) {
+  const slot = parseAdjSlot(el);
+  if (!slot) return;
+  if (slot.kind === 'pt') setPt(slot.specId, slot.idx, el);
+  else setMinMax(slot.specId, slot.kind, el);
+}
+
+function bumpAdjust(delta) {
+  const el = activeAdjEl;
+  if (!el) return;
+  const cur = parseFloat(el.value) || 0;
+  // 부동소수점 노이즈 방지 (0.1+0.2 같은 오차) — 소수 4자리에서 반올림
+  const next = Math.round((cur + delta) * 10000) / 10000;
+  el.value = String(next);
+  applyAdjUpdate(el);
+  document.getElementById('adj-panel-val').textContent = el.value;
+}
+
+// 확인 = 현재 칸 값 확정하고 화면상 다음 입력칸으로 자동 이동 (그 칸도 바로 조절 가능하게 패널 재오픈)
+function adjConfirmNext() {
+  const el = activeAdjEl;
+  if (!el) { closeAdjustPanel(); return; }
+  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
+  const i = all.indexOf(el);
+  const next = i >= 0 ? all[i + 1] : null;
+  if (next) {
+    next.focus();   // onfocus="openAdjustPanel(this)" 가 자동으로 다음 칸 패널을 염
+  } else {
+    closeAdjustPanel();
+    toast('✅ 마지막 항목까지 입력 완료');
+  }
+}
+
 // 카드 테두리 + 결과 뱃지만 갱신 (input은 안 건드림)
 function updateCardState(id) {
   const s = specs.find(x => x.id === id);
@@ -1658,6 +1820,7 @@ function switchMode(id, mode) {
     specInputs[id] = { type: 'points', vals: Array(n).fill('') };
   }
   refreshCard(id);
+  persistSpecCfg(id);   // [v0.37] 모드 변경 즉시 spec 반영 (저장 안 해도 유지)
 }
 
 // 칸 수 조절 (1~10)
@@ -1669,6 +1832,26 @@ function changeCount(id, delta) {
   if (delta > 0) inp.vals.push('');
   else inp.vals.pop();
   refreshCard(id);
+  persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 (저장 안 해도 유지)
+}
+
+// [v0.37] 측정 탭에서 바꾼 칸수/모드를 qc_part_spec 에 즉시 PATCH (디바운스)
+//   - 검사 결과 저장을 안 눌러도 설정이 유지되도록.
+//   - 연타 대비 400ms 디바운스. 로컬 specs 도 같이 갱신해 재렌더 일관성 유지.
+const _cfgPatchTimers = {};
+function persistSpecCfg(id) {
+  const inp = specInputs[id];
+  const s = specs.find(x => x.id === id);
+  if (!inp || !s || s.is_visual) return;
+  const patch = inp.type === 'minmax'
+    ? { is_min_max: true }
+    : { is_min_max: false, measure_points: inp.vals.length };
+  Object.assign(s, patch);   // 로컬 즉시 반영
+  clearTimeout(_cfgPatchTimers[id]);
+  _cfgPatchTimers[id] = setTimeout(() => {
+    sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch })
+      .catch(e => toast('설정 저장 실패: ' + e.message));
+  }, 400);
 }
 
 function refreshCard(id) {
@@ -3130,8 +3313,7 @@ async function saveErasedDrawing() {
   const cv = document.getElementById('cfg-eraser-canvas');
   try {
     const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
-    const ext = (cfgPart.drawing_path || '').split('.').pop() || 'png';
-    const path = `parts/${cfgPart.part_number}.png`;  // 지우개 결과는 png로
+    const path = safeDrawingKey(cfgPart, 'png');  // 지우개 결과는 png로
     const res = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${path}`, {
       method: 'POST',
       headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'x-upsert': 'true' },
@@ -3167,6 +3349,14 @@ async function clearAllMarkers() {
 }
 
 // 도면 업로드
+// [v0.39] Supabase Storage 키 정제: 한글·공백 등은 객체 키로 못 씀 → 안전문자만 남김.
+//   부품 id로 유니크 보장하고, 번호는 영숫자/._- 만 남겨 가독용으로 덧붙임.
+function safeDrawingKey(part, ext) {
+  const num = String(part.part_number || '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  const safeExt = String(ext || 'png').replace(/[^A-Za-z0-9]/g, '').toLowerCase() || 'png';
+  return `parts/${part.id}_${num || 'part'}.${safeExt}`;
+}
+
 async function uploadDrawing(file) {
   if (!file || !cfgPart) return;
   const status = document.getElementById(cfgPart.drawing_path ? 'cfg-drawing-status' : 'cfg-drawing-upload-status');
@@ -3186,7 +3376,7 @@ async function uploadDrawing(file) {
   }
 
   const ext = file.name.split('.').pop().toLowerCase();
-  const path = `parts/${cfgPart.part_number}.${ext}`;
+  const path = safeDrawingKey(cfgPart, ext);
   try {
     const res = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${path}`, {
       method: 'POST',

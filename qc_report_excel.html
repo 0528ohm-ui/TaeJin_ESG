@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.18 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.20 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -68,7 +68,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.18</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.20</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -875,8 +875,18 @@ function genFakeRow(existing, lsl, usl, specText){
 function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, signOhId){
   const p = full.part || {};
   const s = item.shipment;
-  const [yyyy, mm, dd] = fmtDateParts(full.inspection_date);
-  
+  // [v0.20] 보기-눈금선 끄기 (성적서 깔끔하게). 기존 view 속성은 보존.
+  ws.views = (ws.views && ws.views.length ? ws.views : [{}]).map(v => ({ ...v, showGridLines: false }));
+  // [v0.19] DATE/검사일은 검사일이 아니라 '성적서 발행일(오늘)' 기준
+  const _now = new Date();
+  const yyyy = String(_now.getFullYear());
+  const mm = String(_now.getMonth() + 1);
+  const dd = String(_now.getDate());
+  // YYMMDD / HHMMSS (2자리 패딩)
+  const pad2 = n => String(n).padStart(2, '0');
+  const todayYYMMDD = String(_now.getFullYear()).slice(2) + pad2(_now.getMonth() + 1) + pad2(_now.getDate());
+  const nowHHMMSS = pad2(_now.getHours()) + pad2(_now.getMinutes()) + pad2(_now.getSeconds());
+
   ws.getCell('J4').value = parseInt(yyyy) || yyyy;
   ws.getCell('L4').value = parseInt(mm) || mm;
   ws.getCell('M4').value = parseInt(dd) || dd;
@@ -918,8 +928,15 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
     ws.getCell('S11').value = prodDate;
     ws.getCell('R12').value = prodDate;
   }
-  // LOT No
-  ws.getCell('V11').value = s.lot_no || shippingDate.replace(/-/g,'');
+  // LOT No → [v0.19] 발행 식별용: 오늘날짜(YYMMDD)-시분초(HHMMSS), 예: 260617-131255
+  //   V11:X11 / V12:X12 가 따로 병합돼 있어 한 줄에 다 안 들어감 → 두 줄을 V11:X12 한 칸으로 합쳐 공간 확보.
+  try { ws.unMergeCells('V11:X11'); } catch(e) {}
+  try { ws.unMergeCells('V12:X12'); } catch(e) {}
+  ws.getCell('V12').value = null;   // 템플릿 더미 시각값(예:142055) 제거
+  try { ws.mergeCells('V11:X12'); } catch(e) {}
+  const vCell = ws.getCell('V11');
+  vCell.value = `${todayYYMMDD}-\n${nowHHMMSS}`;
+  vCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   // LOT 크기 = box_count × box_size (있으면), 없으면 qty
   if(s.box_count && s.box_size) ws.getCell('Y11').value = parseInt(s.box_count) * parseInt(s.box_size);
   // 출하량 = qty
