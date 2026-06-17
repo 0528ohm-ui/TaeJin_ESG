@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.40</title>
+<title>공정검사 입력 v0.41</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -372,7 +372,7 @@ input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;backgroun
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.40</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.41</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1740,6 +1740,7 @@ function openAdjustPanel(el) {
   activeAdjEl = el;
   el.classList.add('adj-active');
   el.select();   // [v0.40] 포커스 시 기존 값 전체 선택 — 키보드 입력 시 바로 덮어쓰기 가능 (값 자체는 안 지워서 마우스 +/- 조절 기준값 그대로 유지)
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });   // [v0.41] 입력 중인 칸이 화면 하단 조절 패널에 가려지지 않도록 항상 가운데로 스크롤
 
   const posLabel = slot.kind === 'min' ? '최솟값' : slot.kind === 'max' ? '최댓값' : `X${slot.idx + 1}`;
   document.getElementById('adj-item-name').textContent = `No.${s.item_no ?? '—'} ${s.item_name || ''}`;
