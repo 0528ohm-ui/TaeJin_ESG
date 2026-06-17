@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.39</title>
+<title>공정검사 입력 v0.40</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -372,7 +372,7 @@ input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;backgroun
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.39</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.40</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1489,7 +1489,7 @@ function renderGridCard(linkGroup, members) {
       const cVal = cInp.vals[i] ?? '';
       const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
       cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
-        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
     });
     bodyRows += `<tr>${cells}</tr>`;
   }
@@ -1539,14 +1539,14 @@ function renderRowColCard(linkGroup, members) {
 
     let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${posLabel}</td>`;
     cells += `<td><input class="pt-inp ${rCls}" type="text" inputmode="decimal" id="pt-${rs.id}-0"
-      value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
+      value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
     // 연동 항목들의 i번째 포인트
     colSpecs.forEach(cs => {
       const cInp = specInputs[cs.id];
       const cVal = cInp.vals[i] ?? '';
       const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
       cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" id="pt-${cs.id}-${i}"
-        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" style="width:100%;box-sizing:border-box"></td>`;
+        value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
     });
     bodyRows += `<tr>${cells}</tr>`;
   }
@@ -1617,13 +1617,13 @@ function renderSpecCard(s) {
             <label>최솟값</label>
             <input class="pt-inp" type="text" inputmode="decimal" id="mm-min-${s.id}"
               value="${inp.min}" placeholder="—"
-              oninput="setMinMax(${s.id},'min',this)" onfocus="openAdjustPanel(this)">
+              oninput="setMinMax(${s.id},'min',this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)">
           </div>
           <div>
             <label>최댓값</label>
             <input class="pt-inp" type="text" inputmode="decimal" id="mm-max-${s.id}"
               value="${inp.max}" placeholder="—"
-              oninput="setMinMax(${s.id},'max',this)" onfocus="openAdjustPanel(this)">
+              oninput="setMinMax(${s.id},'max',this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)">
           </div>
         </div>
         ${lsuStr}`;
@@ -1636,7 +1636,7 @@ function renderSpecCard(s) {
           <span class="pt-label">X${i+1}</span>
           <input class="pt-inp ${cls}" type="text" inputmode="decimal" id="pt-${s.id}-${i}"
             value="${v}" placeholder="—"
-            oninput="setPt(${s.id},${i},this)" onfocus="openAdjustPanel(this)">
+            oninput="setPt(${s.id},${i},this)" onfocus="openAdjustPanel(this)" onkeydown="ptInpKeyNav(event,this)">
         </div>`;
       }).join('');
       inputHtml = `<div class="pts-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>${lsuStr}`;
@@ -1739,6 +1739,7 @@ function openAdjustPanel(el) {
   if (activeAdjEl && activeAdjEl !== el) activeAdjEl.classList.remove('adj-active');
   activeAdjEl = el;
   el.classList.add('adj-active');
+  el.select();   // [v0.40] 포커스 시 기존 값 전체 선택 — 키보드 입력 시 바로 덮어쓰기 가능 (값 자체는 안 지워서 마우스 +/- 조절 기준값 그대로 유지)
 
   const posLabel = slot.kind === 'min' ? '최솟값' : slot.kind === 'max' ? '최댓값' : `X${slot.idx + 1}`;
   document.getElementById('adj-item-name').textContent = `No.${s.item_no ?? '—'} ${s.item_name || ''}`;
@@ -1759,6 +1760,28 @@ function applyAdjUpdate(el) {
   if (!slot) return;
   if (slot.kind === 'pt') setPt(slot.specId, slot.idx, el);
   else setMinMax(slot.specId, slot.kind, el);
+}
+
+// [v0.40] Tab / Enter / 숫자패드 Enter 로 "입력칸(.pt-inp)"만 순서대로 이동
+//   - 기본 Tab은 메모 버튼, 포인트/최소·최대 토글, 칸수 +/- 버튼까지 다 거쳐가서 불편함 → 차단하고 직접 다음 입력칸으로 점프
+//   - Shift+Tab 은 이전 칸으로 (역방향)
+//   - Enter / 숫자패드 Enter 는 브라우저상 둘 다 event.key === 'Enter' 로 동일하게 들어옴 → 같이 처리
+function ptInpKeyNav(e, el) {
+  const isTab = e.key === 'Tab';
+  const isEnter = e.key === 'Enter';
+  if (!isTab && !isEnter) return;
+  e.preventDefault();
+  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
+  const i = all.indexOf(el);
+  if (i < 0) return;
+  const dir = (isTab && e.shiftKey) ? -1 : 1;
+  const next = all[i + dir];
+  if (next) {
+    next.focus();   // onfocus="openAdjustPanel(this)" 가 자동 실행되며 el.select() 로 전체 선택됨
+  } else if (dir > 0) {
+    el.blur();
+    toast('✅ 마지막 항목까지 입력 완료');
+  }
 }
 
 function bumpAdjust(delta) {
