@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.41</title>
+<title>공정검사 입력 v0.42</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -372,7 +372,7 @@ input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;backgroun
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.41</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.42</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1103,13 +1103,14 @@ function buildInputs(loadedSpecs) {
 // [v0.38] 직전(가장 최근) 검사 측정값을 기본값으로 채움 — PC 마우스 조절 입력 전제.
 //   같은 부품의 최신 inspection 1건을 가져와 spec_id 기준으로 매칭, 칸별로 prefill.
 //   실패해도 입력 자체엔 영향 없도록 조용히 무시.
+//   [v0.42] 항목별 메모(note)와 전체 비고(remark)도 직전값으로 같이 채움 — remark는 반환해서 탭 생성 시 사용.
 async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
   try {
     const lastInsp = await sbAll('qc_shipping_inspection',
-      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id`);
-    if (!lastInsp.length) return;
+      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark`);
+    if (!lastInsp.length) return '';
     const lastRows = await sbAll('qc_shipping_measurement',
-      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,visual_result`);
+      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,visual_result,note`);
     const bySpec = {};
     lastRows.forEach(r => { bySpec[r.spec_id] = r; });
     loadedSpecs.forEach(s => {
@@ -1117,6 +1118,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
       if (!r) return;
       const inp = inputs[s.id];
       if (!inp) return;
+      if (r.note) inp.note = r.note;   // [v0.42] 외관/치수 항목 공통 — 직전 메모 기본 채움
       if (s.is_visual) {
         if (r.visual_result) inp.val = r.visual_result;
         return;
@@ -1134,8 +1136,10 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
         }
       }
     });
+    return lastInsp[0].remark || '';   // [v0.42] 전체 비고 직전값 — 호출쪽(탭 생성)에서 사용
   } catch(e) {
     console.warn('기본값 로드 실패:', e);
+    return '';
   }
 }
 
@@ -1150,8 +1154,8 @@ async function loadVariant(part) {
     `part_id=eq.${part.id}&${typeFilter}&order=sort_order&select=*`
   );
   const inputs = buildInputs(loadedSpecs);
-  await fillDefaultsFromHistory(part, loadedSpecs, inputs);   // [v0.38]
-  return { part, specs: loadedSpecs, inputs, procMode };
+  const lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs);   // [v0.38] 측정값/메모, [v0.42] 비고 반환
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1282,7 +1286,8 @@ async function confirmAddTab() {
       variants,
       activeVariant: 0,
       date: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
-      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`
+      time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      remark: variants[0]?.lastRemark || ''   // [v0.42] 직전 비고 기본값 (그룹이면 대표 부품 기준)
     });
     document.getElementById('main-loading').style.display = 'none';
     cancelPending();
