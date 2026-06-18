@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.42</title>
+<title>공정검사 입력 v0.43</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -372,7 +372,7 @@ input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;backgroun
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.42</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.43</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1971,6 +1971,186 @@ function fillMinMax(minV, maxV, count = 5) {
 }
 
 // ══════════════════════════════════
+// 구글시트 전송 (기존 엑셀 매크로 재현)
+//   [v0.43] 공정검사 저장 시 최근 7일치 측정 데이터를 37열 형식으로 만들어
+//           기존 Google Apps Script 웹앱에 POST. 구글시트 등록 + 텔레그램 알람은 웹앱이 처리.
+//           ※ 전송 실패해도 Supabase 저장엔 영향 없음 (전부 try-catch + 비동기 분리).
+// ══════════════════════════════════
+const GSHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw-_7raqMyWfT884LFkGnnqfLv8rLIyrEqFOLQBsIm09yVyPKDRk8vSthBdeXbelCYc/exec';
+
+// 부품번호 → 한글 (도면주소용, 기존 엑셀 규칙 재현: 숫자/영문 발음, 하이픈제거, 한글유지)
+const _NUM_KR = {'0':'공','1':'일','2':'이','3':'삼','4':'사','5':'오','6':'육','7':'칠','8':'팔','9':'구'};
+const _ALPHA_KR = {'A':'에이','B':'비','C':'씨','D':'디','E':'이','F':'에프','G':'지','H':'에이치','I':'아이','J':'제이','K':'케이','L':'엘','M':'엠','N':'엔','O':'오','P':'피','Q':'큐','R':'알','S':'에스','T':'티','U':'유','V':'브이','W':'더블유','X':'엑스','Y':'와이','Z':'지'};
+function _partNoToKr(pn){
+  if(!pn) return '';
+  let o = '';
+  for(const ch of String(pn)){
+    if(_NUM_KR[ch]) o += _NUM_KR[ch];
+    else if(/[A-Za-z]/.test(ch)) o += _ALPHA_KR[ch.toUpperCase()] || '';
+    else if(/[가-힣]/.test(ch)) o += ch;   // 외철 등 한글 그대로
+    // 하이픈/공백/기타 → 제거
+  }
+  return o;
+}
+
+// spec_text 파싱 → {nominal, plus, minus, lo, hi, type}
+function _parseSpec(specText){
+  if(!specText) return null;
+  const t = String(specText).trim();
+  const numRe = /-?\d+(?:\.\d+)?/g;
+  if(/^(max\.?|최대)/i.test(t)){
+    const n = t.match(numRe);
+    if(n){ const hi = parseFloat(n[n.length-1]); return {nominal:hi,plus:0,minus:hi,lo:0,hi:hi,type:'max'}; }
+  }
+  if(/^(min\.?|최소)/i.test(t)){
+    const n = t.match(numRe);
+    if(n){ const lo = parseFloat(n[n.length-1]); return {nominal:lo,plus:0,minus:0,lo:lo,hi:null,type:'min'}; }
+  }
+  let m = t.match(/(-?\d+(?:\.\d+)?)\s*\+(\d+(?:\.\d+)?)\s*\/\s*-?(\d+(?:\.\d+)?)/);
+  if(m){ const no=parseFloat(m[1]),p=parseFloat(m[2]),mi=parseFloat(m[3]); return {nominal:no,plus:p,minus:mi,lo:no-mi,hi:no+p,type:'asym'}; }
+  m = t.match(/(-?\d+(?:\.\d+)?)\s*±\s*(\d+(?:\.\d+)?)/);
+  if(m){ const no=parseFloat(m[1]),tol=parseFloat(m[2]); return {nominal:no,plus:tol,minus:tol,lo:no-tol,hi:no+tol,type:'sym'}; }
+  const n = t.match(numRe);
+  if(n && n.length===1){ const v=parseFloat(n[0]); return {nominal:v,plus:0,minus:0,lo:v,hi:v,type:'single'}; }
+  return {nominal:null,plus:null,minus:null,lo:null,hi:null,type:'unknown'};
+}
+
+function _rnd(v, d=6){ if(v==null||isNaN(v)) return ''; return Number(Number(v).toFixed(d)); }
+
+// 한 측정행 → 37열 배열 (측정DB 시트 형식)
+function _build37(part, spec, xs, dateYmd, isVisual, visualResult){
+  const row = new Array(37).fill('');
+  const nums = xs.filter(v => v!=null && v!=='' && !isNaN(parseFloat(v))).map(parseFloat);
+  const ps = _parseSpec(spec.spec_text);
+  const lsl = (spec.lsl!=null) ? spec.lsl : (ps ? ps.lo : null);
+  const usl = (spec.usl!=null) ? spec.usl : (ps ? ps.hi : null);
+
+  row[0]  = Number(dateYmd);                 // A 작업일자
+  row[1]  = part.part_number || '';          // B 부품번호
+  row[2]  = _partNoToKr(part.part_number);   // C 부품번호한글
+  row[3]  = part.part_name || '';            // D 부품명
+  row[4]  = part.material || '';             // E 재질
+  row[5]  = 1;                               // F 도면Eco
+  row[6]  = spec.item_no;                    // G No.
+  row[7]  = spec.item_name || '';            // H 항목
+  row[8]  = spec.measure_zone || '';         // I 측정구간
+  row[9]  = spec.inspection_method || '';    // J 검사방법
+  row[10] = '';                              // K 특별특성
+
+  if(!isVisual && ps){
+    row[11] = _rnd(ps.nominal);              // L 규격(센터)
+    if(ps.type==='sym'){ row[12]=_rnd(ps.plus); }            // M ±공차
+    else { row[13]=_rnd(ps.plus); row[14]=_rnd(ps.minus); }  // N/O +/-공차
+  }
+  row[15] = spec.spec_text || '';            // P 규격(텍스트)
+  if(!isVisual && ps && ps.type==='sym'){    // Q/R 하한1/상한1 (대칭만)
+    row[16]=_rnd(lsl); row[17]=_rnd(usl);
+  }
+  if(!isVisual && ps && ps.nominal!=null){   // S/T 하한2/상한2
+    if(ps.type==='sym'){ row[18]=_rnd(ps.nominal); row[19]=_rnd(ps.nominal); }
+    else { if(lsl!=null)row[18]=_rnd(lsl); if(usl!=null)row[19]=_rnd(usl); }
+  }
+  if(!isVisual && lsl!=null) row[20]=_rnd(lsl);   // U 관리하한
+  if(!isVisual && usl!=null) row[21]=_rnd(usl);   // V 관리상한
+  row[22] = '';                              // W 관리내용
+
+  for(let i=0;i<10;i++){                      // X~AG (1~10)
+    const v = xs[i];
+    row[23+i] = (v==null||v==='') ? '' : v;
+  }
+  if(nums.length){                           // AH/AI/AJ 최소/최대/평균
+    row[33]=_rnd(Math.min(...nums));
+    row[34]=_rnd(Math.max(...nums));
+    row[35]=_rnd(nums.reduce((a,b)=>a+b,0)/nums.length);
+  }
+  row[36] = visualResult || 'OK';            // AK 판정
+  return row;
+}
+
+// 검사일(YYYY-MM-DD) 기준 최근 7일치 측정 데이터를 구글시트로 전송
+//   기존 매크로 동작 재현: mode='last7days', values=[37열...], dateList=[고유날짜]
+//   실패해도 조용히 무시 (저장 흐름에 영향 0).
+async function sendToGoogleSheet(baseDateStr){
+  try{
+    if(!baseDateStr) return;
+    // 기준일 - 6일 = 7일 범위 시작
+    const base = new Date(baseDateStr + 'T00:00:00');
+    const from = new Date(base); from.setDate(from.getDate() - 6);
+    const pad = n => String(n).padStart(2,'0');
+    const fromStr = `${from.getFullYear()}-${pad(from.getMonth()+1)}-${pad(from.getDate())}`;
+
+    // 1) 7일치 inspection 조회
+    const insps = await sbAll('qc_shipping_inspection',
+      `inspection_date=gte.${fromStr}&inspection_date=lte.${baseDateStr}&select=id,part_id,inspection_date&order=inspection_date.asc,id.asc`);
+    if(!insps.length) return;
+
+    const inspIds = insps.map(i=>i.id);
+    const partIds = [...new Set(insps.map(i=>i.part_id))];
+
+    // 2) 측정값 / spec / part 조회 (필요한 것만, in 필터)
+    const meas = await sbAll('qc_shipping_measurement',
+      `inspection_id=in.(${inspIds.join(',')})&select=inspection_id,spec_id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result&order=inspection_id.asc,item_no.asc`);
+    const specs = await sbAll('qc_part_spec',
+      `id=in.(${[...new Set(meas.map(m=>m.spec_id).filter(Boolean))].join(',')})&select=id,measure_zone,lsl,usl,is_visual`);
+    const parts = await sbAll('qc_part',
+      `id=in.(${partIds.join(',')})&select=id,part_number,part_name,material`);
+
+    const specById = {}; specs.forEach(s=>specById[s.id]=s);
+    const partByInspId = {}; insps.forEach(i=>{ partByInspId[i.id] = parts.find(p=>p.id===i.part_id); });
+    const dateByInspId = {}; insps.forEach(i=>{ dateByInspId[i.id] = i.inspection_date; });
+
+    // 3) 측정행 → 37열
+    const values = [];
+    const dateSet = new Set();
+    for(const m of meas){
+      const part = partByInspId[m.inspection_id];
+      if(!part) continue;
+      const dateYmd = (dateByInspId[m.inspection_id]||'').replace(/-/g,'');
+      if(dateYmd.length!==8) continue;
+      dateSet.add(Number(dateYmd));
+
+      const sp = specById[m.spec_id] || {};
+      const isVisual = (sp.is_visual === true) || (m.item_no === 0) || (m.inspection_method === '육안');
+      const spec = {
+        item_no: m.item_no, item_name: m.item_name,
+        measure_zone: sp.measure_zone || '', inspection_method: m.inspection_method,
+        spec_text: m.spec_text, lsl: sp.lsl, usl: sp.usl
+      };
+      const xs = isVisual
+        ? [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10].map(v=> v!=null ? v : (m.visual_result||'OK'))
+        : [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10];
+      // 외관인데 x가 다 비어있으면 visual_result로 5칸 채움 (기존 형식)
+      if(isVisual && xs.every(v=>v==null)){
+        for(let k=0;k<5;k++) xs[k] = m.visual_result || 'OK';
+      }
+      const verdict = isVisual ? (m.visual_result||'OK') : (m.result||'OK');
+      const row37 = _build37(part, spec, xs, dateYmd, isVisual, verdict);
+      // [v0.43] 기존 매크로는 모든 셀을 문자열(CStr)로 전송 → 동일하게 문자열화 (빈칸은 '')
+      values.push(row37.map(v => (v==null ? '' : String(v))));
+    }
+    if(!values.length) return;
+
+    const payload = {
+      values: values,
+      dateList: [...dateSet].sort((a,b)=>a-b),
+      mode: 'last7days'
+    };
+
+    // 4) POST (Apps Script는 CORS 응답 없음 → no-cors, 응답 못 읽지만 전송은 됨)
+    await fetch(GSHEET_WEBAPP_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    console.log(`[구글시트] ${values.length}행 / ${payload.dateList.length}일치 전송 시도 완료`);
+  }catch(e){
+    // 전송 실패는 저장에 영향 없음 — 콘솔에만 남김
+    console.warn('[구글시트] 전송 실패(무시):', e);
+  }
+}
+
+// ══════════════════════════════════
 // 저장
 // ══════════════════════════════════
 async function saveAll() {
@@ -2090,6 +2270,12 @@ async function saveAll() {
     }
 
     toast(`✅ 저장 완료! (${savedLabels.join(', ')})`);
+
+    // [v0.43] 저장 성공 후 구글시트 전송 (기존 매크로 재현).
+    //   await 하지 않음 → 전송 지연/실패가 저장 완료 UX·탭닫기를 막지 않게 분리.
+    //   sendToGoogleSheet 내부는 전부 try-catch라 실패해도 무해.
+    sendToGoogleSheet(date);
+
     // 저장 완료 후 현재 탭 닫기
     const savedIdx = activeTabIdx;
     setTimeout(() => closeTab(savedIdx), 500); // toast 잠깐 보여주고 닫기
