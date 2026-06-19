@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.52</title>
+<title>공정검사 입력 v0.53</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -404,7 +404,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.52</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.53</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2292,7 +2292,24 @@ function fillMinMax(minV, maxV, count = 5) {
 //           기존 Google Apps Script 웹앱에 POST. 구글시트 등록 + 텔레그램 알람은 웹앱이 처리.
 //           ※ 전송 실패해도 Supabase 저장엔 영향 없음 (전부 try-catch + 비동기 분리).
 // ══════════════════════════════════
-const GSHEET_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw-_7raqMyWfT884LFkGnnqfLv8rLIyrEqFOLQBsIm09yVyPKDRk8vSthBdeXbelCYc/exec';
+// [v0.53] 고객사별 구글시트 webhook (고객사마다 시트가 분리됨)
+const GSHEET_DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbw-_7raqMyWfT884LFkGnnqfLv8rLIyrEqFOLQBsIm09yVyPKDRk8vSthBdeXbelCYc/exec'; // SKF Seal(기존) — 우창산업·일진 포함
+const GSHEET_WEBHOOKS = {
+  '세동':      'https://script.google.com/macros/s/AKfycbz0or9EWSHKBmaVEkzh2MTQVeENrgEPR9dX3t9JpBlkOSHg5qyuWfyR4Ywh2_sH8NuX/exec',
+  '부강스프링':  'https://script.google.com/macros/s/AKfycbx3umpi4T0UC0xJ2Cx5R1srTpEpcqMT0AzgzJZeHUolNg8_ziiixp2fukIj80gCCFwv/exec',
+  'SKF SBC':   'https://script.google.com/macros/s/AKfycbwXQzDfPNhjlZp_jpR8JFjcMX7kpCuzVvGpUSaZFyVhygoXuqiLl9FyVnXwLo0ZL5Sp/exec',
+  '진양오일씰':  'https://script.google.com/macros/s/AKfycbzHGiXKQIT9AJN3wqTVNpfYqXsvsbLv85DDw4TEBomGEHHWz71K1wGC0sAqOJHAv_LV9A/exec',
+  '일진':      GSHEET_DEFAULT_URL,   // 우선 SKF Seal로 (시트 미확정)
+  'SKF Seal':  GSHEET_DEFAULT_URL,
+};
+const GSHEET_SKIP = new Set(['test']);   // 전송 안 함
+
+// 고객사 → webhook URL (없으면 기본=SKF Seal로 누락 방지, test는 null=스킵)
+function webhookFor(customer) {
+  const c = (customer || '').trim();
+  if (GSHEET_SKIP.has(c)) return null;
+  return GSHEET_WEBHOOKS[c] || GSHEET_DEFAULT_URL;
+}
 
 // 부품번호 → 한글 (도면주소용, 기존 엑셀 규칙 재현: 숫자/영문 발음, 하이픈제거, 한글유지)
 const _NUM_KR = {'0':'공','1':'일','2':'이','3':'삼','4':'사','5':'오','6':'육','7':'칠','8':'팔','9':'구'};
@@ -2409,21 +2426,21 @@ async function sendToGoogleSheet(baseDateStr){
     const specs = await sbAll('qc_part_spec',
       `id=in.(${[...new Set(meas.map(m=>m.spec_id).filter(Boolean))].join(',')})&select=id,measure_zone,lsl,usl,is_visual`);
     const parts = await sbAll('qc_part',
-      `id=in.(${partIds.join(',')})&select=id,part_number,part_name,material`);
+      `id=in.(${partIds.join(',')})&select=id,part_number,part_name,material,customer`);
 
     const specById = {}; specs.forEach(s=>specById[s.id]=s);
     const partByInspId = {}; insps.forEach(i=>{ partByInspId[i.id] = parts.find(p=>p.id===i.part_id); });
     const dateByInspId = {}; insps.forEach(i=>{ dateByInspId[i.id] = i.inspection_date; });
 
-    // 3) 측정행 → 37열
-    const values = [];
-    const dateSet = new Set();
+    // 3) 측정행 → 37열, 고객사 webhook별로 그룹핑
+    const groups = {};   // url → { values:[], dates:Set }
     for(const m of meas){
       const part = partByInspId[m.inspection_id];
       if(!part) continue;
+      const url = webhookFor(part.customer);   // [v0.53] 고객사별 시트
+      if(!url) continue;                       // test 등 스킵
       const dateYmd = (dateByInspId[m.inspection_id]||'').replace(/-/g,'');
       if(dateYmd.length!==8) continue;
-      dateSet.add(Number(dateYmd));
 
       const sp = specById[m.spec_id] || {};
       const isVisual = (sp.is_visual === true) || (m.item_no === 0) || (m.inspection_method === '육안');
@@ -2435,31 +2452,40 @@ async function sendToGoogleSheet(baseDateStr){
       const xs = isVisual
         ? [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10].map(v=> v!=null ? v : (m.visual_result||'OK'))
         : [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10];
-      // 외관인데 x가 다 비어있으면 visual_result로 5칸 채움 (기존 형식)
       if(isVisual && xs.every(v=>v==null)){
         for(let k=0;k<5;k++) xs[k] = m.visual_result || 'OK';
       }
       const verdict = isVisual ? (m.visual_result||'OK') : (m.result||'OK');
       const row37 = _build37(part, spec, xs, dateYmd, isVisual, verdict);
+
+      if(!groups[url]) groups[url] = { values: [], dates: new Set() };
       // [v0.43] 기존 매크로는 모든 셀을 문자열(CStr)로 전송 → 동일하게 문자열화 (빈칸은 '')
-      values.push(row37.map(v => (v==null ? '' : String(v))));
+      groups[url].values.push(row37.map(v => (v==null ? '' : String(v))));
+      groups[url].dates.add(Number(dateYmd));
     }
-    if(!values.length) return;
 
-    const payload = {
-      values: values,
-      dateList: [...dateSet].sort((a,b)=>a-b),
-      mode: 'last7days'
-    };
+    const urls = Object.keys(groups);
+    if(!urls.length) return;
 
-    // 4) POST (Apps Script는 CORS 응답 없음 → no-cors, 응답 못 읽지만 전송은 됨)
-    await fetch(GSHEET_WEBAPP_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
-    console.log(`[구글시트] ${values.length}행 / ${payload.dateList.length}일치 전송 시도 완료`);
+    // 4) 고객사(시트)별로 따로 POST (Apps Script는 CORS 응답 없음 → no-cors)
+    let totalRows = 0;
+    for(const url of urls){
+      const g = groups[url];
+      if(!g.values.length) continue;
+      const payload = {
+        values: g.values,
+        dateList: [...g.dates].sort((a,b)=>a-b),
+        mode: 'last7days'
+      };
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      totalRows += g.values.length;
+    }
+    console.log(`[구글시트] ${totalRows}행 / ${urls.length}개 고객사 시트 전송 시도 완료`);
   }catch(e){
     // 전송 실패는 저장에 영향 없음 — 콘솔에만 남김
     console.warn('[구글시트] 전송 실패(무시):', e);
