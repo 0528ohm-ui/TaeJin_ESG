@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.58</title>
+<title>공정검사 입력 v0.61</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -409,7 +409,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.58</span></h1>
+      <h1>공정검사 입력 <span class="badge">v0.61</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -565,15 +565,15 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
     <!-- [v0.49] 커스텀 숫자패드 (모바일 OS키보드 대체) -->
     <div class="numpad-panel" id="numpad-panel">
       <div class="numpad-grid">
-        <button onclick="numTap('7')">7</button>
-        <button onclick="numTap('8')">8</button>
-        <button onclick="numTap('9')">9</button>
-        <button onclick="numTap('4')">4</button>
-        <button onclick="numTap('5')">5</button>
-        <button onclick="numTap('6')">6</button>
         <button onclick="numTap('1')">1</button>
         <button onclick="numTap('2')">2</button>
         <button onclick="numTap('3')">3</button>
+        <button onclick="numTap('4')">4</button>
+        <button onclick="numTap('5')">5</button>
+        <button onclick="numTap('6')">6</button>
+        <button onclick="numTap('7')">7</button>
+        <button onclick="numTap('8')">8</button>
+        <button onclick="numTap('9')">9</button>
         <button class="np-dot" onclick="numTap('.')">·</button>
         <button onclick="numTap('0')">0</button>
         <button class="np-back" onclick="numBack()">⌫</button>
@@ -1605,7 +1605,7 @@ function renderSpecs() {
   updateSummary();
   // [v0.51] 모바일이면 동적 렌더된 입력칸도 inputmode=none (OS키보드 차단)
   if (isTouchDevice()) {
-    list.querySelectorAll('input[data-mobile-none]').forEach(el => el.setAttribute('inputmode', 'none'));
+    list.querySelectorAll('input[data-mobile-none]').forEach(el => { el.setAttribute('inputmode', 'none'); el.setAttribute('readonly', 'readonly'); });
   }
   applyPrefilledClasses();   // [v0.55] 기본값(직전) 칸 흐릿하게 표시
 }
@@ -1913,7 +1913,14 @@ function openAdjustPanel(el) {
   if (activeAdjEl && activeAdjEl !== el) activeAdjEl.classList.remove('adj-active');
   activeAdjEl = el;
   el.classList.add('adj-active');
-  if (!isTouchDevice()) el.select();   // PC: 키보드 입력 시 전체선택 유지
+  if (isTouchDevice()) {
+    el.setAttribute('inputmode', 'none');
+    el.setAttribute('readonly', 'readonly');   // 모바일: OS키보드 차단
+    if (el.blur) el.blur();
+  } else {
+    el.removeAttribute('readonly');
+    el.select();   // PC: 키보드 입력 시 전체선택 유지
+  }
   scrollInputIntoView(el);   // [v0.51] 입력칸을 화면 위쪽으로 (패널과 안 겹치게)
 
   const posLabel = slot.kind === 'min' ? '최솟값' : slot.kind === 'max' ? '최댓값' : `X${slot.idx + 1}`;
@@ -1941,7 +1948,7 @@ const isTouchDevice = () => navigator.maxTouchPoints > 0;
 // [v0.51] 모바일이면 측정 입력칸 inputmode=none (OS키보드 차단)
 document.addEventListener('DOMContentLoaded', () => {
   if (isTouchDevice()) {
-    document.querySelectorAll('input[data-mobile-none]').forEach(el => el.setAttribute('inputmode', 'none'));
+    document.querySelectorAll('input[data-mobile-none]').forEach(el => { el.setAttribute('inputmode', 'none'); el.setAttribute('readonly', 'readonly'); });
   }
   // renderSpecs 는 동적 렌더이므로 openNumpad/openAdjustPanel에서 직접 처리
 });
@@ -1997,11 +2004,14 @@ function openNumpad(el) {
   activeAdjEl = el;
   el.classList.add('adj-active');
   if (isTouchDevice()) {
-    // 모바일: select() 안 함 → 복사/잘라내기 팝업 방지. 첫 키 입력 시 덮어쓰기.
+    // 모바일: readonly+inputmode=none → OS키보드 확실히 차단. select() 안 함(복사팝업 방지). 첫 키 덮어쓰기.
     el.setAttribute('inputmode', 'none');
+    el.setAttribute('readonly', 'readonly');
     numFirstKey = true;
+    if (el.blur) el.blur();   // 혹시 떠있던 키보드 즉시 내림
   } else {
-    // PC: inputmode 해제 + select() → 키보드 입력 시 전체 선택된 상태로 바로 덮어쓰기
+    // PC: readonly 해제 + inputmode=decimal + select() → 키보드 입력 시 전체선택 후 바로 덮어쓰기
+    el.removeAttribute('readonly');
     el.setAttribute('inputmode', 'decimal');
     el.select();
     numFirstKey = false;
@@ -2064,9 +2074,25 @@ function numBack() {
 }
 
 // ✓ 다음 = 현재 칸 확정하고 화면상 다음 입력칸으로 이동 (그 칸 패널 자동 오픈)
+// [v0.60] 현재 칸 확정 — 값 있으면(기본값이든 입력값이든) "측정 확인"으로 touched 처리
+function confirmCurrentInput(el) {
+  if (!el || el.value === '') return;
+  const slot = parseAdjSlot(el);
+  if (!slot) return;
+  const inp = specInputs[slot.specId];
+  if (!inp) return;
+  if (slot.kind === 'min') inp.prefilledMin = false;
+  else if (slot.kind === 'max') inp.prefilledMax = false;
+  else if (inp.prefilled) inp.prefilled[slot.idx] = false;
+  el.classList.remove('prefilled');
+  el.classList.add('touched');
+  if (typeof updateCardState === 'function') updateCardState(slot.specId);
+}
+
 function numNext() {
   const el = activeAdjEl;
   if (!el) { closeNumpad(); return; }
+  confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
   const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
   const i = all.indexOf(el);
   const next = i >= 0 ? all[i + 1] : null;
@@ -2095,6 +2121,7 @@ function ptInpKeyNav(e, el) {
   const isEnter = e.key === 'Enter';
   if (!isTab && !isEnter) return;
   e.preventDefault();
+  confirmCurrentInput(el);   // [v0.60] 키보드 Tab/Enter로 넘어가도 현재 값 측정 확정
   const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
   const i = all.indexOf(el);
   if (i < 0) return;
@@ -2123,6 +2150,7 @@ function bumpAdjust(delta) {
 function adjConfirmNext() {
   const el = activeAdjEl;
   if (!el) { closeAdjustPanel(); return; }
+  confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
   const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
   const i = all.indexOf(el);
   const next = i >= 0 ? all[i + 1] : null;
