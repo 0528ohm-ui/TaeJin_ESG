@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v0.61</title>
+<title>공정검사 입력 v1.0</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -169,6 +169,11 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 #hist-screen.active{display:block}
 .hist-filters{padding:12px}
 .hist-date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+/* [v1.0] 빠른 기간 선택 칩 */
+.hist-range-chips{display:flex;gap:6px;margin-top:8px}
+.hist-range-chip{flex:1;border:1.5px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;padding:8px 0;font-size:13px;font-weight:700;cursor:pointer;transition:all .12s}
+.hist-range-chip:active{background:#f1f5f9}
+.hist-range-chip.active{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
 .hist-count{font-size:12px;color:#94a3b8;margin-top:8px;text-align:right}
 .hist-list{padding:0 12px 12px}
 .hist-card{background:#fff;border-radius:10px;margin-bottom:8px;border:1.5px solid #e2e8f0;overflow:hidden;transition:border-color .2s}
@@ -409,7 +414,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v0.61</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.0</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -624,9 +629,15 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <!-- 날짜 필터 (부품 선택 후 표시) -->
       <div class="hist-filters" id="hist-filter-area" style="display:none">
         <label>검사일 범위 <span style="font-weight:400;color:#94a3b8;font-size:11px">(부품 미선택 시 그날 전체)</span></label>
+        <div class="hist-range-chips" id="hist-range-chips">
+          <button class="hist-range-chip" data-range="today" onclick="setHistRange('today')">오늘</button>
+          <button class="hist-range-chip" data-range="7" onclick="setHistRange('7')">7일</button>
+          <button class="hist-range-chip" data-range="30" onclick="setHistRange('30')">30일</button>
+          <button class="hist-range-chip" data-range="all" onclick="setHistRange('all')">전체</button>
+        </div>
         <div class="hist-date-row">
-          <input class="inp" id="hist-date-from" type="date" onchange="loadHistData()">
-          <input class="inp" id="hist-date-to" type="date" onchange="loadHistData()">
+          <input class="inp" id="hist-date-from" type="date" onchange="onHistDateManual()">
+          <input class="inp" id="hist-date-to" type="date" onchange="onHistDateManual()">
         </div>
         <!-- 설비호기 / 금형호기 필터 (조회 결과 안에서 추가로 거름) -->
         <div class="hist-date-row" style="margin-top:8px">
@@ -2406,7 +2417,7 @@ const GSHEET_WEBHOOKS = {
   '부강스프링':  'https://script.google.com/macros/s/AKfycbx3umpi4T0UC0xJ2Cx5R1srTpEpcqMT0AzgzJZeHUolNg8_ziiixp2fukIj80gCCFwv/exec',
   'SKF SBC':   'https://script.google.com/macros/s/AKfycbwXQzDfPNhjlZp_jpR8JFjcMX7kpCuzVvGpUSaZFyVhygoXuqiLl9FyVnXwLo0ZL5Sp/exec',
   '진양오일씰':  'https://script.google.com/macros/s/AKfycbzHGiXKQIT9AJN3wqTVNpfYqXsvsbLv85DDw4TEBomGEHHWz71K1wGC0sAqOJHAv_LV9A/exec',
-  '일진':      GSHEET_DEFAULT_URL,   // 우선 SKF Seal로 (시트 미확정)
+  '일진':      'https://script.google.com/macros/s/AKfycbzlFliQefglEsjeSZUpR7LjFJoF9AVj_3ibV4u8xHgb6WmKGKwmwcrdnS-AN36cY2XS/exec',
   'SKF Seal':  GSHEET_DEFAULT_URL,
 };
 const GSHEET_SKIP = new Set(['test']);   // 전송 안 함
@@ -3073,14 +3084,12 @@ function switchNav(name) {
   if (name === 'hist') initHistView();
 }
 
-// [v0.57] 이력조회 진입 — 날짜필터 항상 표시, 기본 오늘, 부품 미선택이면 전체 조회
+// [v1.0] 이력조회 진입 — 날짜필터 항상 표시, 기본 오늘, 부품 미선택이면 전체 조회
 function initHistView() {
   const fromEl = document.getElementById('hist-date-from');
   const toEl = document.getElementById('hist-date-to');
   if (!fromEl.value || !toEl.value) {
-    const now = new Date(); const pad = n => String(n).padStart(2, '0');
-    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    fromEl.value = today; toEl.value = today;
+    setHistRange('today', true);   // 기본 오늘 (조회는 아래서 한 번만)
   }
   document.getElementById('hist-filter-area').style.display = 'block';
   // [v0.57] 전체 모드(부품 미선택)면 목록만, 서브토글/관리도 숨김
@@ -3090,6 +3099,31 @@ function initHistView() {
     document.getElementById('hist-spc-view').style.display = 'none';
   }
   loadHistData();   // histPart 없으면 전체
+}
+
+// [v1.0] 빠른 기간 선택 (오늘/7일/30일/전체)
+function setHistRange(range, noLoad) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const today = ymd(now);
+  let from = today, to = today;
+  if (range === '7') { const d = new Date(now); d.setDate(d.getDate() - 6); from = ymd(d); }
+  else if (range === '30') { const d = new Date(now); d.setDate(d.getDate() - 29); from = ymd(d); }
+  else if (range === 'all') { from = '2000-01-01'; to = today; }
+  document.getElementById('hist-date-from').value = from;
+  document.getElementById('hist-date-to').value = to;
+  // 칩 활성 표시
+  document.querySelectorAll('#hist-range-chips .hist-range-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === range);
+  });
+  if (!noLoad) loadHistData();
+}
+
+// [v1.0] 날짜를 직접 입력하면 빠른선택 칩 해제 후 조회
+function onHistDateManual() {
+  document.querySelectorAll('#hist-range-chips .hist-range-chip').forEach(b => b.classList.remove('active'));
+  loadHistData();
 }
 
 // ══════════════════════════════════
