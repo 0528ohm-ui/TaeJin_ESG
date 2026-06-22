@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.0</title>
+<title>공정검사 입력 v1.01</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -414,7 +414,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.0</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.01</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1987,9 +1987,17 @@ function switchInputMode() {
 // 입력칸을 화면 위쪽(약 30% 지점)으로 스크롤 — 하단 패널과 안 겹치고 무슨 값 넣는지 보이게
 function scrollInputIntoView(el) {
   requestAnimationFrame(() => {
-    const rect = el.getBoundingClientRect();
-    const target = window.scrollY + rect.top - Math.round(window.innerHeight * 0.30);
-    window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    // 입력칸이 속한 항목 카드 전체가 보이도록 카드 상단 기준 정렬
+    const card = (el.closest && (el.closest('.spec-card') || el.closest('.linked-card'))) || el;
+    // 화면 최상단에 실제 고정된 영역(sub-nav + sticky-group)의 최하단 y좌표
+    let fixedBottom = 0;
+    document.querySelectorAll('.sub-nav, .sticky-group').forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.height > 0 && r.top < 120 && r.bottom > fixedBottom) fixedBottom = r.bottom;
+    });
+    const cardTop = card.getBoundingClientRect().top;
+    const delta = cardTop - fixedBottom - 10;   // 카드 상단을 고정영역 바로 아래로
+    if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: 'smooth' });
   });
 }
 
@@ -2902,6 +2910,20 @@ async function saveAll() {
     if (!confirm(`${vtxt}측정(입력)하지 않은 항목이 ${totalUnmeasured}개 있습니다.\n안 건드린 칸은 직전값이 그대로 저장됩니다. 계속할까요?`)) return;
   }
 
+  // [v1.01] NG 항목 있으면 다시 확인 — 항목명까지 보여줌
+  const ngNames = [];
+  targets.forEach(v => {
+    v.specs.forEach(s => {
+      if (calcResult(s, v.inputs[s.id]) === 'NG') {
+        ngNames.push((s.item_name || `항목${s.item_no}`));
+      }
+    });
+  });
+  if (ngNames.length > 0) {
+    const uniq = [...new Set(ngNames)];
+    if (!confirm(`⚠️ NG 항목이 ${ngNames.length}개 있습니다.\n${uniq.join(', ')}\n\n측정값을 다시 확인하세요. 그래도 저장할까요?`)) return;
+  }
+
   const btn = document.querySelector('#save-area .btn');
   btn.textContent = '저장 중…'; btn.disabled = true;
 
@@ -3092,11 +3114,10 @@ function initHistView() {
     setHistRange('today', true);   // 기본 오늘 (조회는 아래서 한 번만)
   }
   document.getElementById('hist-filter-area').style.display = 'block';
-  // [v0.57] 전체 모드(부품 미선택)면 목록만, 서브토글/관리도 숨김
+  // [v1.01] 서브토글(목록/관리도)은 항상 표시 — 관리도는 부품 선택 시 동작
+  document.getElementById('hist-sub-toggle').style.display = 'flex';
   if (!histPart) {
-    document.getElementById('hist-sub-toggle').style.display = 'none';
-    document.getElementById('hist-list-view').style.display = '';
-    document.getElementById('hist-spc-view').style.display = 'none';
+    switchHistView('list');
   }
   loadHistData();   // histPart 없으면 전체
 }
@@ -3192,7 +3213,9 @@ function clearHistPart() {
   histMeasCache = {};
   histSpecs = [];
   document.getElementById('hist-selected-part').style.display = 'none';
-  document.getElementById('hist-sub-toggle').style.display = 'none';
+  // [v1.01] 토글은 유지(목록으로 전환만)
+  document.getElementById('hist-sub-toggle').style.display = 'flex';
+  switchHistView('list');
   // SPC 리셋
   destroySpcCharts();
   document.getElementById('spc-xbar-wrap').style.display = 'none';
@@ -3200,7 +3223,6 @@ function clearHistPart() {
   document.getElementById('spc-cpk-panel').style.display = 'none';
   document.getElementById('spc-spec-sel').innerHTML = '<option value="">항목 선택…</option>';
   // [v0.57] 부품 해제 → 그날 전체 조회로 복귀
-  document.getElementById('hist-list-view').style.display = '';
   loadHistData();
 }
 
@@ -3646,6 +3668,11 @@ function fmtNum(v) {
 
 // 이력목록 ↔ 관리도 뷰 전환
 function switchHistView(view) {
+  // [v1.01] 관리도는 부품 선택이 있어야 동작 — 없으면 부품 선택 유도
+  if (view === 'spc' && !histPart) {
+    toast('관리도는 부품을 먼저 선택해야 볼 수 있어요');
+    return;
+  }
   document.getElementById('hist-list-view').style.display = view === 'list' ? 'block' : 'none';
   document.getElementById('hist-spc-view').style.display = view === 'spc' ? 'block' : 'none';
   document.getElementById('hst-list-btn').classList.toggle('sel', view === 'list');
