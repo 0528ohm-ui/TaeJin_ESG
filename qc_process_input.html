@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.08</title>
+<title>공정검사 입력 v1.14</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -83,7 +83,9 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .drawing-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#fff}
 .drawing-modal-hdr span{font-size:14px;font-weight:700}
 .drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
-.drawing-img-wrap{flex:1;overflow:visible;display:flex;align-items:center;justify-content:center;padding:24px;touch-action:pinch-zoom}
+.drawing-img-wrap{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:24px;touch-action:none;position:relative}
+.drawing-img-wrap img{will-change:transform;user-select:none;-webkit-user-drag:none}
+.drawing-zoom-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:5px 12px;border-radius:14px;pointer-events:none;z-index:5;transition:opacity .4s}
 
 /* [v0.38] 마우스 조절 패널 — PC 전사용 빠른 값 조정 */
 input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;background:#eff6ff}
@@ -154,6 +156,19 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .cfg-del-btn{background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:56px}
 .cfg-save-btn:active,.cfg-del-btn:active{opacity:.7}
 .cfg-saved{color:#16a34a;font-size:12px;font-weight:700;text-align:center;min-height:16px}
+/* 입력 순서 편집 */
+.seg-btn{flex:1;padding:8px;border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;font-size:13px;font-weight:700;color:#64748b;cursor:pointer}
+.seg-btn.on{border-color:#1e3a5f;background:#1e3a5f;color:#fff}
+.ord-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;background:#fff}
+.ord-item.grp{background:#faf5ff;border-color:#e9d5ff}
+.ord-seq{min-width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ord-name{flex:1;font-size:13px;font-weight:600;color:#1e293b;line-height:1.3}
+.ord-name .ord-spec{font-size:11px;color:#94a3b8;font-weight:500}
+.ord-grp-tag{display:inline-block;font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:1px 5px;border-radius:4px;margin-right:4px}
+.ord-btns{display:flex;flex-direction:column;gap:2px}
+.ord-btns button{width:30px;height:22px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:5px;font-size:12px;cursor:pointer;line-height:1;color:#475569}
+.ord-btns button:disabled{opacity:.3;cursor:default}
+.ord-del{border:none;background:#fef2f2;color:#dc2626;border-radius:6px;width:30px;height:26px;font-size:13px;cursor:pointer}
 .cfg-btn-row{display:flex;gap:8px}
 .cfg-add-btn{width:100%;padding:12px;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;margin:0 12px 8px;width:calc(100% - 24px)}
 .cfg-add-btn:active{background:#f1f5f9}
@@ -414,7 +429,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.08</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.14</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -824,6 +839,24 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       </div>
     </div>
 
+    <!-- ── 입력(다음 버튼) 순서 편집 ── -->
+    <div class="card" id="cfg-order-card" style="margin:12px;display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:15px;font-weight:800;color:#1e3a5f">⇅ 입력 순서</span>
+        <span style="font-size:11px;color:#94a3b8">측정값 입력 시 '다음' 누르면 넘어갈 순서</span>
+      </div>
+      <div style="display:flex;gap:6px;margin:8px 0">
+        <button class="seg-btn" id="cfg-order-press" onclick="setOrderProc('press')">🔧 프레스</button>
+        <button class="seg-btn" id="cfg-order-mach" onclick="setOrderProc('machining')">⚙️ 가공</button>
+      </div>
+      <div id="cfg-order-list" style="margin-top:4px"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-primary" style="flex:1" onclick="saveInputOrder()">순서 저장</button>
+        <button class="btn-ghost" onclick="resetInputOrder()">기본 순서로</button>
+      </div>
+      <div class="cfg-saved" id="cfg-order-saved" style="margin-top:6px"></div>
+    </div>
+
     <div id="cfg-spec-list" style="padding:0 12px 20px"></div>
     <div id="cfg-loading" class="loading" style="display:none">항목 불러오는 중…</div>
   </div>
@@ -884,6 +917,7 @@ async function getLastHoFromDB(partId) {
 let selectedPart = null;
 let specs = [];
 let specInputs = {};
+let activeRules = [];   // [v1.14] 현재 탭의 입력 흐름 삽입 규칙
 
 // ── PIN 입력 버퍼 ──
 let pinBuf = '';
@@ -1272,7 +1306,15 @@ async function loadVariant(part) {
   if (!sedong) {
     lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs);
   }
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong };
+  // [v1.14] 입력 순서 삽입 규칙 로드 (없으면 빈 배열)
+  let insertRules = [];
+  if (!sedong) {
+    try {
+      const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules`);
+      if (rr.length && Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
+    } catch(e){}
+  }
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1488,6 +1530,7 @@ function applyVariant(t) {
   selectedPart = v.part;
   specs = v.specs;
   specInputs = v.inputs;
+  activeRules = v.insertRules || [];   // [v1.14] 현재 입력 흐름 규칙
 
   renderVariantToggle(t);
   renderSpecs();
@@ -2092,6 +2135,74 @@ function numBack() {
   applyAdjUpdate(el);
 }
 
+// [v1.14] 규칙(activeRules)을 반영한 입력칸 순서 배열 생성
+//   DOM의 .pt-inp 들을 가져와, '끼울 항목' 칸 블록을 anchor 행 뒤로 재배치.
+//   규칙 없으면 DOM 순서 그대로 반환.
+function orderedInputs() {
+  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
+  if (!activeRules || !activeRules.length) return all;
+
+  // 각 칸의 specId 추출 (id 형식: pt-{specId}-{idx} / mm-min-{specId} / mm-max-{specId})
+  const specOf = el => {
+    const m = el.id.match(/^pt-(\d+)-/) || el.id.match(/^mm-(?:min|max)-(\d+)$/);
+    return m ? parseInt(m[1]) : null;
+  };
+  // 끼울 항목(item_no) → 그 spec의 칸들을 통째로 빼서 anchor 위치 뒤에 삽입
+  // item_no → specId 매핑
+  const noToId = {};
+  specs.forEach(s => { noToId[s.item_no] = s.id; });
+
+  // 결과 배열을 복사본으로 조작
+  let seq = all.slice();
+
+  activeRules.forEach(rule => {
+    const insSpecId = noToId[rule.item_no];
+    if (insSpecId == null) return;
+    // 끼울 칸 블록 추출
+    const block = seq.filter(el => specOf(el) === insSpecId);
+    if (!block.length) return;
+    seq = seq.filter(el => specOf(el) !== insSpecId);
+
+    // anchor 위치 찾기: anchor가 'g:group' 이면 그 그룹의 after_row 번째 "행"의 마지막 칸 뒤
+    //                   's:item_no' 이면 그 spec의 after_row 번째 칸 뒤
+    // 칸의 행 인덱스 추출 (pt-{id}-{idx} → idx, mm-min-{id} → 0, mm-max-{id} → 1)
+    const rowIdxOf = el => {
+      let m = el.id.match(/^pt-\d+-(\d+)$/);
+      if (m) return parseInt(m[1]);
+      if (/^mm-min-\d+$/.test(el.id)) return 0;
+      if (/^mm-max-\d+$/.test(el.id)) return 1;
+      return -1;
+    };
+
+    let anchorIdx = -1;
+    if (rule.anchor && rule.anchor.startsWith('g:')) {
+      const grp = rule.anchor.slice(2);
+      const memIds = specs.filter(s => s.link_group === grp).map(s => s.id);
+      // after_row 행에 해당하는 그룹 칸들 중 DOM상 가장 뒤 칸
+      const wanted = seq.filter(el => memIds.includes(specOf(el)) && rowIdxOf(el) === rule.after_row);
+      const last = wanted[wanted.length - 1];
+      if (last) anchorIdx = seq.indexOf(last);
+    } else if (rule.anchor && rule.anchor.startsWith('s:')) {
+      const aId = noToId[parseInt(rule.anchor.slice(2))];
+      const wanted = seq.filter(el => specOf(el) === aId && rowIdxOf(el) === rule.after_row);
+      const last = wanted[wanted.length - 1];
+      if (last) anchorIdx = seq.indexOf(last);
+    }
+    if (anchorIdx >= 0) seq.splice(anchorIdx + 1, 0, ...block);
+    else seq.push(...block);   // anchor 못 찾으면 맨 뒤
+  });
+
+  return seq;
+}
+
+// 현재 칸 기준 다음/이전 입력칸 (규칙 반영)
+function nextInputOf(el, dir = 1) {
+  const seq = orderedInputs();
+  const i = seq.indexOf(el);
+  if (i < 0) return null;
+  return seq[i + dir] || null;
+}
+
 // ✓ 다음 = 현재 칸 확정하고 화면상 다음 입력칸으로 이동 (그 칸 패널 자동 오픈)
 // [v0.60] 현재 칸 확정 — 값 있으면(기본값이든 입력값이든) "측정 확인"으로 touched 처리
 function confirmCurrentInput(el) {
@@ -2112,9 +2223,7 @@ function numNext() {
   const el = activeAdjEl;
   if (!el) { closeNumpad(); return; }
   confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
-  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
-  const i = all.indexOf(el);
-  const next = i >= 0 ? all[i + 1] : null;
+  const next = nextInputOf(el, 1);   // [v1.14] 규칙 반영 다음칸
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행
   } else {
@@ -2141,11 +2250,8 @@ function ptInpKeyNav(e, el) {
   if (!isTab && !isEnter) return;
   e.preventDefault();
   confirmCurrentInput(el);   // [v0.60] 키보드 Tab/Enter로 넘어가도 현재 값 측정 확정
-  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
-  const i = all.indexOf(el);
-  if (i < 0) return;
   const dir = (isTab && e.shiftKey) ? -1 : 1;
-  const next = all[i + dir];
+  const next = nextInputOf(el, dir);   // [v1.14] 규칙 반영
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행되며 el.select() 로 전체 선택됨
   } else if (dir > 0) {
@@ -2170,9 +2276,7 @@ function adjConfirmNext() {
   const el = activeAdjEl;
   if (!el) { closeAdjustPanel(); return; }
   confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
-  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
-  const i = all.indexOf(el);
-  const next = i >= 0 ? all[i + 1] : null;
+  const next = nextInputOf(el, 1);   // [v1.14] 규칙 반영 다음칸
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동으로 다음 칸 패널을 염
   } else {
@@ -3067,14 +3171,14 @@ function openDrawing() {
     const ctx = cv.getContext('2d');
     ctx.drawImage(img, 0, 0, NW, NH);
 
-    // 마커 크기: 설정화면 표시 비율에 맞춰 도면 픽셀 기준으로 산정
+    // 마커 크기: 도면 값을 덜 가리도록 작게 (설정화면 고정 px 크기에 근접)
     const base = Math.max(NW, NH);
-    const R = Math.round(base * 0.022);          // 반지름
-    const fontPx = Math.round(R * 1.15);
+    const R = Math.round(base * 0.014);          // 반지름 (0.022 → 0.014로 축소)
+    const fontPx = Math.round(R * 1.25);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `700 ${fontPx}px 'Malgun Gothic','맑은 고딕',sans-serif`;
-    ctx.lineWidth = Math.max(2, Math.round(R * 0.18));
+    ctx.lineWidth = Math.max(1.5, Math.round(R * 0.18));
 
     // ── 마커 좌표(px) 준비 ──
     const pts = markersData.map(s => ({
@@ -3129,15 +3233,17 @@ function openDrawing() {
         ctx.fillStyle = '#dc2626';
         ctx.fill();
       }
-      // 마커 원
+      // 마커 원 (살짝 반투명 → 뒤 도면 글자가 비쳐서 가림 완화)
+      ctx.globalAlpha = 0.85;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
       ctx.fillStyle = '#dc2626';
       ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = Math.max(2, Math.round(R * 0.18));
       ctx.stroke();
-      // 번호
+      // 번호 (불투명 → 가독성 유지)
       ctx.fillStyle = '#fff';
       ctx.fillText(String(p.no), p.x, p.y);
     });
@@ -3150,6 +3256,15 @@ function openDrawing() {
     out.style.cssText = 'display:block;max-width:100%;max-height:calc(100vh - 120px);width:auto;height:auto;border-radius:6px';
     out.src = dataUrl || img.src;   // 합성 성공 → 마커 포함 / 실패(CORS 오염) → 원본만
     wrap.appendChild(out);
+
+    // 안내 힌트 (3초 후 사라짐)
+    const hint = document.createElement('div');
+    hint.className = 'drawing-zoom-hint';
+    hint.textContent = '두 손가락으로 확대 · 더블탭 확대/축소';
+    wrap.appendChild(hint);
+    setTimeout(() => { hint.style.opacity = '0'; }, 3000);
+
+    setupDrawingZoom(wrap, out);   // 핀치/드래그/더블탭 줌 연결
   };
   img.onerror = () => {
     // crossOrigin 때문에 로드 실패한 경우 → CORS 없이 한 번 재시도 (마커 합성은 포기될 수 있음)
@@ -3165,13 +3280,116 @@ function openDrawing() {
   img.src = imgUrl;
 }
 
+// ── 도면 줌/팬 (핀치 + 드래그 + 더블탭 + 휠) ──
+let _zoomState = null;   // 현재 모달 줌 상태 (closeDrawing에서 초기화용)
+function setupDrawingZoom(wrap, imgEl) {
+  const MIN = 1, MAX = 6;
+  const st = { scale: 1, tx: 0, ty: 0 };
+  _zoomState = st;
+
+  function apply() {
+    imgEl.style.transformOrigin = 'center center';
+    imgEl.style.transform = `translate(${st.tx}px,${st.ty}px) scale(${st.scale})`;
+    imgEl.style.cursor = st.scale > 1 ? 'grab' : 'default';
+  }
+  // 확대 상태에서 이미지가 화면 밖으로 너무 빠지지 않게 이동범위 제한
+  function clamp() {
+    const wr = wrap.getBoundingClientRect();
+    const baseW = imgEl.clientWidth, baseH = imgEl.clientHeight;
+    const sw = baseW * st.scale, sh = baseH * st.scale;
+    const maxX = Math.max(0, (sw - wr.width) / 2 + 40);
+    const maxY = Math.max(0, (sh - wr.height) / 2 + 40);
+    st.tx = Math.min(maxX, Math.max(-maxX, st.tx));
+    st.ty = Math.min(maxY, Math.max(-maxY, st.ty));
+  }
+
+  // ── 포인터(터치/마우스 공통) ──
+  const pointers = new Map();
+  let startDist = 0, startScale = 1;
+  let panStart = null;
+  let lastTap = 0;
+
+  function dist() {
+    const p = [...pointers.values()];
+    return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+  }
+
+  imgEl.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    imgEl.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      startDist = dist();
+      startScale = st.scale;
+    } else if (pointers.size === 1) {
+      panStart = { x: e.clientX - st.tx, y: e.clientY - st.ty };
+      // 더블탭 감지
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        st.scale = st.scale > 1.2 ? 1 : 2.5;
+        if (st.scale === 1) { st.tx = 0; st.ty = 0; }
+        clamp(); apply();
+        lastTap = 0;
+      } else {
+        lastTap = now;
+      }
+    }
+  });
+
+  imgEl.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const d = dist();
+      if (startDist > 0) {
+        st.scale = Math.min(MAX, Math.max(MIN, startScale * (d / startDist)));
+        if (st.scale === 1) { st.tx = 0; st.ty = 0; }
+        clamp(); apply();
+      }
+    } else if (pointers.size === 1 && panStart && st.scale > 1) {
+      st.tx = e.clientX - panStart.x;
+      st.ty = e.clientY - panStart.y;
+      clamp(); apply();
+    }
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) startDist = 0;
+    if (pointers.size === 0) panStart = null;
+  }
+  imgEl.addEventListener('pointerup', endPointer);
+  imgEl.addEventListener('pointercancel', endPointer);
+
+  // ── PC 휠 줌 ──
+  imgEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    st.scale = Math.min(MAX, Math.max(MIN, st.scale * delta));
+    if (st.scale === 1) { st.tx = 0; st.ty = 0; }
+    clamp(); apply();
+  }, { passive: false });
+
+  // PC 더블클릭 줌
+  imgEl.addEventListener('dblclick', e => {
+    e.preventDefault();
+    st.scale = st.scale > 1.2 ? 1 : 2.5;
+    if (st.scale === 1) { st.tx = 0; st.ty = 0; }
+    clamp(); apply();
+  });
+
+  apply();
+}
+
 function closeDrawing() {
   document.getElementById('drawing-modal').classList.remove('open');
   document.body.style.overflow = '';
+  _zoomState = null;
 }
 
-// 모달 배경/여백 클릭으로 닫기 (이미지 자체 클릭은 제외)
+// 모달 배경/여백 클릭으로 닫기 (이미지 자체 클릭은 제외, 확대 중이면 닫지 않음)
 document.addEventListener('click', e => {
+  if (_zoomState && _zoomState.scale > 1) return;   // 확대/팬 중 오작동 방지
   if (e.target.id === 'drawing-modal' || e.target.id === 'drawing-img-wrap') closeDrawing();
 });
 
@@ -4626,7 +4844,216 @@ function renderCfgSpecs() {
     </div>`;
 
   el.innerHTML = linkHtml + rows + addPanel + addBtn;
+  renderInputOrder();   // 입력 순서 편집 카드도 같이 갱신
 }
+
+// ══════════════════════════════════
+// 입력 순서 — 삽입 규칙(insert_rules) 편집  [v1.14]
+//   화면 카드 순서는 그대로 두고, '다음' 버튼 흐름만 규칙으로 점프시킴.
+//   규칙 = { item_no:끼울항목, anchor:'g:그룹키'|'s:항목no', after_row:기준의 N번째 행 뒤 }
+// ══════════════════════════════════
+let cfgOrderProc = 'press';     // 현재 편집 중인 탭
+let cfgRules = {};              // {press:[rule...], machining:[...]} DB 저장본 + __partId
+
+// 해당 탭에서 입력 대상이 되는 spec (입력 화면과 동일 필터)
+function specsForProc(proc) {
+  return cfgSpecs.filter(s => {
+    const pt = s.process_type || 'press';
+    return proc === 'machining' ? (pt === 'machining' || pt === 'both')
+                                : (pt === 'press' || pt === 'both');
+  });
+}
+
+// spec 목록 → 표시단위(unit). 연동그룹=한 덩어리(행 수=대표 멤버 measure_points)
+// 한 spec의 실제 입력칸(행) 수
+function specRowCount(s) {
+  if (s.is_visual) return 1;       // 외관 = 1칸
+  if (s.is_min_max) return 2;      // 최소/최대 = 2칸
+  return s.measure_points || 1;    // 포인트 = 측정칸수
+}
+
+function buildUnits(specs) {
+  const units = [];
+  const seen = new Set();
+  specs.forEach(s => {
+    if (s.link_group) {
+      if (seen.has(s.link_group)) return;
+      seen.add(s.link_group);
+      const mem = specs.filter(x => x.link_group === s.link_group).sort((a,b)=>a.item_no-b.item_no);
+      const rows = Math.max(...mem.map(specRowCount));
+      units.push({ type:'group', key:'g:'+s.link_group, link_group:s.link_group,
+        members:mem, rows, label:mem.map(m=>m.item_name).join(' + '),
+        nos:mem.map(m=>'No.'+m.item_no).join(',') });
+    } else {
+      units.push({ type:'single', key:'s:'+s.item_no, item_no:s.item_no, spec:s,
+        rows:specRowCount(s), label:s.item_name||'—', nos:'No.'+s.item_no });
+    }
+  });
+  return units;
+}
+
+// 행 라벨 — min/max 항목은 최소/최대, 연동그룹은 measure_zone, 그 외 N번째
+function rowLabel(unit, rowIdx) {
+  const rep = unit.members ? unit.members[0] : unit.spec;
+  // 최소/최대 입력이면 2칸을 "최소/최대"로
+  const isMM = unit.type==='single' && rep && rep.is_min_max;
+  if (isMM) return rowIdx === 0 ? '최소' : '최대';
+  // 연동그룹 등 measure_zone 있으면 그 값
+  if (rep && rep.measure_zone) {
+    const zs = String(rep.measure_zone).split(',').map(z=>z.trim()).filter(Boolean);
+    if (zs[rowIdx]) return zs[rowIdx];
+  }
+  return (rowIdx+1) + '번째';
+}
+
+function setOrderProc(proc) { cfgOrderProc = proc; renderInputOrder(); }
+
+async function renderInputOrder() {
+  const card = document.getElementById('cfg-order-card');
+  if (!cfgPart) { card.style.display='none'; return; }
+  card.style.display = 'block';
+  document.getElementById('cfg-order-press').classList.toggle('on', cfgOrderProc==='press');
+  document.getElementById('cfg-order-mach').classList.toggle('on', cfgOrderProc==='machining');
+
+  // 저장본 로드 (부품 바뀌면 1회)
+  if (cfgRules.__partId !== cfgPart.id) {
+    cfgRules = { __partId: cfgPart.id };
+    try {
+      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules`);
+      rows.forEach(r => { cfgRules[r.process_type] = Array.isArray(r.insert_rules)?r.insert_rules:[]; });
+    } catch(e){}
+  }
+  const rules = cfgRules[cfgOrderProc] || [];
+  const specs = specsForProc(cfgOrderProc);
+  const units = buildUnits(specs);
+
+  // ── 미리보기(다음 흐름) ──
+  const flow = buildFlowPreview(units, rules);
+  const previewHtml = `<div style="font-size:11px;color:#64748b;margin:2px 0 8px;line-height:1.7">
+    ${flow.map(f => `<span style="display:inline-block;background:${f.inserted?'#fef3c7':'#f1f5f9'};border-radius:5px;padding:1px 7px;margin:1px 3px 1px 0;${f.inserted?'color:#92400e;font-weight:700':''}">${f.label}</span>`).join('→ ')}
+  </div>`;
+
+  // ── 규칙 목록 ──
+  let rulesHtml;
+  if (!rules.length) {
+    rulesHtml = `<div style="font-size:12px;color:#94a3b8;padding:6px 0">규칙 없음 (항목 번호 순서대로 입력)</div>`;
+  } else {
+    rulesHtml = rules.map((r, i) => {
+      const u = units.find(x => x.type==='single' && x.item_no===r.item_no);
+      const anchor = units.find(x => x.key === r.anchor);
+      const aName = anchor ? `${anchor.label} ${rowLabel(anchor, r.after_row)}` : r.anchor;
+      return `<div class="ord-item">
+        <div class="ord-name"><span class="ord-grp-tag" style="background:#fef3c7;color:#92400e">끼움</span>
+          <b>${u?u.label:('No.'+r.item_no)}</b> 를 <b>${aName}</b> 뒤에
+        </div>
+        <button class="ord-del" onclick="deleteRule(${i})">🗑</button>
+      </div>`;
+    }).join('');
+  }
+
+  // ── 규칙 추가 폼 ──
+  // 끼울 후보 = single unit 전체 / 기준 = group + single (자기 자신 제외)
+  const insertOpts = units.filter(u=>u.type==='single')
+    .map(u=>`<option value="${u.item_no}">${u.label} (No.${u.item_no})</option>`).join('');
+  const formHtml = `
+    <div style="border-top:1px dashed #e2e8f0;margin-top:10px;padding-top:10px">
+      <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:6px">＋ 끼우기 규칙 추가</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div><label style="font-size:11px;color:#64748b">이 항목을</label>
+          <select class="inp" id="rule-item" onchange="renderAnchorOpts()">${insertOpts}</select></div>
+        <div><label style="font-size:11px;color:#64748b">이 위치 뒤에 끼움</label>
+          <select class="inp" id="rule-anchor"></select></div>
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:8px" onclick="addRule()">규칙 추가</button>
+    </div>`;
+
+  document.getElementById('cfg-order-list').innerHTML =
+    `<div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
+    + previewHtml + rulesHtml + formHtml;
+  document.getElementById('cfg-order-saved').textContent = '';
+  renderAnchorOpts();
+}
+
+// 기준위치 드롭다운 채우기 (끼울 항목 자신은 제외, 각 unit의 행마다 옵션)
+function renderAnchorOpts() {
+  const sel = document.getElementById('rule-anchor');
+  if (!sel) return;
+  const insItem = parseInt(document.getElementById('rule-item').value);
+  const specs = specsForProc(cfgOrderProc);
+  const units = buildUnits(specs);
+  const opts = [];
+  units.forEach(u => {
+    // 자기 자신(끼울 항목)이 기준이 되는 건 제외
+    if (u.type==='single' && u.item_no===insItem) return;
+    for (let r=0; r<u.rows; r++) {
+      opts.push(`<option value="${u.key}|${r}">${u.label} ${rowLabel(u,r)} 뒤</option>`);
+    }
+  });
+  sel.innerHTML = opts.join('');
+}
+
+// 규칙 반영해 '다음 흐름' 미리보기 토큰 생성
+function buildFlowPreview(units, rules) {
+  // 기본 흐름: 각 unit을 행 단위로 펼침 → [{key,row,label}]
+  const flow = [];
+  units.forEach(u => {
+    for (let r=0; r<u.rows; r++) {
+      flow.push({ key:u.key, row:r, label:`${u.label}${u.rows>1?' '+rowLabel(u,r):''}`, inserted:false });
+    }
+  });
+  // 규칙 적용: anchor(key|row) 위치 바로 뒤에 끼울 항목 삽입
+  rules.forEach(rule => {
+    const u = units.find(x=>x.type==='single' && x.item_no===rule.item_no);
+    if (!u) return;
+    // 끼울 항목의 기본 위치들(이미 flow에 있음)을 제거하고 anchor 뒤로 이동
+    for (let k=flow.length-1;k>=0;k--) if (flow[k].key === u.key) flow.splice(k,1);
+    const idx = flow.findIndex(f => f.key===rule.anchor && f.row===rule.after_row);
+    const token = { key:u.key, row:0, label:u.label, inserted:true };
+    if (idx>=0) flow.splice(idx+1, 0, token);
+    else flow.push(token);
+  });
+  return flow;
+}
+
+function addRule() {
+  const item_no = parseInt(document.getElementById('rule-item').value);
+  const av = document.getElementById('rule-anchor').value;   // "key|row"
+  if (!av) { toast('기준 위치를 선택해'); return; }
+  const [anchor, rowStr] = av.split('|');
+  const after_row = parseInt(rowStr);
+  const rules = cfgRules[cfgOrderProc] = (cfgRules[cfgOrderProc] || []);
+  // 같은 항목 규칙은 1개만 (덮어쓰기)
+  const ex = rules.findIndex(r => r.item_no === item_no);
+  const rule = { item_no, anchor, after_row };
+  if (ex>=0) rules[ex] = rule; else rules.push(rule);
+  saveRules();
+}
+
+function deleteRule(i) {
+  const rules = cfgRules[cfgOrderProc] || [];
+  rules.splice(i,1);
+  saveRules();
+}
+
+async function saveRules() {
+  if (!cfgPart) return;
+  const savedEl = document.getElementById('cfg-order-saved');
+  try {
+    await sbFetch('qc_input_order?on_conflict=part_id,process_type', {
+      method:'POST',
+      prefer:'resolution=merge-duplicates,return=minimal',
+      body:{ part_id:cfgPart.id, process_type:cfgOrderProc,
+             insert_rules:(cfgRules[cfgOrderProc]||[]), updated_at:new Date().toISOString() }
+    });
+    renderInputOrder();
+    savedEl.style.color = '#16a34a';
+    savedEl.textContent = `✓ ${cfgOrderProc==='machining'?'가공':'프레스'} 규칙 저장됨`;
+  } catch(e) {
+    savedEl.style.color = '#dc2626';
+    savedEl.textContent = '저장 실패: ' + e.message;
+  }
+}
+
 
 // ── 연동 그룹 관리 ──
 function renderLinkManager() {
