@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.27 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.28 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -68,7 +68,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.27</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.28</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -435,7 +435,7 @@ async function reload(){
     
     // 6) [v0.6] 모든 spec 캐시 (process_type 포함) — [v0.7] 페이지네이션으로 1000건 제한 우회
     setStatus('⏳ qc_part_spec 조회 중...');
-    const allSpecs = await sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl&order=item_no.asc,sort_order.asc');
+    const allSpecs = await sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y&order=item_no.asc,sort_order.asc');
     _specsByPartId = {};
     const machSpecIds = new Set();   // process_type이 machining|both인 spec id 모음
     allSpecs.forEach(s => {
@@ -1242,6 +1242,112 @@ async function getImageDimensions(arrayBuffer, ext){
   }
 }
 
+// [v0.28] 도면 원본(ArrayBuffer) + 측정위치 마커 → 합성된 PNG ArrayBuffer.
+//   입력화면(qc_process_input.html v1.10+)의 캔버스 합성 로직 이식.
+//   markers: [{no, x, y}]  (x,y는 0~1 비율). 합성 실패 시 null 반환(→ 원본 사용).
+//   ※ fetch로 받은 buf로 Blob URL을 만들어 디코드하므로 canvas taint 없음 → toDataURL 항상 가능.
+async function compositeMarkers(buf, ext, markers){
+  if(!buf || !markers || !markers.length) return null;
+  const mime = ext === 'jpeg' ? 'image/jpeg' : 'image/' + ext;
+  const url = URL.createObjectURL(new Blob([buf], {type: mime}));
+  try{
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('이미지 디코드 실패'));
+      im.src = url;
+    });
+
+    const NW = img.naturalWidth, NH = img.naturalHeight;
+    const cv = document.createElement('canvas');
+    cv.width = NW; cv.height = NH;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0, NW, NH);
+
+    // 마커 크기 (입력화면과 동일 비율)
+    const base = Math.max(NW, NH);
+    const R = Math.round(base * 0.014);
+    const fontPx = Math.round(R * 1.25);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fontPx}px 'Malgun Gothic','맑은 고딕',sans-serif`;
+
+    // 마커 좌표(px) 준비
+    const pts = markers.map(m => ({
+      no: m.no,
+      ox: m.x * NW, oy: m.y * NH,   // 원래(앵커) 위치
+      x:  m.x * NW, y:  m.y * NH     // 표시 위치(분산으로 이동될 수 있음)
+    }));
+
+    // 겹침 자동 분산(de-cluster)
+    const minGap = R * 2.05;
+    for(let iter = 0; iter < 60; iter++){
+      let moved = false;
+      for(let i = 0; i < pts.length; i++){
+        for(let j = i + 1; j < pts.length; j++){
+          const a = pts[i], b = pts[j];
+          let dx = b.x - a.x, dy = b.y - a.y;
+          let d = Math.hypot(dx, dy);
+          if(d < minGap){
+            if(d < 0.01){ dx = (Math.random()-0.5); dy = (Math.random()-0.5); d = Math.hypot(dx,dy) || 1; }
+            const push = (minGap - d) / 2;
+            const ux = dx / d, uy = dy / d;
+            a.x -= ux * push; a.y -= uy * push;
+            b.x += ux * push; b.y += uy * push;
+            moved = true;
+          }
+        }
+      }
+      pts.forEach(p => {
+        p.x += (p.ox - p.x) * 0.05;
+        p.y += (p.oy - p.y) * 0.05;
+        p.x = Math.min(NW - R, Math.max(R, p.x));
+        p.y = Math.min(NH - R, Math.max(R, p.y));
+      });
+      if(!moved) break;
+    }
+
+    pts.forEach(p => {
+      // 이동했으면 원래 위치로 리더 라인
+      const shifted = Math.hypot(p.x - p.ox, p.y - p.oy) > R * 0.6;
+      if(shifted){
+        ctx.beginPath();
+        ctx.moveTo(p.ox, p.oy);
+        ctx.lineTo(p.x, p.y);
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = Math.max(1.5, Math.round(R * 0.12));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(p.ox, p.oy, Math.max(2, R*0.18), 0, Math.PI*2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+      }
+      // 마커 원 — 노란 바탕
+      ctx.globalAlpha = 0.92;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
+      ctx.fillStyle = '#facc15';   // 노란색
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#000';   // 검은 테두리
+      ctx.lineWidth = Math.max(2, Math.round(R * 0.18));
+      ctx.stroke();
+      // 번호 — 검은 글자
+      ctx.fillStyle = '#000';
+      ctx.fillText(String(p.no), p.x, p.y);
+    });
+
+    // canvas → PNG ArrayBuffer
+    const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/png'));
+    if(!blob) return null;
+    return await blob.arrayBuffer();
+  }catch(e){
+    return null;   // 실패 시 원본 도면 사용
+  }finally{
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
 // 셀 영역 (1-indexed col/row) 의 픽셀 크기 계산
 function calcAreaPixels(ws, startCol, endCol, startRow, endRow){
   // Excel column width → pixels (Calibri 11pt 기준 char_width=7)
@@ -1387,9 +1493,21 @@ async function generateXlsx(){
           try{
             const ext = (part.drawing_path.match(/\.(\w+)$/) || [,'png'])[1].toLowerCase();
             const imgExt = (ext === 'jpg' || ext === 'jpeg') ? 'jpeg' : 'png';
-            
+
+            // [v0.28] 측정위치 마커 합성 — 성공 시 합성본(PNG) 사용, 실패 시 원본
+            let useBuf = buf, useExt = imgExt;
+            const specs = _specsByPartId[part.id] || [];
+            const markers = specs
+              .filter(s => s.marker_x != null && s.marker_y != null)
+              .map(s => ({ no: s.item_no, x: s.marker_x, y: s.marker_y }));
+            if(markers.length){
+              const comp = await compositeMarkers(buf, imgExt, markers);
+              if(comp){ useBuf = comp; useExt = 'png'; log(`    🔴 마커 ${markers.length}개 합성`, 'ok'); }
+              else { log(`    ⚠ 마커 합성 실패 → 원본 도면 사용`, 'warn'); }
+            }
+
             // 1) 이미지 자연 크기 (비율용)
-            const dims = await getImageDimensions(buf, imgExt);
+            const dims = await getImageDimensions(useBuf, useExt);
             const imgRatio = dims.width / dims.height;
             
             // 2) 영역 = C14:AG25
@@ -1437,7 +1555,7 @@ async function generateXlsx(){
             const brCol = colStart + areaCols * (padW + fillW);
             const brRow = rowStart + areaRows * (padH + fillH);
             
-            const imgId = wb.addImage({buffer: buf, extension: imgExt});
+            const imgId = wb.addImage({buffer: useBuf, extension: useExt});
             ws.addImage(imgId, {
               tl: {col: tlCol, row: tlRow},
               br: {col: brCol, row: brRow},
