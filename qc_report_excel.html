@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.28 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.32 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -68,7 +68,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.28</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.32</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -1082,10 +1082,21 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
   //   템플릿(SKF/우창산업): A2='SKF 씰', A3='KOREA', C4='수입 , SKF', V9='한국 SKF씰㈜'
   //   부강스프링: 회사명만 바꾸고 A3/V9는 비움, 구분은 '공정'
   if(company === '부강스프링'){
+    // [v0.31] A2 회사명이 길어 A2:E2 병합 폭을 넘으면 잘림.
+    //   병합을 '풀어' A2를 단독셀로 만들면 오른쪽 빈칸으로 흘러넘쳐 보임(주석칸과 같은 원리).
+    //   ※ 새 병합을 만들지 않고 풀기만 하므로 과거 병합 중첩 깨짐 위험 없음.
+    try { ws.unMergeCells('A2:E2'); } catch(e){}
     ws.getCell('A2').value = '(주)부강스프링';
     ws.getCell('A3').value = '';
     ws.getCell('C4').value = '공정';
     ws.getCell('V9').value = '';
+    // [v0.30] 부강 하단 양식 정리 — SKF 양식 흔적 제거
+    ws.getCell('C89').value = '판정';                 // 'SKF 판정' → '판정'
+    ws.getCell('O94').value = '㈜태진다이텍';          // '한국SKF씰주식회사' → 자사명
+    ws.getCell('C94').value = '';                     // 양식번호(QP1001-F10.Rev(0)) 삭제
+    ws.getCell('D95').value = '';                     // 하단 주석 1
+    ws.getCell('D96').value = '';                     // 하단 주석 2
+    ws.getCell('D97').value = '';                     // 하단 주석 3
   }
   // SKF/우창산업은 템플릿 값 그대로 사용 (덮어쓰지 않음)
   
@@ -1210,6 +1221,29 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
     }
     ws.getCell('AF'+r1).value = m.result || '';
     ws.getCell('AF'+r2).value = m.result || '';
+  }
+
+  // [v0.29] 부강: 빈 측정행 숨김 (마지막 데이터행 다음 ~ 88행)
+  //   meas 개수만큼만 채우고 나머지 빈 항목 행은 숨겨 성적서를 깔끔하게.
+  //   측정 항목은 29행부터 2행 단위(r1=29+i*2). 최대 30항목(87/88행).
+  //   주의: B54:B93 세로병합이 측정+하단을 걸쳐 부분 숨김이 됨 → 깨짐 발생 시 1순위 의심.
+  if(company === '부강스프링'){
+    const filled = Math.min(meas.length, 30);
+    const lastDataRow = 29 + filled*2 - 1;   // 마지막으로 채워진 데이터 행
+    for(let r = lastDataRow + 1; r <= 88; r++){
+      try { ws.getRow(r).hidden = true; } catch(e){}
+    }
+    // [v0.32] 1페이지 인쇄 — fitToPage가 Excel에서 파일을 깨뜨려(이미지 포함 시) 동적 scale로 대체.
+    //   행 높이 전부 15pt. 보이는 영역 = 헤더(1~28, 420pt) + 데이터(29~lastDataRow) + 하단(89~97, 135pt).
+    //   세로: A4 인쇄가능 ≈690pt에 맞춤 / 가로: 35열 → A4 1장에 ≈68%.
+    //   ※ scale 값만 변경하고 fitToPage/pageSetUpPr는 안 건드림 = v0.28~0.30과 같은 안전한 구조.
+    if(ws.pageSetup){
+      const printH = 420 + (lastDataRow - 28) * 15 + 135;   // 보이는 행 높이합(pt)
+      const scaleV = Math.floor(690 / printH * 100);         // 세로 1장 맞춤 배율
+      let scale = Math.min(68, scaleV, 100);                 // 가로(68) 제약 + 확대 금지
+      if(scale < 10) scale = 10;                             // Excel 최소값
+      ws.pageSetup.scale = scale;
+    }
   }
   return warnings;
 }
