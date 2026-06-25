@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.22</title>
+<title>공정검사 입력 v1.24</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.22</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.24</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1338,14 +1338,12 @@ async function loadVariant(part) {
   if (!sedong) {
     lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs);
   }
-  // [v1.17] 입력 순서 삽입 규칙 로드 (없으면 빈 배열)
+  // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
-  if (!sedong) {
-    try {
-      const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules`);
-      if (rr.length && Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
-    } catch(e){}
-  }
+  try {
+    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules`);
+    if (rr.length && Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
+  } catch(e){}
   return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules };
 }
 
@@ -1947,6 +1945,18 @@ function setVisual(id, val) {
   document.getElementById(`vt-ok-${id}`).classList.toggle('ok-sel', val === 'OK');
   document.getElementById(`vt-ng-${id}`).classList.toggle('ng-sel', val === 'NG');
   updateCardState(id);
+  // [v1.24] 외관 OK/NG 선택 후 규칙 순서대로 다음 입력칸으로 자동 이동
+  //   orderedInputs()는 vt-ok 마커를 anchor로 참조한 뒤 pt-inp만 반환하므로
+  //   외관이 규칙의 anchor로 쓰인 항목이 첫 번째로 오게 됨.
+  if (activeRules && activeRules.length) {
+    const seq = orderedInputs();  // 규칙 적용된 pt-inp 순서
+    if (seq.length) {
+      const first = seq[0];
+      first.focus();
+      first.select && first.select();
+      if (typeof openPanelOf === 'function') openPanelOf(first);
+    }
+  }
 }
 
 function setMinMax(id, key, el) {
@@ -2170,13 +2180,24 @@ function numBack() {
 // [v1.17] 규칙(activeRules)을 반영한 입력칸 순서 배열 생성
 //   DOM의 .pt-inp 들을 가져와, '끼울 항목' 칸 블록을 anchor 행 뒤로 재배치.
 //   규칙 없으면 DOM 순서 그대로 반환.
+// [v1.23] is_visual 항목(외관)은 pt-inp가 없어 anchor 탐색에서 누락됨 →
+//   vt-ok-{id} 버튼을 anchor 마커로 seq에 포함시키고, 최종 반환 시엔 제거.
 function orderedInputs() {
-  const all = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
-  if (!activeRules || !activeRules.length) return all;
+  const ptInps = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
+  if (!activeRules || !activeRules.length) return ptInps;
 
-  // 각 칸의 specId 추출 (id 형식: pt-{specId}-{idx} / mm-min-{specId} / mm-max-{specId})
+  // visual 항목의 anchor 마커(vt-ok 버튼)를 seq에 포함
+  const visualMarkers = Array.from(document.querySelectorAll('#specs-list button[id^="vt-ok-"]'));
+  // DOM 순서를 유지하면서 pt-inp + visual 마커를 합산
+  const allEls = Array.from(document.querySelectorAll(
+    '#specs-list input.pt-inp, #specs-list button[id^="vt-ok-"]'
+  ));
+
+  // 각 칸의 specId 추출
+  // pt-{specId}-{idx} / mm-min-{specId} / mm-max-{specId} / vt-ok-{specId}
   const specOf = el => {
-    const m = el.id.match(/^pt-(\d+)-/) || el.id.match(/^mm-(?:min|max)-(\d+)$/);
+    const m = el.id.match(/^pt-(\d+)-/) || el.id.match(/^mm-(?:min|max)-(\d+)$/)
+            || el.id.match(/^vt-ok-(\d+)$/);
     return m ? parseInt(m[1]) : null;
   };
   // 끼울 항목(item_no) → 그 spec의 칸들을 통째로 빼서 anchor 위치 뒤에 삽입
@@ -2184,47 +2205,65 @@ function orderedInputs() {
   const noToId = {};
   specs.forEach(s => { noToId[s.item_no] = s.id; });
 
-  // 결과 배열을 복사본으로 조작
-  let seq = all.slice();
+  // 결과 배열을 복사본으로 조작 (pt-inp + visual 마커 포함)
+  let seq = allEls.slice();
 
+  // 칸의 행 인덱스 추출 (pt-{id}-{idx} → idx, mm-min-{id} → 0, mm-max-{id} → 1)
+  const rowIdxOf = el => {
+    let m = el.id.match(/^pt-\d+-(\d+)$/);
+    if (m) return parseInt(m[1]);
+    if (/^mm-min-\d+$/.test(el.id)) return 0;
+    if (/^mm-max-\d+$/.test(el.id)) return 1;
+    if (/^vt-ok-\d+$/.test(el.id)) return 0;  // visual 마커는 항상 row 0
+    return -1;
+  };
+
+  // [v1.24] buildFlowPreview와 동일한 방식으로 anchor 탐색:
+  //   anchor spec의 칸이 이미 다른 규칙으로 앞에 삽입됐어도 현재 seq에서 위치를 찾음.
+  //   같은 anchor에 여러 규칙이 쌓일 때 순서가 뒤집히는 문제를 방지하기 위해
+  //   끼울 칸을 seq에서 제거하기 전에 anchor 위치를 먼저 확정함.
   activeRules.forEach(rule => {
     const insSpecId = noToId[rule.item_no];
     if (insSpecId == null) return;
-    // 끼울 칸 블록 추출
-    const block = seq.filter(el => specOf(el) === insSpecId);
-    if (!block.length) return;
-    seq = seq.filter(el => specOf(el) !== insSpecId);
 
-    // anchor 위치 찾기: anchor가 'g:group' 이면 그 그룹의 after_row 번째 "행"의 마지막 칸 뒤
-    //                   's:item_no' 이면 그 spec의 after_row 번째 칸 뒤
-    // 칸의 행 인덱스 추출 (pt-{id}-{idx} → idx, mm-min-{id} → 0, mm-max-{id} → 1)
-    const rowIdxOf = el => {
-      let m = el.id.match(/^pt-\d+-(\d+)$/);
-      if (m) return parseInt(m[1]);
-      if (/^mm-min-\d+$/.test(el.id)) return 0;
-      if (/^mm-max-\d+$/.test(el.id)) return 1;
-      return -1;
-    };
-
+    // 1) anchor 위치 먼저 확정 (끼울 항목 제거 전)
     let anchorIdx = -1;
     if (rule.anchor && rule.anchor.startsWith('g:')) {
       const grp = rule.anchor.slice(2);
       const memIds = specs.filter(s => s.link_group === grp).map(s => s.id);
-      // after_row 행에 해당하는 그룹 칸들 중 DOM상 가장 뒤 칸
       const wanted = seq.filter(el => memIds.includes(specOf(el)) && rowIdxOf(el) === rule.after_row);
       const last = wanted[wanted.length - 1];
       if (last) anchorIdx = seq.indexOf(last);
     } else if (rule.anchor && rule.anchor.startsWith('s:')) {
       const aId = noToId[parseInt(rule.anchor.slice(2))];
-      const wanted = seq.filter(el => specOf(el) === aId && rowIdxOf(el) === rule.after_row);
+      // visual 항목(vt-ok 마커) 포함해서 찾기
+      const wanted = seq.filter(el => (specOf(el) === aId) && rowIdxOf(el) === rule.after_row);
       const last = wanted[wanted.length - 1];
       if (last) anchorIdx = seq.indexOf(last);
     }
-    if (anchorIdx >= 0) seq.splice(anchorIdx + 1, 0, ...block);
-    else seq.push(...block);   // anchor 못 찾으면 맨 뒤
+
+    // 2) 끼울 칸 블록 추출 및 seq에서 제거
+    const block = seq.filter(el => specOf(el) === insSpecId);
+    if (!block.length) return;
+    seq = seq.filter(el => specOf(el) !== insSpecId);
+
+    // 3) anchor 이후 삽입 (제거로 인한 인덱스 보정)
+    if (anchorIdx >= 0) {
+      // 제거된 block 중 anchor 앞에 있던 항목 수만큼 보정
+      const removedBefore = block.filter(el => {
+        const origIdx = allEls.indexOf(el);
+        return origIdx < allEls.indexOf(seq[anchorIdx] || seq[anchorIdx - 1]);
+      }).length;
+      const adj = anchorIdx - removedBefore;
+      const insertAt = Math.max(0, Math.min(adj + 1, seq.length));
+      seq.splice(insertAt, 0, ...block);
+    } else {
+      seq.push(...block);   // anchor 못 찾으면 맨 뒤
+    }
   });
 
-  return seq;
+  // visual 마커(vt-ok 버튼) 제거 → pt-inp만 반환
+  return seq.filter(el => !el.id.startsWith('vt-ok-'));
 }
 
 // 현재 칸 기준 다음/이전 입력칸 (규칙 반영)
@@ -5155,15 +5194,29 @@ async function saveRules() {
   if (!cfgPart) return;
   const savedEl = document.getElementById('cfg-order-saved');
   try {
-    await sbFetch('qc_input_order?on_conflict=part_id,process_type', {
-      method:'POST',
-      prefer:'resolution=merge-duplicates,return=minimal',
-      body:{ part_id:cfgPart.id, process_type:cfgOrderProc,
-             insert_rules:(cfgRules[cfgOrderProc]||[]), updated_at:new Date().toISOString() }
-    });
+    const payload = {
+      part_id: cfgPart.id,
+      process_type: cfgOrderProc,
+      insert_rules: (cfgRules[cfgOrderProc] || []),
+      updated_at: new Date().toISOString()
+    };
+    // 기존 행 있는지 확인 → 있으면 PATCH, 없으면 POST(배열)
+    const existing = await sbFetch(
+      `qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${cfgOrderProc}&select=id`
+    );
+    if (existing && existing.length) {
+      await sbFetch(
+        `qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${cfgOrderProc}`,
+        { method: 'PATCH', prefer: 'return=minimal', body: payload }
+      );
+    } else {
+      await sbFetch('qc_input_order', {
+        method: 'POST', prefer: 'return=minimal', body: [payload]
+      });
+    }
     renderInputOrder();
     savedEl.style.color = '#16a34a';
-    savedEl.textContent = `✓ ${cfgOrderProc==='machining'?'가공':'프레스'} 규칙 저장됨`;
+    savedEl.textContent = `✓ ${cfgOrderProc === 'machining' ? '가공' : '프레스'} 규칙 저장됨`;
   } catch(e) {
     savedEl.style.color = '#dc2626';
     savedEl.textContent = '저장 실패: ' + e.message;
