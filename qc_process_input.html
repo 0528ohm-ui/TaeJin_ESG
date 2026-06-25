@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.21</title>
+<title>공정검사 입력 v1.22</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.21</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.22</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -627,6 +627,11 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
     <!-- 부품 검색 -->
     <div class="card" style="margin-top:12px">
       <div class="card-title">📋 이력조회</div>
+      <!-- [v1.22] 고객사 필터 -->
+      <select class="inp" id="hist-customer-filter" onchange="applyHistFilter()"
+        style="margin-bottom:8px;font-weight:600">
+        <option value="">전체 고객사</option>
+      </select>
       <div class="part-search-wrap">
         <input class="inp" id="hist-part-search" type="text" placeholder="부품번호 또는 부품명 검색…"
           oninput="filterPartsHist(this.value)" onfocus="openDropdownHist()" onblur="setTimeout(closeDropdownHist,200)">
@@ -1137,6 +1142,10 @@ async function enterMain() {
   const customers = [...new Set(allParts.map(p => p.customer).filter(Boolean))].sort();
   const sel = document.getElementById('customer-filter');
   sel.innerHTML = '<option value="">전체</option>'
+    + customers.map(c => `<option value="${c}">${c}</option>`).join('');
+  // [v1.22] 이력조회 고객사 필터도 같은 목록으로 채우기
+  const histCustSel = document.getElementById('hist-customer-filter');
+  histCustSel.innerHTML = '<option value="">전체 고객사</option>'
     + customers.map(c => `<option value="${c}">${c}</option>`).join('');
 
   // 설비호기는 부품 추가 시 부품별로 자동 복원됨 (여기선 비워둠)
@@ -3676,12 +3685,14 @@ function applyHistFilter() {
   // [v0.58] 조회 결과 안에서 설비호기/금형호기로 추가 필터링
   const filterHo = document.getElementById('hist-filter-ho').value;
   const filterMold = document.getElementById('hist-filter-mold').value;
+  const filterCust = document.getElementById('hist-customer-filter').value; // [v1.22]
   const filtered = histInspections.filter(i =>
     (!filterHo || String(i.ho ?? '') === filterHo) &&
-    (!filterMold || String(i.mold_no ?? '') === filterMold)
+    (!filterMold || String(i.mold_no ?? '') === filterMold) &&
+    (!filterCust || (i.part?.customer || '') === filterCust) // [v1.22]
   );
   const rangeTxt = window._histRangeTxt || '';
-  const totalTxt = (filterHo || filterMold) ? ` / 전체 ${histInspections.length}건` : '';
+  const totalTxt = (filterHo || filterMold || filterCust) ? ` / 전체 ${histInspections.length}건` : '';
   document.getElementById('hist-count').textContent = `${filtered.length}건${totalTxt} · ${rangeTxt}`;
   if (!filtered.length) {
     document.getElementById('hist-list').innerHTML = '';
