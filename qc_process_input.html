@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.26</title>
+<title>공정검사 입력 v1.30</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.26</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.30</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1341,8 +1341,13 @@ async function loadVariant(part) {
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
   try {
-    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules`);
-    if (rr.length && Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
+    // [v1.27] insert_rules + group_orders 함께 로드. group_orders는 activeGroupOrders에 머지
+    //   (이게 없어서 껐다 켜면 측정 탭 연동 순서가 원본으로 원복되던 버그)
+    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules,group_orders`);
+    if (rr.length) {
+      if (Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
+      if (rr[0].group_orders && typeof rr[0].group_orders === 'object') Object.assign(activeGroupOrders, rr[0].group_orders);
+    }
   } catch(e){}
   return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules };
 }
@@ -1467,6 +1472,7 @@ async function confirmAddTab() {
   }
 
   document.getElementById('main-loading').style.display = 'block';
+  activeGroupOrders = {};  // [v1.27] 새 탭 생성 시 초기화 → loadVariant에서 이 부품 group_orders만 다시 로드
   try {
     let variants;
     if (pendingSel.isGroup) {
@@ -4907,8 +4913,21 @@ async function uploadDrawing(file) {
 }
 
 // ── 설정 spec 렌더링 ──
-function renderCfgSpecs() {
+async function renderCfgSpecs() {
   const el = document.getElementById('cfg-spec-list');
+  // [v1.30] 연동 그룹 카드(renderLinkManager)가 cfgGroupOrders를 참조하는데,
+  //   이 값 로드가 입력순서 탭(renderInputOrder)에만 있어 설정 탭 첫 진입 시 비어있던 버그.
+  //   여기서 직접 로드하되, 메모리에 이미 있는 키(방금 ▲▼로 바꾼 값)는 유지(머지).
+  if (cfgPart) {
+    try {
+      const grows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=group_orders`);
+      const fromDb = {};
+      grows.forEach(r => {
+        if (r.group_orders && typeof r.group_orders === 'object') Object.assign(fromDb, r.group_orders);
+      });
+      cfgGroupOrders = Object.assign(fromDb, cfgGroupOrders);
+    } catch(e){}
+  }
   const linkHtml = renderLinkManager();
   const rows = cfgSpecs.map((s, idx) => `
     <div class="cfg-spec-row" id="cfgrow-${s.id}">
@@ -5077,18 +5096,27 @@ async function renderInputOrder() {
   document.getElementById('cfg-order-press').classList.toggle('on', cfgOrderProc==='press');
   document.getElementById('cfg-order-mach').classList.toggle('on', cfgOrderProc==='machining');
 
-  // 저장본 로드 (부품 바뀌면 1회)
+  // 저장본 로드 (insert_rules는 부품 바뀌면 1회 캐시)
   if (cfgRules.__partId !== cfgPart.id) {
     cfgRules = { __partId: cfgPart.id };
-    cfgGroupOrders = {};  // [v1.25]
+    cfgGroupOrders = {};  // [v1.29] 부품 바뀌면 연동순서 메모리도 초기화 (이전 부품 키 잔재 제거)
     try {
-      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules,group_orders`);
+      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules`);
       rows.forEach(r => {
         cfgRules[r.process_type] = Array.isArray(r.insert_rules) ? r.insert_rules : [];
-        if (r.group_orders && typeof r.group_orders === 'object') Object.assign(cfgGroupOrders, r.group_orders);  // [v1.25]
       });
     } catch(e){}
   }
+  // [v1.29] group_orders는 매번 최신으로 다시 로드하되, 메모리에 이미 있는 키는 유지(머지).
+  //   (moveGroupMember가 방금 바꾼 순서를 DB 재로드가 덮어쓰지 않도록 메모리 우선)
+  try {
+    const grows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=group_orders`);
+    const fromDb = {};
+    grows.forEach(r => {
+      if (r.group_orders && typeof r.group_orders === 'object') Object.assign(fromDb, r.group_orders);
+    });
+    cfgGroupOrders = Object.assign(fromDb, cfgGroupOrders);  // 메모리 값이 DB값을 덮음(최신 우선)
+  } catch(e){}
   const rules = cfgRules[cfgOrderProc] || [];
   const specs = specsForProc(cfgOrderProc);
   const units = buildUnits(specs);
@@ -5423,8 +5451,18 @@ async function moveGroupMember(groupKey, specId, dir) {
   if (ni < 0 || ni >= ids.length) return;
   [ids[i], ids[ni]] = [ids[ni], ids[i]];
   cfgGroupOrders[groupKey] = ids;
-  // UI 즉시 갱신 (저장 전에 먼저)
   activeGroupOrders[groupKey] = ids;
+  // [v1.29] 저장할 myOrders를 renderCfgSpecs() 호출 '전에' 계산.
+  //   renderCfgSpecs 안에서 cfgGroupOrders를 DB(빈값)로 다시 읽어 덮어쓰므로,
+  //   여기서 먼저 스냅샷을 떠야 방금 바꾼 순서가 날아가지 않음.
+  const srcSpecs = (cfgSpecs && cfgSpecs.length) ? cfgSpecs : (specs || []);
+  const myGroupKeys = new Set(srcSpecs.filter(s => s.link_group).map(s => s.link_group));
+  myGroupKeys.add(groupKey);
+  const myOrders = {};
+  for (const k of Object.keys(cfgGroupOrders)) {
+    if (myGroupKeys.has(k)) myOrders[k] = cfgGroupOrders[k];
+  }
+  // UI 즉시 갱신
   if (specs && specs.length) renderSpecs();
   renderCfgSpecs();
   // 백그라운드 저장 (await 없이 비동기)
@@ -5434,10 +5472,10 @@ async function moveGroupMember(groupKey, specId, dir) {
         const existing = await sbFetch(`qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${proc}&select=id`);
         if (existing && existing.length) {
           await sbFetch(`qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${proc}`,
-            { method:'PATCH', prefer:'return=minimal', body:{ group_orders: cfgGroupOrders, updated_at: new Date().toISOString() } });
+            { method:'PATCH', prefer:'return=minimal', body:{ group_orders: myOrders, updated_at: new Date().toISOString() } });
         } else {
           await sbFetch('qc_input_order',
-            { method:'POST', prefer:'return=minimal', body:[{ part_id:cfgPart.id, process_type:proc, insert_rules:[], group_orders:cfgGroupOrders }] });
+            { method:'POST', prefer:'return=minimal', body:[{ part_id:cfgPart.id, process_type:proc, insert_rules:[], group_orders:myOrders }] });
         }
       }
       toast('✅ 그룹 순서 저장됨');
