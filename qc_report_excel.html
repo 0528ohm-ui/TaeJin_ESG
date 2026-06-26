@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.32 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.37 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -68,7 +68,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.32</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.37</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -424,7 +424,7 @@ async function reload(){
     // 4) 모든 검사 로드 — part_id별 최신1건(_lastInspByPartId) + 전체배열(_allInspByPartId)
     //   [v0.24] 생산일 기준 매칭을 위해 부품별 전체 프레스검사 목록이 필요 (최신1건만으론 부족)
     setStatus('⏳ qc_shipping_inspection 조회 중...');
-    const insps = await sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no&order=inspection_date.desc,id.desc');
+    const insps = await sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark&order=inspection_date.desc,id.desc');
     _lastInspByPartId = {};
     _allInspByPartId = {};
     insps.forEach(i => {
@@ -881,6 +881,61 @@ function extractProdDate(lotNo){
   return '';
 }
 
+// [v0.33] 로트 압축 — 같은 부분(접두) 빼고 다른 꼬리만 콤마로.
+//   입력: 배열 또는 문자열(줄바꿈/콤마 구분). 출력: 압축 문자열.
+//   예) CQBB663B-03-3 / -03-4 / -03-5  → CQBB663B-03-3,4,5
+//       CQBB663B-03-3 / -04-1          → CQBB663B-03-3,04-1  (가운데 다르면 거기부터)
+//       CPCC314C-1 / -2 / -3           → CPCC314C-1,2,3
+//       제품코드(첫 '-' 앞)가 다르면 ' / '로 분리해 따로 표기.
+//   안전장치: 공통접두는 '-' 경계까지만 잘라 -1 과 -12 를 -1,2 로 잘못 합치지 않음.
+//            꼬리는 숫자 자연정렬(numeric)로 1,2,10 순서 보장.
+function compressLots(raw){
+  let list = Array.isArray(raw) ? raw.slice() : String(raw || '').split(/[\n,]+/);
+  list = [...new Set(list.map(s => String(s).trim()).filter(Boolean))];
+  if(list.length === 0) return '';
+  if(list.length === 1) return list[0];
+
+  const natSort = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+  // 제품코드(첫 '-' 앞)별 그룹
+  const groups = {};
+  for(const lot of list){
+    const base = lot.includes('-') ? lot.slice(0, lot.indexOf('-')) : lot;
+    (groups[base] = groups[base] || []).push(lot);
+  }
+  const parts = Object.keys(groups).sort(natSort).map(base => {
+    const g = groups[base].sort(natSort);
+    if(g.length === 1) return g[0];
+    // 최장 공통 접두 → '-' 경계까지만 잘라 숫자 중간 분리 방지
+    let pre = g[0];
+    for(const s of g){ while(!s.startsWith(pre)) pre = pre.slice(0, -1); }
+    const cut = pre.lastIndexOf('-');
+    pre = cut >= 0 ? pre.slice(0, cut + 1) : '';
+    const tails = g.map(s => s.slice(pre.length)).sort(natSort);
+    return pre + tails.join(',');
+  });
+  return parts.join(' / ');
+}
+
+// [v0.34] 출하 lot 문자열에서 생산일(들) 추출 → ['YYYY-MM-DD', ...]
+//   출하데이터(move_history_tj)의 lot은 자재로트가 아니라 '생산일'이 들어옴.
+//   '20260622/0623' → ['2026-06-22','2026-06-23']  (뒤 MMDD는 앞 토큰 연도 상속)
+//   '20260622'      → ['2026-06-22']
+//   '260622'        → ['2026-06-22']  (6자리 YYMMDD)
+function lotDates(lotStr){
+  const toks = String(lotStr || '').split(/[\/,\s]+/).filter(Boolean);
+  const out = []; let lastY = '';
+  for(const t of toks){
+    let y, mo, d;
+    if(/^\d{8}$/.test(t)){ y = t.slice(0,4); mo = t.slice(4,6); d = t.slice(6,8); }
+    else if(/^\d{6}$/.test(t)){ y = '20' + t.slice(0,2); mo = t.slice(2,4); d = t.slice(4,6); }
+    else if(/^\d{4}$/.test(t)){ y = lastY; mo = t.slice(0,2); d = t.slice(2,4); }  // MMDD → 직전 연도 상속
+    else continue;
+    if(!y) continue; lastY = y;
+    out.push(`${y}-${mo}-${d}`);
+  }
+  return [...new Set(out)];
+}
+
 let _templateBuf = null;
 
 function cloneSheet(wb, srcWs, name){
@@ -1097,6 +1152,33 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
     ws.getCell('D95').value = '';                     // 하단 주석 1
     ws.getCell('D96').value = '';                     // 하단 주석 2
     ws.getCell('D97').value = '';                     // 하단 주석 3
+
+    // [v0.37] 비고(H90·내용칸)에 사용된 소재 로트 표기.
+    //   ※ 부강 공정검사에선 자재로트를 lot_no가 아니라 remark(비고) 컬럼에 적음 (예: 'AT44821A-9').
+    //   흐름: 같은 출하일+제품의 출하행 lot(=생산일) → 생산일들 추출 → 그 생산일에 검사한
+    //         이 제품 공정검사의 remark를 모아 압축.
+    //   예) 출하 '20260622/0623' → 생산일 6/22,6/23 → remark -9/-10/-11 → 'AT44821A-9,10,11'
+    //       (6/08 검사 -8 등 범위 밖은 자동 제외, 같은 로트 중복은 dedup)
+    //   ※ remark에 로트만 적는 운영 전제. 잡텍스트가 섞이면 그대로 들어오니 주의.
+    //   하단 89~97은 고정 행(숨김 대상 밖)이라 H90 위치 항상 동일. 우측 X열까지 비어 오버플로 여유.
+    try {
+      const _ships = (typeof _allShipments !== 'undefined' ? _allShipments : [])
+        .filter(x => x.reg_date === s.reg_date && x.part_no === s.part_no);
+      const _prodDays = new Set(_ships.flatMap(x => lotDates(x.lot_no)));
+      const _pid = p.id ?? full.part_id;
+      const _insps = (typeof _allInspByPartId !== 'undefined' ? (_allInspByPartId[_pid] || []) : []);
+      const _bad = v => v == null || !String(v).trim() || String(v).trim().toLowerCase() === 'null';
+      let _matLots = _insps.filter(i => _prodDays.has(i.inspection_date))
+        .map(i => i.remark).filter(v => !_bad(v));
+      // 매칭 0건이면 이 성적서 검사 1건의 remark라도 사용
+      if(_matLots.length === 0 && !_bad(full.remark)) _matLots = [full.remark];
+      const _lotText = compressLots(_matLots);
+      if(_lotText){
+        const c90 = ws.getCell('H90');
+        c90.value = _lotText;
+        c90.alignment = { horizontal: 'left', vertical: 'middle' };  // shrinkToFit 금지 → 오버플로 사용
+      }
+    } catch(e){ /* 로트 표기 실패는 성적서 생성 막지 않음 */ }
   }
   // SKF/우창산업은 템플릿 값 그대로 사용 (덮어쓰지 않음)
   
