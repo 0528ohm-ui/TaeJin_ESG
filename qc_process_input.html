@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.24</title>
+<title>공정검사 입력 v1.25</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.24</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.25</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -946,6 +946,7 @@ let selectedPart = null;
 let specs = [];
 let specInputs = {};
 let activeRules = [];   // [v1.17] 현재 탭의 입력 흐름 삽입 규칙
+let activeGroupOrders = {};  // [v1.25] 연동 그룹 내 멤버 순서 { groupId: [specId, ...] }
 
 // ── PIN 입력 버퍼 ──
 let pinBuf = '';
@@ -1715,7 +1716,13 @@ function applyPrefilledClasses() {
 
 // 연동 그룹 카드 렌더 — 패턴 분기
 function renderLinkedCard(linkGroup) {
-  const members = specs.filter(s => s.link_group === linkGroup);
+  let members = specs.filter(s => s.link_group === linkGroup);
+  // [v1.25] 저장된 멤버 순서(activeGroupOrders) 적용
+  const savedOrder = activeGroupOrders[linkGroup];
+  if (savedOrder && savedOrder.length) {
+    members = [...savedOrder.map(id => members.find(s => s.id === id)).filter(Boolean),
+               ...members.filter(s => !savedOrder.includes(s.id))];
+  }
   const isGrid = members.some(s => s.link_role === 'grid');
   if (isGrid) return renderGridCard(linkGroup, members);
   return renderRowColCard(linkGroup, members);
@@ -1723,7 +1730,7 @@ function renderLinkedCard(linkGroup) {
 
 // 패턴 B (형상측정기): 항목 여러 개가 모두 N포인트, 같은 i포인트끼리 한 행
 function renderGridCard(linkGroup, members) {
-  const cols = members.sort((a,b)=>a.item_no-b.item_no);
+  const cols = members;  // [v1.25] 순서는 renderLinkedCard에서 activeGroupOrders로 이미 결정
   // 행 수 = 최대 포인트 수 (각 항목 measure_points 기준)
   const N = Math.max(...cols.map(c => specInputs[c.id]?.vals?.length || c.measure_points || 4));
 
@@ -1766,8 +1773,8 @@ function renderGridCard(linkGroup, members) {
 
 // 패턴 A (외경+진원도): 기준 항목 N개(각 1포인트) + 연동 항목(N포인트)
 function renderRowColCard(linkGroup, members) {
-  const rowSpecs = members.filter(s => s.link_role === 'row').sort((a,b)=>a.item_no-b.item_no);
-  const colSpecs = members.filter(s => s.link_role === 'col').sort((a,b)=>a.item_no-b.item_no);
+  const rowSpecs = members.filter(s => s.link_role === 'row');  // [v1.25] 순서 유지
+  const colSpecs = members.filter(s => s.link_role === 'col');  // [v1.25] 순서 유지
   const N = rowSpecs.length;  // 행 수 = 기준 항목 개수
 
   // 헤더: 기준 항목명(대표) + 연동 항목명들
@@ -5009,6 +5016,7 @@ function renderCfgSpecs() {
 // ══════════════════════════════════
 let cfgOrderProc = 'press';     // 현재 편집 중인 탭
 let cfgRules = {};              // {press:[rule...], machining:[...]} DB 저장본 + __partId
+let cfgGroupOrders = {};        // [v1.25] 연동 그룹 멤버 순서 { groupId:[specId,...] }
 
 // 해당 탭에서 입력 대상이 되는 spec (입력 화면과 동일 필터)
 function specsForProc(proc) {
@@ -5073,9 +5081,13 @@ async function renderInputOrder() {
   // 저장본 로드 (부품 바뀌면 1회)
   if (cfgRules.__partId !== cfgPart.id) {
     cfgRules = { __partId: cfgPart.id };
+    cfgGroupOrders = {};  // [v1.25]
     try {
-      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules`);
-      rows.forEach(r => { cfgRules[r.process_type] = Array.isArray(r.insert_rules)?r.insert_rules:[]; });
+      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules,group_orders`);
+      rows.forEach(r => {
+        cfgRules[r.process_type] = Array.isArray(r.insert_rules) ? r.insert_rules : [];
+        if (r.group_orders && typeof r.group_orders === 'object') Object.assign(cfgGroupOrders, r.group_orders);  // [v1.25]
+      });
     } catch(e){}
   }
   const rules = cfgRules[cfgOrderProc] || [];
@@ -5241,19 +5253,29 @@ function renderLinkManager() {
     groupsHtml = `<div style="font-size:12px;color:#94a3b8;padding:8px 0">아직 연동 그룹이 없습니다</div>`;
   } else {
     groupsHtml = groupKeys.map(gk => {
-      const mem = groups[gk].sort((a,b)=>a.item_no-b.item_no);
+      // [v1.25] 저장된 순서 우선, 없으면 item_no 오름차순
+      const base = groups[gk].sort((a,b)=>a.item_no-b.item_no);
+      const saved = cfgGroupOrders[gk];
+      const mem = saved && saved.length
+        ? [...saved.map(id=>base.find(s=>s.id===id)).filter(Boolean), ...base.filter(s=>!saved.includes(s.id))]
+        : base;
       const isGrid = mem.some(s => s.link_role === 'grid');
       const ptn = isGrid ? '형상형' : '외경형';
-      const nos = mem.map(s => `No.${s.item_no} ${s.item_name}`).join(', ');
+      const memberRows = mem.map((s, i) => `
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #ede9fe">
+          <span style="flex:1;font-size:12px;color:#5b21b6">No.${s.item_no} ${s.item_name}</span>
+          <button onclick="moveGroupMember('${gk}',${s.id},-1)" ${i===0?'disabled':''} style="border:1px solid #ddd6fe;background:${i===0?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===0?'default':'pointer'};font-size:13px;line-height:1">▲</button>
+          <button onclick="moveGroupMember('${gk}',${s.id},1)" ${i===mem.length-1?'disabled':''} style="border:1px solid #ddd6fe;background:${i===mem.length-1?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===mem.length-1?'default':'pointer'};font-size:13px;line-height:1">▼</button>
+        </div>`).join('');
       return `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
           <div style="flex:1">
             <span style="font-size:10px;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700">${ptn}</span>
-            <span style="font-size:12px;color:#5b21b6;margin-left:6px">${mem.length}개 항목</span>
+            <span style="font-size:12px;color:#5b21b6;margin-left:6px">${mem.length}개 항목 · 입력 순서</span>
           </div>
           <button onclick="unlinkGroup('${gk.replace(/'/g,"\\'")}')" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">연동 해제</button>
         </div>
-        <div style="font-size:11px;color:#7c3aed;margin-top:6px">${nos}</div>
+        ${memberRows}
       </div>`;
     }).join('');
   }
@@ -5384,6 +5406,44 @@ async function createLinkGroup() {
     savedEl.textContent = '생성 실패: ' + e.message;
     savedEl.style.color = '#dc2626';
   }
+}
+
+// [v1.25] 연동 그룹 멤버 순서 변경 (▲▼)
+async function moveGroupMember(groupKey, specId, dir) {
+  if (!cfgPart) { toast('설정 탭에서 부품을 먼저 선택하세요'); return; }
+  // 현재 순서 가져오기
+  const base = cfgSpecs.filter(s => s.link_group === groupKey).sort((a,b)=>a.item_no-b.item_no);
+  const saved = cfgGroupOrders[groupKey];
+  let order = saved && saved.length
+    ? [...saved.map(id=>base.find(s=>s.id===id)).filter(Boolean), ...base.filter(s=>!saved.includes(s.id))]
+    : base;
+  const ids = order.map(s => s.id);
+  const i = ids.indexOf(specId);
+  if (i < 0) return;
+  const ni = i + dir;
+  if (ni < 0 || ni >= ids.length) return;
+  [ids[i], ids[ni]] = [ids[ni], ids[i]];
+  cfgGroupOrders[groupKey] = ids;
+  // UI 즉시 갱신 (저장 전에 먼저)
+  activeGroupOrders[groupKey] = ids;
+  if (specs && specs.length) renderSpecs();
+  renderCfgSpecs();
+  // 백그라운드 저장 (await 없이 비동기)
+  (async () => {
+    try {
+      for (const proc of ['press', 'machining']) {
+        const existing = await sbFetch(`qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${proc}&select=id`);
+        if (existing && existing.length) {
+          await sbFetch(`qc_input_order?part_id=eq.${cfgPart.id}&process_type=eq.${proc}`,
+            { method:'PATCH', prefer:'return=minimal', body:{ group_orders: cfgGroupOrders, updated_at: new Date().toISOString() } });
+        } else {
+          await sbFetch('qc_input_order',
+            { method:'POST', prefer:'return=minimal', body:[{ part_id:cfgPart.id, process_type:proc, insert_rules:[], group_orders:cfgGroupOrders }] });
+        }
+      }
+      toast('✅ 그룹 순서 저장됨');
+    } catch(e) { toast('저장 실패: ' + e.message); }
+  })();
 }
 
 // 연동 해제
