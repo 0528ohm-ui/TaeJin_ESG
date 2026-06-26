@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.30</title>
+<title>공정검사 입력 v1.31</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.30</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.31</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -520,32 +520,32 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="row2" style="margin-bottom:10px">
         <div>
           <label>검사일</label>
-          <input class="inp" id="insp-date" type="date">
+          <input class="inp" id="insp-date" type="date" onchange="persistDraft()">
         </div>
         <div>
           <label>검사시간</label>
-          <input class="inp" id="insp-time" type="time">
+          <input class="inp" id="insp-time" type="time" onchange="persistDraft()">
         </div>
       </div>
       <div class="row2" style="margin-bottom:10px" id="insp-ho-mold-row">
         <div>
           <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(직전값 자동)</span></label>
-          <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px">
+          <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px" onchange="persistDraft()">
         </div>
         <div>
           <label>금형호기</label>
-          <input class="inp" id="insp-mold" type="text" placeholder="예) 1호기 …" style="margin-top:4px">
+          <input class="inp" id="insp-mold" type="text" placeholder="예) 1호기 …" style="margin-top:4px" onchange="persistDraft()">
         </div>
       </div>
       <div style="margin-bottom:10px">
         <label>측정사유</label>
-        <select class="inp" id="insp-reason" style="margin-top:4px">
+        <select class="inp" id="insp-reason" style="margin-top:4px" onchange="persistDraft()">
           <option value="">선택 안 함</option>
         </select>
       </div>
       <div>
         <label>비고 <span style="color:#94a3b8;font-weight:400;font-size:11px">(선택)</span></label>
-        <input class="inp" id="insp-remark" type="text" placeholder="특이사항 입력…" style="margin-top:4px">
+        <input class="inp" id="insp-remark" type="text" placeholder="특이사항 입력…" style="margin-top:4px" onchange="persistDraft()">
       </div>
     </div>
 
@@ -898,7 +898,8 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 // 상수 / 전역 상태
 // ══════════════════════════════════
 const SK = {
-  AUTH: 'QC_PROCESS_AUTH'
+  AUTH: 'QC_PROCESS_AUTH',
+  DRAFT: 'QC_PROCESS_DRAFT'   // [v1.31] 입력 중인 탭 전체 임시저장 (껐다 켜도 유지)
 };
 
 // Supabase 연결 정보 (하드코딩 — anon 키는 RLS로 보호됨)
@@ -1150,6 +1151,9 @@ async function enterMain() {
     + customers.map(c => `<option value="${c}">${c}</option>`).join('');
 
   // 설비호기는 부품 추가 시 부품별로 자동 복원됨 (여기선 비워둠)
+
+  // [v1.31] 저장돼 있던 입력 중 탭 복원 (allParts/reasons 로드 후, 세동 마감 체크 전)
+  restoreDraft();
 
   // [v0.47] 세동 9시간대 마감 체크 (백그라운드 — 실패해도 메인 진입 무해)
   checkSedongClose();
@@ -1526,6 +1530,54 @@ function stashActiveTab() {
   }
 }
 
+// ══════════════════════════════════
+// [v1.31] 입력 중인 탭 임시저장 (드래프트)
+//   - tabs 배열 전체를 localStorage에 스냅샷 → 페이지 껐다 켜도 복원.
+//   - 측정값은 tabs[].variants[].inputs 메모리에 실시간 반영되므로 통째 직렬화하면 항목·값 모두 보존됨.
+//   - 저장(saveAll/saveSedong) 성공 시 그 탭은 closeTab으로 빠지고, 직접 X로 닫아도 빠짐 → 그때마다 다시 써서 자동 제거됨.
+//   - 날짜/시각/슬롯은 탭 생성(부품 선택) 시점 값 그대로 보존 (요구사항).
+// ══════════════════════════════════
+let _draftTimer = null;
+function persistDraft() {
+  // 연타 대비 400ms 디바운스
+  clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(persistDraftNow, 400);
+}
+function persistDraftNow() {
+  try {
+    stashActiveTab();   // 활성 탭의 검사정보(date/time/호기/사유/비고) + scrollY를 tabs에 먼저 동기화
+    if (!tabs.length) { localStorage.removeItem(SK.DRAFT); return; }
+    localStorage.setItem(SK.DRAFT, JSON.stringify({
+      v: 1,
+      savedAt: Date.now(),
+      procMode,
+      activeTabIdx,
+      tabs
+    }));
+  } catch (e) {
+    // 용량 초과 등 — 무해. 다음 입력에서 재시도됨.
+    console.warn('[draft] 저장 실패(무시):', e.message);
+  }
+}
+function clearDraft() {
+  clearTimeout(_draftTimer);
+  try { localStorage.removeItem(SK.DRAFT); } catch (e) {}
+}
+// 페이지 로드(로그인) 후 저장돼 있던 탭 복원
+function restoreDraft() {
+  let raw;
+  try { raw = localStorage.getItem(SK.DRAFT); } catch (e) { return; }
+  if (!raw) return;
+  let d;
+  try { d = JSON.parse(raw); } catch (e) { clearDraft(); return; }
+  if (!d || !Array.isArray(d.tabs) || !d.tabs.length) { clearDraft(); return; }
+  tabs = d.tabs;
+  procMode = d.procMode || 'press';
+  activeTabIdx = -1;   // switchTab에서 직전 탭 stash 시도 방지
+  const idx = (d.activeTabIdx >= 0 && d.activeTabIdx < tabs.length) ? d.activeTabIdx : 0;
+  switchTab(idx);      // applyVariant→renderSpecs가 inputs 값으로 입력칸을 다시 그림
+}
+
 function switchTab(idx) {
   if (idx < 0 || idx >= tabs.length) return;
   stashActiveTab();
@@ -1558,6 +1610,7 @@ function switchTab(idx) {
   // 활성 variant가 마지막으로 보던 위치로 복원 (렌더 완료 후)
   const targetY = t.variants[t.activeVariant]?.scrollY || 0;
   requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, targetY)));
+  persistDraft();   // [v1.31] 탭 추가/전환/닫기 후 상태 스냅샷
 }
 
 // 활성 variant의 specs/inputs를 포인터에 적용 + variant 토글 갱신
@@ -1612,6 +1665,7 @@ function switchVariant(vi) {
   // 렌더 직후엔 레이아웃 높이가 안 잡혀 scrollTo가 무시됨 → rAF 2번으로 렌더 완료 후 복원
   const targetY = t.variants[vi]?.scrollY || 0;
   requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, targetY)));
+  persistDraft();   // [v1.31] variant 전환도 활성 variant 바뀌므로 스냅샷
 }
 
 // variant에 입력값이 있는지
@@ -1642,6 +1696,7 @@ function closeTab(idx, ev, skipConfirm) {
     document.getElementById('drawing-bar').style.display = 'none';
     document.getElementById('variant-toggle').style.display = 'none';
     renderTabBar();
+    clearDraft();   // [v1.31] 열린 탭 0개 → 드래프트 비움
     return;
   }
   // 닫은 탭 기준으로 active 보정
@@ -1957,6 +2012,7 @@ function setVisual(id, val) {
   document.getElementById(`vt-ok-${id}`).classList.toggle('ok-sel', val === 'OK');
   document.getElementById(`vt-ng-${id}`).classList.toggle('ng-sel', val === 'NG');
   updateCardState(id);
+  persistDraft();   // [v1.31] 외관 OK/NG 변경 → 드래프트 갱신
   // [v1.24] 외관 OK/NG 선택 후 규칙 순서대로 다음 입력칸으로 자동 이동
   //   orderedInputs()는 vt-ok 마커를 anchor로 참조한 뒤 pt-inp만 반환하므로
   //   외관이 규칙의 anchor로 쓰인 항목이 첫 번째로 오게 됨.
@@ -1978,6 +2034,7 @@ function setMinMax(id, key, el) {
   el.classList.remove('prefilled');
   el.classList.toggle('touched', el.value !== '');
   updateCardState(id);
+  persistDraft();   // [v1.31] min/max 변경 → 드래프트 갱신
 }
 
 function setPt(id, idx, el) {
@@ -1993,6 +2050,7 @@ function setPt(id, idx, el) {
   el.classList.remove('ok', 'ng');
   if (cls) el.classList.add(cls);
   updateCardState(id);
+  persistDraft();   // [v1.31] 측정값 변경 → 드래프트 갱신
 }
 
 // ══════════════════════════════════
@@ -2460,6 +2518,7 @@ function changeCount(id, delta) {
   else inp.vals.pop();
   refreshCard(id);
   persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 (저장 안 해도 유지)
+  persistDraft();       // [v1.31] 칸수 변경 → 드래프트 갱신
 }
 
 // [v0.37] 측정 탭에서 바꾼 칸수/모드를 qc_part_spec 에 즉시 PATCH (디바운스)
@@ -4143,6 +4202,7 @@ function setNote(id, val) {
   if (specInputs[id]) specInputs[id].note = val;
   const btn = document.getElementById(`note-btn-${id}`);
   if (btn) btn.classList.toggle('has', val.trim() !== '');
+  persistDraft();   // [v1.31] 노트 변경 → 드래프트 갱신
 }
 
 function fmtNum(v) {
