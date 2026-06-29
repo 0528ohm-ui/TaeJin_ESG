@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.34</title>
+<title>공정검사 입력 v1.37</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -91,17 +91,20 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 
 /* [v0.38] 마우스 조절 패널 — PC 전사용 빠른 값 조정 */
 input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;background:#eff6ff}
-.adj-panel{display:none;position:fixed;right:18px;bottom:18px;width:300px;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:300;overflow:hidden;border:1px solid #e2e8f0}
+.adj-panel{display:none;position:fixed;right:18px;bottom:18px;width:340px;max-width:calc(100vw - 24px);background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:300;overflow:hidden;border:1px solid #e2e8f0}
 .adj-panel.open{display:block}
-.adj-panel-hdr{background:#1e3a5f;color:#fff;padding:10px 14px;font-size:12px}
+.adj-panel-hdr{background:#1e3a5f;color:#fff;padding:9px 14px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .adj-panel-hdr .adj-item{font-size:13px;font-weight:700}
 .adj-panel-hdr .adj-pos{opacity:.75;font-size:11px}
-.adj-panel-val{text-align:center;font-size:26px;font-weight:800;color:#0f172a;padding:14px 0 8px;letter-spacing:.5px}
-.adj-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:0 12px}
-.adj-grid button{border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:700;cursor:pointer}
+.adj-panel-hdr .adj-hdr-val{font-size:24px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
+.adj-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:14px 14px 0}
+.adj-grid button{border:none;border-radius:9px;padding:14px 0;font-size:15px;font-weight:700;cursor:pointer}
 .adj-grid button.plus{background:#fde7c8;color:#9a5b13}
 .adj-grid button.plus:active{background:#fbd49a}
 .adj-grid button.minus{background:#c8f3f0;color:#0f6b63}
+.adj-grid button.minus.fine,.adj-grid button.plus.fine{font-size:13px;padding:12px 0;opacity:.92}
+.adj-grid button.plus.fine{background:#fdf1e0;color:#b06a1d}
+.adj-grid button.minus.fine{background:#dcf6f3;color:#13837a}
 .adj-grid button.minus:active{background:#a6e8e3}
 .adj-panel-footer{display:flex;gap:8px;padding:12px}
 .adj-panel-footer button{flex:1;border:none;border-radius:8px;padding:11px 0;font-size:13px;font-weight:800;cursor:pointer}
@@ -439,7 +442,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.34</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.37</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -567,14 +570,21 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="drawing-img-wrap" id="drawing-img-wrap"></div>
     </div>
 
-    <!-- [v0.38] 마우스 조절 패널 -->
+    <!-- [v0.38] 마우스 조절 패널  [v1.35] 값을 헤더로 통합 + 0.001 미세조정 행 추가 -->
     <div class="adj-panel" id="adj-panel">
       <div class="adj-panel-hdr">
-        <div class="adj-item" id="adj-item-name">—</div>
-        <div class="adj-pos" id="adj-pos-label">—</div>
+        <div class="adj-hdr-left">
+          <div class="adj-item" id="adj-item-name">—</div>
+          <div class="adj-pos" id="adj-pos-label">—</div>
+        </div>
+        <div class="adj-hdr-val" id="adj-panel-val">—</div>
       </div>
-      <div class="adj-panel-val" id="adj-panel-val">—</div>
       <div class="adj-grid">
+        <button class="plus fine" onclick="bumpAdjust(0.001)">+.001</button>
+        <button class="plus fine" onclick="bumpAdjust(0.002)">+.002</button>
+        <button class="plus fine" onclick="bumpAdjust(0.003)">+.003</button>
+        <button class="plus fine" onclick="bumpAdjust(0.004)">+.004</button>
+        <button class="plus fine" onclick="bumpAdjust(0.005)">+.005</button>
         <button class="plus" onclick="bumpAdjust(0.01)">+0.01</button>
         <button class="plus" onclick="bumpAdjust(0.02)">+0.02</button>
         <button class="plus" onclick="bumpAdjust(0.03)">+0.03</button>
@@ -585,6 +595,11 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <button class="minus" onclick="bumpAdjust(-0.03)">−0.03</button>
         <button class="minus" onclick="bumpAdjust(-0.04)">−0.04</button>
         <button class="minus" onclick="bumpAdjust(-0.05)">−0.05</button>
+        <button class="minus fine" onclick="bumpAdjust(-0.001)">−.001</button>
+        <button class="minus fine" onclick="bumpAdjust(-0.002)">−.002</button>
+        <button class="minus fine" onclick="bumpAdjust(-0.003)">−.003</button>
+        <button class="minus fine" onclick="bumpAdjust(-0.004)">−.004</button>
+        <button class="minus fine" onclick="bumpAdjust(-0.005)">−.005</button>
       </div>
       <div class="adj-panel-footer">
         <button class="adj-btn-switch" onclick="switchInputMode()">⇄ 숫자</button>
@@ -1363,8 +1378,14 @@ async function loadVariant(part) {
   lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong);
   // [v1.33] 세동: 같은 날 직전 슬롯의 칸별 원본이 기기 캐시에 있으면 DB 평균 1개 prefill을 덮어 칸별로 복원
   if (sedong) {
-    const today = document.getElementById('insp-date')?.value || new Date().toISOString().slice(0, 10);
-    sedongRawPrefill(part.id, today, inputs);
+    // [v1.37] 키 날짜는 KST 기준 오늘로 통일 (toISOString의 UTC 어긋남 방지). insp-date 있으면 우선.
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const kstToday = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    const today = document.getElementById('insp-date')?.value || kstToday;
+    const ok = sedongRawPrefill(part.id, today, inputs);
+    console.log('[sedongRaw 진단] prefill 시도 partId=', part.id, 'date=', today, '적용=', ok,
+      '| 캐시키들=', Object.keys(localStorage).filter(k => k.startsWith('QC_SEDONG_RAW')));
   }
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
@@ -1613,6 +1634,7 @@ function sedongRawSave(partId, date, slot, specs, inputs) {
       }
     });
     if (Object.keys(slotMap).length) { store[slot] = slotMap; localStorage.setItem(k, JSON.stringify(store)); }
+    console.log('[sedongRaw 진단] 저장 key=', k, 'slot=', slot, '항목수=', Object.keys(slotMap).length);
   } catch (e) { console.warn('[sedongRaw] 저장 실패(무시):', e.message); }
 }
 // 직전(가장 큰 번호) 슬롯의 칸 원본을 inputs에 prefill. 적용했으면 true.
