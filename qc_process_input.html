@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.31</title>
+<title>공정검사 입력 v1.33</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -437,7 +437,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.31</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.33</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1286,7 +1286,7 @@ function countUnmeasured(variant) {
 //   같은 부품의 최신 inspection 1건을 가져와 spec_id 기준으로 매칭, 칸별로 prefill.
 //   실패해도 입력 자체엔 영향 없도록 조용히 무시.
 //   [v0.42] 항목별 메모(note)와 전체 비고(remark)도 직전값으로 같이 채움 — remark는 반환해서 탭 생성 시 사용.
-async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
+async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false) {
   try {
     const lastInsp = await sbAll('qc_shipping_inspection',
       `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark`);
@@ -1308,13 +1308,30 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs) {
       const xs = [r.x1, r.x2, r.x3, r.x4, r.x5, r.x6, r.x7, r.x8, r.x9, r.x10];
       if (inp.type === 'minmax') {
         const nonNull = xs.filter(v => v != null);
-        if (nonNull.length >= 2) {
+        if (sedong) {
+          // [v1.32] 세동: 슬롯당 1칸 저장 → 마지막 채워진 슬롯값 하나로 min·max 둘 다 prefill
+          if (nonNull.length) {
+            const rep = String(nonNull[nonNull.length - 1]);
+            inp.min = rep; inp.prefilledMin = true;
+            inp.max = rep; inp.prefilledMax = true;
+          }
+        } else if (nonNull.length >= 2) {
           inp.min = String(nonNull[0]); inp.prefilledMin = true;
           inp.max = String(nonNull[nonNull.length - 1]); inp.prefilledMax = true;
         }
       } else {
-        for (let i = 0; i < inp.vals.length; i++) {
-          if (xs[i] != null) { inp.vals[i] = String(xs[i]); inp.prefilled[i] = true; }
+        // [v1.32] 세동: 슬롯별 1칸 저장 구조(x{slot})라 위치 매핑이 안 맞음.
+        //   → 가장 최근 채워진 슬롯값을 대표로 vals[0]에 prefill (직전 슬롯 참고용)
+        if (sedong) {
+          const filled = xs.filter(v => v != null);
+          if (filled.length && inp.vals.length) {
+            inp.vals[0] = String(filled[filled.length - 1]);
+            inp.prefilled[0] = true;
+          }
+        } else {
+          for (let i = 0; i < inp.vals.length; i++) {
+            if (xs[i] != null) { inp.vals[i] = String(xs[i]); inp.prefilled[i] = true; }
+          }
         }
       }
     });
@@ -1341,7 +1358,12 @@ async function loadVariant(part) {
   // [v1.26] 세동도 직전 검사일 값 prefill 적용 — 매일 첫 측정 시 기본값 참조.
   //   (이전: 세동만 건너뜀 → 매일 처음엔 모든 값 수동 입력 필요해서 복구)
   let lastRemark = '';
-  lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs);
+  lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong);
+  // [v1.33] 세동: 같은 날 직전 슬롯의 칸별 원본이 기기 캐시에 있으면 DB 평균 1개 prefill을 덮어 칸별로 복원
+  if (sedong) {
+    const today = document.getElementById('insp-date')?.value || new Date().toISOString().slice(0, 10);
+    sedongRawPrefill(part.id, today, inputs);
+  }
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
   try {
@@ -1562,6 +1584,64 @@ function persistDraftNow() {
 function clearDraft() {
   clearTimeout(_draftTimer);
   try { localStorage.removeItem(SK.DRAFT); } catch (e) {}
+}
+
+// ══════════════════════════════════
+// [v1.33] 세동 슬롯별 "칸 원본값" 캐시 (같은 기기 한정)
+//   - DB(qc_shipping_measurement)는 슬롯당 평균 1개(x{slot})만 저장 → X1·X2·X3 원본 소실.
+//   - 다음 슬롯 열 때 직전 슬롯의 칸별 원본을 그대로 prefill하려면 별도 보관 필요.
+//   - 같은 기기에서만 보면 되므로 localStorage에 부품+날짜 단위로 캐시.
+//   - 키: QC_SEDONG_RAW :: {partId} :: {date}  →  { [slot]: { [specId]: {type, vals|min,max} } }
+// ══════════════════════════════════
+function sedongRawKey(partId, date) { return `QC_SEDONG_RAW::${partId}::${date}`; }
+function sedongRawSave(partId, date, slot, specs, inputs) {
+  try {
+    const k = sedongRawKey(partId, date);
+    let store = {};
+    try { store = JSON.parse(localStorage.getItem(k) || '{}'); } catch (e) {}
+    const slotMap = {};
+    specs.forEach(s => {
+      const inp = inputs[s.id];
+      if (!inp || s.is_visual) return;
+      if (inp.type === 'minmax') {
+        if (inp.min !== '' || inp.max !== '') slotMap[s.id] = { type: 'minmax', min: inp.min, max: inp.max };
+      } else {
+        // 사용자가 실제로 채운 칸이 하나라도 있을 때만 (전부 빈 슬롯은 캐시 안 함)
+        if (inp.vals.some(x => x !== '' && x != null)) slotMap[s.id] = { type: 'points', vals: inp.vals.slice() };
+      }
+    });
+    if (Object.keys(slotMap).length) { store[slot] = slotMap; localStorage.setItem(k, JSON.stringify(store)); }
+  } catch (e) { console.warn('[sedongRaw] 저장 실패(무시):', e.message); }
+}
+// 직전(가장 큰 번호) 슬롯의 칸 원본을 inputs에 prefill. 적용했으면 true.
+function sedongRawPrefill(partId, date, inputs) {
+  try {
+    const raw = localStorage.getItem(sedongRawKey(partId, date));
+    if (!raw) return false;
+    const store = JSON.parse(raw);
+    const slots = Object.keys(store).map(Number).sort((a, b) => b - a);   // 큰 슬롯 우선
+    if (!slots.length) return false;
+    const slotMap = store[slots[0]];
+    let applied = false;
+    Object.entries(slotMap).forEach(([sid, saved]) => {
+      const inp = inputs[sid];
+      if (!inp) return;
+      if (saved.type === 'minmax' && inp.type === 'minmax') {
+        inp.min = saved.min; inp.prefilledMin = true;
+        inp.max = saved.max; inp.prefilledMax = true;
+        applied = true;
+      } else if (saved.type === 'points' && inp.type === 'points') {
+        // 칸 수는 현재 설정(measure_points)에 맞춰 saved 값으로 덮어쓰기
+        for (let i = 0; i < inp.vals.length; i++) {
+          if (saved.vals[i] !== undefined && saved.vals[i] !== '' && saved.vals[i] != null) {
+            inp.vals[i] = String(saved.vals[i]); inp.prefilled[i] = true;
+          }
+        }
+        applied = true;
+      }
+    });
+    return applied;
+  } catch (e) { return false; }
 }
 // 페이지 로드(로그인) 후 저장돼 있던 탭 복원
 function restoreDraft() {
@@ -3069,6 +3149,8 @@ async function saveSedong(t) {
         });
         await sbFetch('qc_shipping_measurement', { method: 'POST', body: mRows });
       }
+      // [v1.33] 같은 기기 한정: 이 슬롯의 칸별 원본을 캐시 → 다음 슬롯 열 때 칸별 prefill
+      sedongRawSave(v.part.id, date, slot, v.specs, v.inputs);
       savedLabels.push(v.part.part_variant || v.part.part_number);
     }
 
