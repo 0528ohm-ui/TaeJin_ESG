@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.33</title>
+<title>공정검사 입력 v1.34</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -53,6 +53,8 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 .sedong-banner b{font-weight:700}
 .sedong-banner .sd-slot{display:inline-block;background:#fff;color:#0e7490;
   font-weight:800;padding:1px 8px;border-radius:5px;margin:0 2px;font-size:13px}
+.sedong-banner .sd-slot-sel{background:#fff;color:#0e7490;font-weight:800;
+  padding:2px 6px;border-radius:5px;margin:0 3px;font-size:14px;border:0;cursor:pointer}
 .sedong-banner .sd-sub{display:block;margin-top:3px;font-size:11px;opacity:.9}
 /* 금형호기 태그 버튼 */
 .mold-tag{padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
@@ -437,7 +439,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.33</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.34</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1711,10 +1713,24 @@ function renderSedongBanner(t) {
   const el = document.getElementById('sedong-banner');
   if (!el) return;
   if (!t || !t.sedong) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  const label = sedongSlotLabel(t.slot);
+  // [v1.34] 슬롯 직접 선택 — 늦게 측정한 제품을 실제 시간대 칸에 넣을 수 있게 (기본값=탭 생성 시각 슬롯)
+  const opts = SEDONG_SLOTS.map((h, i) =>
+    `<option value="${i + 1}" ${t.slot === i + 1 ? 'selected' : ''}>${h}시</option>`).join('');
   el.style.display = 'block';
-  el.innerHTML = `🕘 <b>세동 9시간대 순회검사</b> — 현재 <span class="sd-slot">${label}</span> 타임 입력 중`
-    + `<span class="sd-sub">이 시간대 전 항목 측정 → 저장 시 <b>x${t.slot}</b> 칸에 누적 · 같은 날 같은 부품이면 기존 이력에 합쳐짐</span>`;
+  el.innerHTML = `🕘 <b>세동 9시간대 순회검사</b> — 시간대 `
+    + `<select class="sd-slot-sel" onchange="changeSedongSlot(this.value)">${opts}</select> 입력 중`
+    + `<span class="sd-sub">저장 시 <b>x${t.slot}</b> 칸에 누적 · 같은 날 같은 부품이면 기존 이력에 합쳐짐 · 늦게 측정했으면 실제 시간대로 바꿔 저장</span>`;
+}
+
+// [v1.34] 세동 슬롯 수동 변경 — 현재 탭의 slot 갱신 후 배너만 다시 그림
+function changeSedongSlot(val) {
+  const t = tabs[activeTabIdx];
+  if (!t || !t.sedong) return;
+  const n = parseInt(val, 10);
+  if (!n || n < 1 || n > 9) return;
+  t.slot = n;
+  renderSedongBanner(t);
+  persistDraft();   // 변경된 슬롯도 임시저장에 반영
 }
 
 // IW/OW 토글 렌더 (그룹 탭일 때만)
