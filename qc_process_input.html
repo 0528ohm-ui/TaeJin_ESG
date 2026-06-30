@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.37</title>
+<title>공정검사 입력 v1.38</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -442,7 +442,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.37</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.38</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1378,14 +1378,8 @@ async function loadVariant(part) {
   lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong);
   // [v1.33] 세동: 같은 날 직전 슬롯의 칸별 원본이 기기 캐시에 있으면 DB 평균 1개 prefill을 덮어 칸별로 복원
   if (sedong) {
-    // [v1.37] 키 날짜는 KST 기준 오늘로 통일 (toISOString의 UTC 어긋남 방지). insp-date 있으면 우선.
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const kstToday = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    const today = document.getElementById('insp-date')?.value || kstToday;
-    const ok = sedongRawPrefill(part.id, today, inputs);
-    console.log('[sedongRaw 진단] prefill 시도 partId=', part.id, 'date=', today, '적용=', ok,
-      '| 캐시키들=', Object.keys(localStorage).filter(k => k.startsWith('QC_SEDONG_RAW')));
+    // [v1.38] 날짜 무관 — 이 부품의 가장 최근 측정 슬롯 칸 원본을 prefill
+    sedongRawPrefill(part.id, inputs);
   }
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
@@ -1610,44 +1604,39 @@ function clearDraft() {
 }
 
 // ══════════════════════════════════
-// [v1.33] 세동 슬롯별 "칸 원본값" 캐시 (같은 기기 한정)
+// [v1.38] 세동 "칸 원본값" 캐시 (같은 기기 한정, 날짜 무관)
 //   - DB(qc_shipping_measurement)는 슬롯당 평균 1개(x{slot})만 저장 → X1·X2·X3 원본 소실.
-//   - 다음 슬롯 열 때 직전 슬롯의 칸별 원본을 그대로 prefill하려면 별도 보관 필요.
-//   - 같은 기기에서만 보면 되므로 localStorage에 부품+날짜 단위로 캐시.
-//   - 키: QC_SEDONG_RAW :: {partId} :: {date}  →  { [slot]: { [specId]: {type, vals|min,max} } }
+//   - 부품별로 "가장 최근 측정한 슬롯"의 칸별 원본 1건만 보관(덮어씀). 날짜가 바뀌어도 직전 측정값 참고 가능.
+//   - 키: QC_SEDONG_RAW :: {partId}  →  { savedAt, date, slot, items: { [specId]: {type, vals|min,max} } }
 // ══════════════════════════════════
-function sedongRawKey(partId, date) { return `QC_SEDONG_RAW::${partId}::${date}`; }
+function sedongRawKey(partId) { return `QC_SEDONG_RAW::${partId}`; }
 function sedongRawSave(partId, date, slot, specs, inputs) {
   try {
-    const k = sedongRawKey(partId, date);
-    let store = {};
-    try { store = JSON.parse(localStorage.getItem(k) || '{}'); } catch (e) {}
-    const slotMap = {};
+    const items = {};
     specs.forEach(s => {
       const inp = inputs[s.id];
       if (!inp || s.is_visual) return;
       if (inp.type === 'minmax') {
-        if (inp.min !== '' || inp.max !== '') slotMap[s.id] = { type: 'minmax', min: inp.min, max: inp.max };
+        if (inp.min !== '' || inp.max !== '') items[s.id] = { type: 'minmax', min: inp.min, max: inp.max };
       } else {
         // 사용자가 실제로 채운 칸이 하나라도 있을 때만 (전부 빈 슬롯은 캐시 안 함)
-        if (inp.vals.some(x => x !== '' && x != null)) slotMap[s.id] = { type: 'points', vals: inp.vals.slice() };
+        if (inp.vals.some(x => x !== '' && x != null)) items[s.id] = { type: 'points', vals: inp.vals.slice() };
       }
     });
-    if (Object.keys(slotMap).length) { store[slot] = slotMap; localStorage.setItem(k, JSON.stringify(store)); }
-    console.log('[sedongRaw 진단] 저장 key=', k, 'slot=', slot, '항목수=', Object.keys(slotMap).length);
+    if (!Object.keys(items).length) return;   // 빈 측정은 직전값을 덮어쓰지 않음
+    localStorage.setItem(sedongRawKey(partId), JSON.stringify({ savedAt: Date.now(), date, slot, items }));
   } catch (e) { console.warn('[sedongRaw] 저장 실패(무시):', e.message); }
 }
-// 직전(가장 큰 번호) 슬롯의 칸 원본을 inputs에 prefill. 적용했으면 true.
-function sedongRawPrefill(partId, date, inputs) {
+// 부품의 가장 최근 측정 슬롯 칸 원본을 inputs에 prefill. 적용했으면 true.
+function sedongRawPrefill(partId, inputs) {
   try {
-    const raw = localStorage.getItem(sedongRawKey(partId, date));
+    const raw = localStorage.getItem(sedongRawKey(partId));
     if (!raw) return false;
-    const store = JSON.parse(raw);
-    const slots = Object.keys(store).map(Number).sort((a, b) => b - a);   // 큰 슬롯 우선
-    if (!slots.length) return false;
-    const slotMap = store[slots[0]];
+    const rec = JSON.parse(raw);
+    const items = rec && rec.items;
+    if (!items || !Object.keys(items).length) return false;
     let applied = false;
-    Object.entries(slotMap).forEach(([sid, saved]) => {
+    Object.entries(items).forEach(([sid, saved]) => {
       const inp = inputs[sid];
       if (!inp) return;
       if (saved.type === 'minmax' && inp.type === 'minmax') {
