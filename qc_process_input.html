@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.38</title>
+<title>공정검사 입력 v1.39</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -442,7 +442,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.38</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.39</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -3940,7 +3940,7 @@ function renderHistList(inspList) {
           ${tDisp ? `<div class="hist-date-time">${tDisp}</div>` : ''}
         </div>
         <div class="hist-meta">
-          ${!histPart && insp.part ? `<span class="hist-chip" style="background:#dbeafe;color:#1e40af;font-weight:700">${insp.part.part_number}</span>` : ''}
+          ${!histPart && insp.part ? `<span class="hist-chip" style="background:#dbeafe;color:#1e40af;font-weight:700">${isSedongPart(insp.part) ? (insp.part.part_name || insp.part.part_number) : insp.part.part_number}</span>` : ''}
           ${insp.ho ? `<span class="hist-chip">설비 ${insp.ho}</span>` : ''}
           ${insp.process_type === 'machining'
             ? `<span class="hist-chip" style="background:#fef3c7;color:#92400e;font-weight:700">⚙️ 가공</span>`
