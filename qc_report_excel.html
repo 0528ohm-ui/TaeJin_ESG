@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.37 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.38 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -68,7 +68,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.37</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.38</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -1305,18 +1305,20 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
     ws.getCell('AF'+r2).value = m.result || '';
   }
 
-  // [v0.29] 부강: 빈 측정행 숨김 (마지막 데이터행 다음 ~ 88행)
+  // [v0.29] 빈 측정행 숨김 (마지막 데이터행 다음 ~ 88행)
   //   meas 개수만큼만 채우고 나머지 빈 항목 행은 숨겨 성적서를 깔끔하게.
   //   측정 항목은 29행부터 2행 단위(r1=29+i*2). 최대 30항목(87/88행).
   //   주의: B54:B93 세로병합이 측정+하단을 걸쳐 부분 숨김이 됨 → 깨짐 발생 시 1순위 의심.
-  if(company === '부강스프링'){
+  //   [v0.38] 부강 전용 → SKF/우창 포함 전 회사 적용 (템플릿 구조 3사 완전 동일: 데이터29~, 하단89~97, B54:B93병합).
+  {
     const filled = Math.min(meas.length, 30);
     const lastDataRow = 29 + filled*2 - 1;   // 마지막으로 채워진 데이터 행
     for(let r = lastDataRow + 1; r <= 88; r++){
       try { ws.getRow(r).hidden = true; } catch(e){}
     }
     // [v0.32] 1페이지 인쇄 — fitToPage가 Excel에서 파일을 깨뜨려(이미지 포함 시) 동적 scale로 대체.
-    //   행 높이 전부 15pt. 보이는 영역 = 헤더(1~28, 420pt) + 데이터(29~lastDataRow) + 하단(89~97, 135pt).
+    //   행 높이 전부 15pt 가정(실측 12~13pt보다 커서 scale이 보수적=더 축소 → 1장 보장에 안전).
+    //   보이는 영역 = 헤더(1~28, 420pt) + 데이터(29~lastDataRow) + 하단(89~97, 135pt).
     //   세로: A4 인쇄가능 ≈690pt에 맞춤 / 가로: 35열 → A4 1장에 ≈68%.
     //   ※ scale 값만 변경하고 fitToPage/pageSetUpPr는 안 건드림 = v0.28~0.30과 같은 안전한 구조.
     if(ws.pageSetup){
