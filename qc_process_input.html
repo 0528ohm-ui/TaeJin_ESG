@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.39</title>
+<title>공정검사 입력 v1.40</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -442,7 +442,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.39</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.40</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1591,7 +1591,8 @@ function persistDraftNow() {
       savedAt: Date.now(),
       procMode,
       activeTabIdx,
-      tabs
+      tabs,
+      activeGroupOrders   // [v1.40] 연동 순서도 함께 스냅샷 (탭 discard 후 reload 시 번호순으로 돌아가는 문제 방지)
     }));
   } catch (e) {
     // 용량 초과 등 — 무해. 다음 입력에서 재시도됨.
@@ -1666,6 +1667,8 @@ function restoreDraft() {
   if (!d || !Array.isArray(d.tabs) || !d.tabs.length) { clearDraft(); return; }
   tabs = d.tabs;
   procMode = d.procMode || 'press';
+  // [v1.40] 연동 순서 복원. switchTab→renderLinkedCard가 이 값을 읽으므로 반드시 그 전에 세팅.
+  activeGroupOrders = (d.activeGroupOrders && typeof d.activeGroupOrders === 'object') ? d.activeGroupOrders : {};
   activeTabIdx = -1;   // switchTab에서 직전 탭 stash 시도 방지
   const idx = (d.activeTabIdx >= 0 && d.activeTabIdx < tabs.length) ? d.activeTabIdx : 0;
   switchTab(idx);      // applyVariant→renderSpecs가 inputs 값으로 입력칸을 다시 그림
