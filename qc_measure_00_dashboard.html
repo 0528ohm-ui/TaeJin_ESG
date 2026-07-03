@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.8</title>
+<title>측정기 종합현황 v1.9</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -90,6 +90,10 @@
 <div class="hdr">
   <h1>📐 측정기 종합현황</h1>
   <p>일간 · 주간 · 월간 점검 주기 모니터링</p>
+  <p style="margin-top:4px;font-size:12px">
+    점검자: <b id="inspectorName" style="color:#fff">-</b>
+    <a href="#" onclick="openPinModal(true);return false;" style="color:var(--text3);margin-left:6px;font-size:11px;text-decoration:none">· 변경</a>
+  </p>
 </div>
 
 <div class="toolbar">
@@ -124,6 +128,21 @@
       ✅ 월간 점검완료
       <span class="b-sub">30일 주기 항목</span>
     </button>
+  </div>
+</div>
+
+<!-- PIN 인증 모달 -->
+<div class="modal-mask" id="pinMask">
+  <div class="modal">
+    <h3>🔐 점검자 확인</h3>
+    <p style="margin:6px 0 12px;font-size:13px;color:var(--text3)">본인 PIN을 입력하면 그 이름으로 점검 기록이 저장됩니다.</p>
+    <input id="pinInput" type="password" inputmode="numeric" autocomplete="off"
+      placeholder="PIN 입력"
+      style="width:100%;box-sizing:border-box;padding:12px;font-size:20px;letter-spacing:6px;text-align:center;border:1px solid #333;border-radius:8px;background:#111;color:#fff">
+    <p id="pinErr" style="display:none;color:#ef4444;font-size:12px;margin:8px 0 0"></p>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="mbtn confirm" id="pinOk" style="width:100%">확인</button>
+    </div>
   </div>
 </div>
 
@@ -500,6 +519,92 @@ async function askBulk(period){
 }
 window.askBulk = askBulk;
 
+// ===== 점검자 PIN 인증 (본인 Supabase user_pin.pin_hash 기반) =====
+const PIN_AUTH_KEY = 'QC_PIN_AUTH';
+
+// admin_pin.html과 동일한 SHA-256 해시
+async function sha256hex(s){
+  const b = new TextEncoder().encode(s);
+  const h = await crypto.subtle.digest('SHA-256', b);
+  return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// 캐시된 인증 조회 (당일 자정 만료 → 날짜 바뀌면 재인증)
+function getPinAuth(){
+  try{
+    const a = JSON.parse(localStorage.getItem(PIN_AUTH_KEY)||'null');
+    if(!a || !a.name || !a.exp) return null;
+    if(Date.now() > a.exp) return null;
+    return a;
+  }catch(e){ return null; }
+}
+
+// 인증 성공 시 당일 자정까지 캐시
+function setPinAuth(name){
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0,0,0,0).getTime();
+  try{ localStorage.setItem(PIN_AUTH_KEY, JSON.stringify({name:name, exp:midnight})); }catch(e){}
+}
+
+// PIN → user_pin.pin_hash 조회 → 이름 반환 (없으면 null)
+async function verifyPin(pin){
+  const hash = await sha256hex(String(pin).trim());
+  const url = SB_URL + '/rest/v1/user_pin?select=name&pin_hash=eq.' + hash;
+  const r = await fetch(url, {headers:SB_HEADERS});
+  if(!r.ok) throw new Error('조회실패 HTTP '+r.status);
+  const rows = await r.json();
+  return (rows && rows.length) ? rows[0].name : null;
+}
+
+// PIN 모달 열기. force=true면 캐시 무시하고 재인증.
+// 반환: 인증된 이름으로 resolve되는 Promise
+let __pinResolve = null;
+function openPinModal(force){
+  const cached = getPinAuth();
+  if(cached && !force){
+    const el = document.getElementById('inspectorName');
+    if(el) el.textContent = cached.name;
+    return Promise.resolve(cached.name);
+  }
+  const mask = document.getElementById('pinMask');
+  const inp  = document.getElementById('pinInput');
+  const err  = document.getElementById('pinErr');
+  err.style.display='none'; inp.value='';
+  mask.classList.add('show');
+  setTimeout(()=>inp.focus(), 100);
+  return new Promise(res=>{ __pinResolve = res; });
+}
+window.openPinModal = openPinModal;
+
+async function submitPin(){
+  const inp = document.getElementById('pinInput');
+  const err = document.getElementById('pinErr');
+  const btn = document.getElementById('pinOk');
+  const pin = inp.value.trim();
+  if(!pin){ err.textContent='PIN을 입력하세요.'; err.style.display='block'; return; }
+  btn.disabled=true; btn.textContent='확인 중...';
+  try{
+    const name = await verifyPin(pin);
+    if(!name){
+      err.textContent='일치하는 PIN이 없습니다. 다시 확인하세요.';
+      err.style.display='block';
+      inp.value=''; inp.focus();
+      btn.disabled=false; btn.textContent='확인';
+      return;
+    }
+    setPinAuth(name);
+    const el = document.getElementById('inspectorName');
+    if(el) el.textContent = name;
+    document.getElementById('pinMask').classList.remove('show');
+    btn.disabled=false; btn.textContent='확인';
+    if(__pinResolve){ __pinResolve(name); __pinResolve=null; }
+  }catch(e){
+    err.textContent='조회 오류: '+e.message;
+    err.style.display='block';
+    btn.disabled=false; btn.textContent='확인';
+  }
+}
+
 // ESG 메인 시스템 로그인 정보 (개별 페이지와 동일 패턴)
 function getEsgAuth(){
   try{
@@ -521,8 +626,10 @@ function nowKSTTime(){
 
 // ===== 백필 (빠진 평일 자동 채우기) 관련 헬퍼 =====
 
-// 현재 검사자 (URL 파라미터 > localStorage > esg_pin_auth > 일괄완료)
+// 현재 점검자 (PIN 인증 캐시 > URL 파라미터 > localStorage > esg_pin_auth > 미확인)
 function getCurrentInspector(){
+  const pa = getPinAuth();
+  if(pa) return pa.name;
   const sp = new URLSearchParams(location.search);
   const urlName = sp.get('inspector') || sp.get('user') || sp.get('worker') || sp.get('name');
   if(urlName) return urlName.trim();
@@ -530,7 +637,7 @@ function getCurrentInspector(){
   try{ const n = localStorage.getItem('esg_inspector_name'); if(n) return n; }catch(e){}
   const auth = getEsgAuth();
   if(auth) return auth.name;
-  return '일괄완료';
+  return '미확인';
 }
 
 // 평일 여부 (월=1 ~ 금=5)
@@ -660,9 +767,8 @@ async function upsertEqLog(eqName, period, items){
   const okItems = {};
   targetItems.forEach(it=>{ okItems[it.label] = 'OK'; });
 
-  // 점검자: ESG 로그인 우선, 없으면 '일괄완료'
-  const auth = getEsgAuth();
-  const inspector = auth ? auth.name : '일괄완료';
+  // 점검자: PIN 인증 캐시 기준 (백필과 동일)
+  const inspector = getCurrentInspector();
 
   if(exist && exist.length>0){
     // 기존 row와 merge → PATCH (items_json만 갱신)
@@ -811,7 +917,15 @@ async function runBulk(period, backfillDays){
   await loadStatus();
 }
 
-window.addEventListener('DOMContentLoaded', loadStatus);
+window.addEventListener('DOMContentLoaded', async ()=>{
+  // PIN 모달 이벤트 바인딩
+  document.getElementById('pinOk').addEventListener('click', submitPin);
+  document.getElementById('pinInput').addEventListener('keydown', e=>{ if(e.key==='Enter') submitPin(); });
+  // 진입 시 점검자 확인 (당일 캐시 있으면 스킵). 인증 완료까지 대기.
+  await openPinModal(false);
+  // 현황 로드
+  loadStatus();
+});
 </script>
 
 </body>
