@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.40</title>
+<title>공정검사 입력 v1.47</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -13,31 +13,31 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .screen.active{display:block}
 
 .hdr{background:#1e3a5f;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.hdr h1{font-size:16px;font-weight:700;letter-spacing:-.3px}
-.hdr .sub{font-size:11px;opacity:.7;margin-top:2px}
-.badge{background:#3b82f6;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
+.hdr h1{font-size:21px;font-weight:700;letter-spacing:-.3px}
+.hdr .sub{font-size:14px;opacity:.7;margin-top:2px}
+.badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.card-title{font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.card-title{font-size:17px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
 
-.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;font-size:20px;font-weight:700;cursor:pointer;transition:opacity .15s}
 .btn:active{opacity:.7}
 .btn-primary{background:#1e3a5f;color:#fff}
 .btn-success{background:#16a34a;color:#fff}
 .btn-danger{background:#dc2626;color:#fff}
 .btn-ghost{background:#f1f5f9;color:#334155}
 
-.inp{width:100%;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:15px;outline:none;transition:border-color .15s}
+.inp{width:100%;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:20px;outline:none;transition:border-color .15s}
 .inp:focus{border-color:#3b82f6}
-label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5px}
+label{display:block;font-size:16px;font-weight:600;color:#64748b;margin-bottom:5px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:18px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
 
 /* ── 서브 네비 ── */
 .sub-nav{display:flex;background:#162d4a;border-top:1px solid rgba(255,255,255,.1);position:sticky;top:var(--hdr-only-h,54px);z-index:100}
-.snav-btn{flex:1;padding:10px 0;border:none;background:transparent;color:rgba(255,255,255,.55);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.snav-btn{flex:1;padding:10px 0;border:none;background:transparent;color:rgba(255,255,255,.55);font-size:16px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
 .snav-btn.active{color:#fff;border-bottom-color:#60a5fa}
 
 /* ── 도면 모달 ── */
@@ -49,65 +49,65 @@ label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:5
 /* [v0.45] 세동 9시간대 순회검사 배너 */
 .sedong-banner{margin:8px 12px 0;padding:10px 12px;border-radius:9px;
   background:linear-gradient(135deg,#0e7490,#0891b2);color:#fff;
-  font-size:12.5px;line-height:1.5;box-shadow:0 2px 6px rgba(8,145,178,.3)}
+  font-size:16px;line-height:1.5;box-shadow:0 2px 6px rgba(8,145,178,.3)}
 .sedong-banner b{font-weight:700}
 .sedong-banner .sd-slot{display:inline-block;background:#fff;color:#0e7490;
-  font-weight:800;padding:1px 8px;border-radius:5px;margin:0 2px;font-size:13px}
+  font-weight:800;padding:1px 8px;border-radius:5px;margin:0 2px;font-size:17px}
 .sedong-banner .sd-slot-sel{background:#fff;color:#0e7490;font-weight:800;
-  padding:2px 6px;border-radius:5px;margin:0 3px;font-size:14px;border:0;cursor:pointer}
-.sedong-banner .sd-sub{display:block;margin-top:3px;font-size:11px;opacity:.9}
+  padding:2px 6px;border-radius:5px;margin:0 3px;font-size:18px;border:0;cursor:pointer}
+.sedong-banner .sd-sub{display:block;margin-top:3px;font-size:14px;opacity:.9}
 /* 금형호기 태그 버튼 */
-.mold-tag{padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
+.mold-tag{padding:8px 16px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;font-size:17px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
 .mold-tag.sel{border-color:#3b82f6;background:#3b82f6;color:#fff}
 .mold-tag:active{transform:scale(.96)}
 /* 프레스/가공 세그먼트 */
 .proc-seg{display:flex;background:#e2e8f0;border-radius:8px;padding:3px;gap:2px;margin:10px 12px 0}
-.proc-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.proc-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:17px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
 .proc-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.tab-mach-badge{font-size:9px;background:#7c3aed;color:#fff;padding:0 4px;border-radius:3px;margin-left:3px;vertical-align:middle}
+.tab-mach-badge{font-size:12px;background:#7c3aed;color:#fff;padding:0 4px;border-radius:3px;margin-left:3px;vertical-align:middle}
 /* 연동 그룹 카드 */
 .linked-card{border-color:#ddd6fe}
 .linked-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:4px}
-.linked-grid{width:100%;border-collapse:collapse;font-size:13px}
-.linked-grid th{padding:6px 4px;font-size:11px;font-weight:700;color:#64748b;background:#f5f3ff;border-bottom:1.5px solid #ddd6fe;white-space:nowrap;text-align:center}
+.linked-grid{width:100%;border-collapse:collapse;font-size:17px}
+.linked-grid th{padding:6px 4px;font-size:14px;font-weight:700;color:#64748b;background:#f5f3ff;border-bottom:1.5px solid #ddd6fe;white-space:nowrap;text-align:center}
 .linked-grid td{padding:4px;border-bottom:1px solid #f1f5f9}
 .linked-grid tr:last-child td{border-bottom:none}
 .linked-grid .pt-inp{margin:0;text-align:center;padding:8px 4px}
-.vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
+.vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:17px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
 .vrt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .vrt-btn .vrt-badge{display:inline-block;min-width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
 .vrt-btn .vrt-badge.has{background:#16a34a}
-.drawing-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:8px;background:#fff;color:#1e40af;font-size:13px;font-weight:700;cursor:pointer}
+.drawing-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #3b82f6;border-radius:8px;background:#fff;color:#1e40af;font-size:17px;font-weight:700;cursor:pointer}
 .drawing-btn:active{background:#eff6ff}
 .drawing-btn.no-drawing{border-color:#e2e8f0;color:#94a3b8;cursor:default}
 .drawing-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;flex-direction:column}
 .drawing-modal.open{display:flex}
 .drawing-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#fff}
-.drawing-modal-hdr span{font-size:14px;font-weight:700}
-.drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;line-height:1}
+.drawing-modal-hdr span{font-size:18px;font-weight:700}
+.drawing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:26px;cursor:pointer;line-height:1}
 .drawing-img-wrap{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:24px;touch-action:none;position:relative}
 .drawing-img-wrap img{will-change:transform;user-select:none;-webkit-user-drag:none}
-.drawing-zoom-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:5px 12px;border-radius:14px;pointer-events:none;z-index:5;transition:opacity .4s}
+.drawing-zoom-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:16px;padding:5px 12px;border-radius:14px;pointer-events:none;z-index:5;transition:opacity .4s}
 
 /* [v0.38] 마우스 조절 패널 — PC 전사용 빠른 값 조정 */
 input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;background:#eff6ff}
 .adj-panel{display:none;position:fixed;right:18px;bottom:18px;width:340px;max-width:calc(100vw - 24px);background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:300;overflow:hidden;border:1px solid #e2e8f0}
 .adj-panel.open{display:block}
-.adj-panel-hdr{background:#1e3a5f;color:#fff;padding:9px 14px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.adj-panel-hdr .adj-item{font-size:13px;font-weight:700}
-.adj-panel-hdr .adj-pos{opacity:.75;font-size:11px}
-.adj-panel-hdr .adj-hdr-val{font-size:24px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
+.adj-panel-hdr{background:#1e3a5f;color:#fff;padding:9px 14px;font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.adj-panel-hdr .adj-item{font-size:17px;font-weight:700}
+.adj-panel-hdr .adj-pos{opacity:.75;font-size:14px}
+.adj-panel-hdr .adj-hdr-val{font-size:31px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
 .adj-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:14px 14px 0}
-.adj-grid button{border:none;border-radius:9px;padding:14px 0;font-size:15px;font-weight:700;cursor:pointer}
+.adj-grid button{border:none;border-radius:9px;padding:14px 0;font-size:20px;font-weight:700;cursor:pointer}
 .adj-grid button.plus{background:#fde7c8;color:#9a5b13}
 .adj-grid button.plus:active{background:#fbd49a}
 .adj-grid button.minus{background:#c8f3f0;color:#0f6b63}
-.adj-grid button.minus.fine,.adj-grid button.plus.fine{font-size:13px;padding:12px 0;opacity:.92}
+.adj-grid button.minus.fine,.adj-grid button.plus.fine{font-size:17px;padding:12px 0;opacity:.92}
 .adj-grid button.plus.fine{background:#fdf1e0;color:#b06a1d}
 .adj-grid button.minus.fine{background:#dcf6f3;color:#13837a}
 .adj-grid button.minus:active{background:#a6e8e3}
 .adj-panel-footer{display:flex;gap:8px;padding:12px}
-.adj-panel-footer button{flex:1;border:none;border-radius:8px;padding:11px 0;font-size:13px;font-weight:800;cursor:pointer}
+.adj-panel-footer button{flex:1;border:none;border-radius:8px;padding:11px 0;font-size:17px;font-weight:800;cursor:pointer}
 .adj-btn-confirm{background:#16a34a;color:#fff}
 .adj-btn-confirm:active{background:#15803d}
 .adj-btn-close{background:#e2e8f0;color:#475569}
@@ -118,17 +118,17 @@ input.pt-inp.adj-active{outline:2.5px solid #3b82f6;outline-offset:1px;backgroun
 .numpad-panel{display:none;position:fixed;right:18px;bottom:18px;width:286px;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.30);z-index:320;overflow:hidden;border:1px solid #e2e8f0}
 .numpad-panel.open{display:block}
 .numpad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:12px 12px 0}
-.numpad-grid button{border:none;border-radius:11px;padding:17px 0;font-size:21px;font-weight:700;background:#f1f5f9;color:#1e293b;cursor:pointer;-webkit-user-select:none;user-select:none}
+.numpad-grid button{border:none;border-radius:11px;padding:17px 0;font-size:27px;font-weight:700;background:#f1f5f9;color:#1e293b;cursor:pointer;-webkit-user-select:none;user-select:none}
 .numpad-grid button:active{background:#dbe3ec}
-.numpad-grid button.np-dot{background:#dbeafe;color:#1d4ed8;font-size:26px;line-height:.6}
+.numpad-grid button.np-dot{background:#dbeafe;color:#1d4ed8;font-size:34px;line-height:.6}
 .numpad-grid button.np-dot:active{background:#bfdbfe}
-.numpad-grid button.np-back{background:#fee2e2;color:#dc2626;font-size:19px}
+.numpad-grid button.np-back{background:#fee2e2;color:#dc2626;font-size:25px}
 .numpad-grid button.np-back:active{background:#fecaca}
 .numpad-footer{display:flex;gap:7px;padding:10px 12px 12px}
-.numpad-footer button{border:none;border-radius:10px;padding:14px 0;font-size:14px;font-weight:800;cursor:pointer;-webkit-user-select:none;user-select:none}
-.np-sign{flex:1;background:#fef3c7;color:#92400e;font-size:18px}
+.numpad-footer button{border:none;border-radius:10px;padding:14px 0;font-size:18px;font-weight:800;cursor:pointer;-webkit-user-select:none;user-select:none}
+.np-sign{flex:1;background:#fef3c7;color:#92400e;font-size:23px}
 .np-sign:active{background:#fde68a}
-.np-switch{flex:1.4;background:#e0e7ff;color:#4338ca;font-size:13px}
+.np-switch{flex:1.4;background:#e0e7ff;color:#4338ca;font-size:17px}
 .np-switch:active{background:#c7d2fe}
 .np-btn-next{flex:2;background:#16a34a;color:#fff}
 .np-btn-next:active{background:#15803d}
@@ -144,9 +144,9 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .cfg-spec-row{background:#fff;border-radius:10px;margin-bottom:8px;overflow:hidden;border:1.5px solid #e2e8f0}
 .cfg-spec-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
 .cfg-spec-hdr:active{background:#f8fafc}
-.cfg-no{min-width:26px;height:26px;border-radius:6px;background:#1e3a5f;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.cfg-name{flex:1;font-size:13px;font-weight:700}
-.cfg-badge{font-size:10px;padding:2px 6px;border-radius:5px;font-weight:700}
+.cfg-no{min-width:26px;height:26px;border-radius:6px;background:#1e3a5f;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.cfg-name{flex:1;font-size:17px;font-weight:700}
+.cfg-badge{font-size:13px;padding:2px 6px;border-radius:5px;font-weight:700}
 .cfg-badge.press{background:#dbeafe;color:#1d4ed8}
 .cfg-badge.machining{background:#fef3c7;color:#92400e}
 .cfg-badge.both{background:#dcfce7;color:#166534}
@@ -154,41 +154,41 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .cfg-edit-panel.open{display:flex}
 .cfg-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .cfg-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-.cfg-field label{font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
-.cfg-field input,.cfg-field select{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:13px;outline:none}
+.cfg-field label{font-size:14px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
+.cfg-field input,.cfg-field select{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:17px;outline:none}
 .cfg-field input:focus,.cfg-field select:focus{border-color:#3b82f6}
-.cfg-save-btn{background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;flex:1}
-.cfg-del-btn{background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:56px}
+.cfg-save-btn{background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:10px;font-size:17px;font-weight:700;cursor:pointer;flex:1}
+.cfg-del-btn{background:#fee2e2;color:#dc2626;border:none;border-radius:8px;padding:10px;font-size:17px;font-weight:700;cursor:pointer;width:56px}
 .cfg-save-btn:active,.cfg-del-btn:active{opacity:.7}
-.cfg-saved{color:#16a34a;font-size:12px;font-weight:700;text-align:center;min-height:16px}
+.cfg-saved{color:#16a34a;font-size:16px;font-weight:700;text-align:center;min-height:16px}
 /* 입력 순서 편집 */
-.seg-btn{flex:1;padding:8px;border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;font-size:13px;font-weight:700;color:#64748b;cursor:pointer}
+.seg-btn{flex:1;padding:8px;border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;font-size:17px;font-weight:700;color:#64748b;cursor:pointer}
 .seg-btn.on{border-color:#1e3a5f;background:#1e3a5f;color:#fff}
 .ord-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;background:#fff}
 .ord-item.grp{background:#faf5ff;border-color:#e9d5ff}
-.ord-seq{min-width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.ord-name{flex:1;font-size:13px;font-weight:600;color:#1e293b;line-height:1.3}
-.ord-name .ord-spec{font-size:11px;color:#94a3b8;font-weight:500}
-.ord-grp-tag{display:inline-block;font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:1px 5px;border-radius:4px;margin-right:4px}
+.ord-seq{min-width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ord-name{flex:1;font-size:17px;font-weight:600;color:#1e293b;line-height:1.3}
+.ord-name .ord-spec{font-size:14px;color:#94a3b8;font-weight:500}
+.ord-grp-tag{display:inline-block;font-size:13px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:1px 5px;border-radius:4px;margin-right:4px}
 .ord-btns{display:flex;flex-direction:column;gap:2px}
-.ord-btns button{width:30px;height:22px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:5px;font-size:12px;cursor:pointer;line-height:1;color:#475569}
+.ord-btns button{width:30px;height:22px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:5px;font-size:16px;cursor:pointer;line-height:1;color:#475569}
 .ord-btns button:disabled{opacity:.3;cursor:default}
-.ord-del{border:none;background:#fef2f2;color:#dc2626;border-radius:6px;width:30px;height:26px;font-size:13px;cursor:pointer}
+.ord-del{border:none;background:#fef2f2;color:#dc2626;border-radius:6px;width:30px;height:26px;font-size:17px;cursor:pointer}
 /* 접이식 설정 섹션 */
 .cfg-fold{padding:0!important;overflow:hidden}
-.cfg-fold-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 14px;cursor:pointer;font-size:15px;font-weight:800;color:#1e3a5f;user-select:none}
+.cfg-fold-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 14px;cursor:pointer;font-size:20px;font-weight:800;color:#1e3a5f;user-select:none}
 .cfg-fold-hdr:hover{background:#f8fafc}
-.cfg-fold-arrow{font-size:14px;color:#94a3b8;transition:transform .2s}
+.cfg-fold-arrow{font-size:18px;color:#94a3b8;transition:transform .2s}
 .cfg-fold.collapsed .cfg-fold-arrow{transform:rotate(-90deg)}
 .cfg-fold-body{padding:0 14px 16px}
 .cfg-fold.collapsed .cfg-fold-body{display:none}
 .cfg-btn-row{display:flex;gap:8px}
-.cfg-add-btn{width:100%;padding:12px;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;margin:0 12px 8px;width:calc(100% - 24px)}
+.cfg-add-btn{width:100%;padding:12px;border:2px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:17px;font-weight:700;cursor:pointer;margin:0 12px 8px;width:calc(100% - 24px)}
 .cfg-add-btn:active{background:#f1f5f9}
-.align-btn{padding:5px 9px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap}
+.align-btn{padding:5px 9px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:14px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap}
 .align-btn:active{background:#eff6ff;border-color:#3b82f6}
 /* 새 부품 등록 토글 */
-.cfg-new-toggle{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#3b82f6;cursor:pointer;margin-top:10px;padding:6px 0}
+.cfg-new-toggle{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;color:#3b82f6;cursor:pointer;margin-top:10px;padding:6px 0}
 .cfg-new-form{display:none;margin-top:10px;border-top:1px solid #f1f5f9;padding-top:12px}
 .cfg-new-form.open{display:block}
 
@@ -199,118 +199,118 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .hist-date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 /* [v1.0] 빠른 기간 선택 칩 */
 .hist-range-chips{display:flex;gap:6px;margin-top:8px}
-.hist-range-chip{flex:1;border:1.5px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;padding:8px 0;font-size:13px;font-weight:700;cursor:pointer;transition:all .12s}
+.hist-range-chip{flex:1;border:1.5px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;padding:8px 0;font-size:17px;font-weight:700;cursor:pointer;transition:all .12s}
 .hist-range-chip:active{background:#f1f5f9}
 .hist-range-chip.active{background:#1e3a5f;border-color:#1e3a5f;color:#fff}
-.hist-count{font-size:12px;color:#94a3b8;margin-top:8px;text-align:right}
+.hist-count{font-size:16px;color:#94a3b8;margin-top:8px;text-align:right}
 .hist-list{padding:0 12px 12px}
 .hist-card{background:#fff;border-radius:10px;margin-bottom:8px;border:1.5px solid #e2e8f0;overflow:hidden;transition:border-color .2s}
 .hist-card.expanded{border-color:#3b82f6}
 .hist-card-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
 .hist-card-hdr:active{background:#f8fafc}
 .hist-date-col{min-width:70px}
-.hist-date-main{font-size:14px;font-weight:700;color:#1e293b}
-.hist-date-time{font-size:11px;color:#94a3b8;margin-top:1px}
+.hist-date-main{font-size:18px;font-weight:700;color:#1e293b}
+.hist-date-time{font-size:14px;color:#94a3b8;margin-top:1px}
 .hist-meta{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.hist-chip{font-size:11px;padding:2px 7px;border-radius:5px;font-weight:600;background:#f1f5f9;color:#64748b}
-.hist-result{font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap}
+.hist-chip{font-size:14px;padding:2px 7px;border-radius:5px;font-weight:600;background:#f1f5f9;color:#64748b}
+.hist-result{font-size:16px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap}
 .hist-result.ok{background:#dcfce7;color:#16a34a}
 .hist-result.ng{background:#fee2e2;color:#dc2626}
 .hist-result.null{background:#f1f5f9;color:#94a3b8}
-.hist-expand-icon{font-size:14px;color:#94a3b8;transition:transform .2s}
+.hist-expand-icon{font-size:18px;color:#94a3b8;transition:transform .2s}
 .hist-card.expanded .hist-expand-icon{transform:rotate(180deg)}
 .hist-detail{display:none;border-top:1px solid #f1f5f9}
 .hist-card.expanded .hist-detail{display:block}
-.hist-meas-tbl{width:100%;font-size:12px;border-collapse:collapse}
+.hist-meas-tbl{width:100%;font-size:16px;border-collapse:collapse}
 .hist-meas-tbl th{padding:8px 10px;text-align:left;font-weight:700;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;white-space:nowrap}
 .hist-meas-tbl td{padding:7px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
 .hist-meas-tbl tr:last-child td{border-bottom:none}
 .hist-meas-tbl .ng-val{color:#dc2626;font-weight:700}
 .hist-meas-tbl .ok-val{color:#16a34a}
 .hist-meas-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.hist-empty{text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px}
+.hist-empty{text-align:center;padding:40px 20px;color:#94a3b8;font-size:18px}
 .hist-toolbar{display:flex;gap:8px;padding:10px 14px;justify-content:flex-end;border-top:1px solid #f1f5f9}
-.hist-edit-btn{padding:7px 14px;border:1.5px solid #3b82f6;border-radius:7px;background:#fff;color:#1e40af;font-size:12px;font-weight:700;cursor:pointer}
+.hist-edit-btn{padding:7px 14px;border:1.5px solid #3b82f6;border-radius:7px;background:#fff;color:#1e40af;font-size:16px;font-weight:700;cursor:pointer}
 .hist-edit-btn:active{background:#eff6ff}
-.hist-del-btn{padding:7px 14px;border:1.5px solid #fca5a5;border-radius:7px;background:#fff;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer}
+.hist-del-btn{padding:7px 14px;border:1.5px solid #fca5a5;border-radius:7px;background:#fff;color:#dc2626;font-size:16px;font-weight:700;cursor:pointer}
 .hist-del-btn:active{background:#fee2e2}
-.hist-save-btn{padding:7px 14px;border:none;border-radius:7px;background:#16a34a;color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.hist-save-btn{padding:7px 14px;border:none;border-radius:7px;background:#16a34a;color:#fff;font-size:16px;font-weight:700;cursor:pointer}
 .hist-save-btn:active{opacity:.7}
-.hist-cancel-btn{padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:7px;background:#fff;color:#64748b;font-size:12px;font-weight:700;cursor:pointer}
+.hist-cancel-btn{padding:7px 14px;border:1.5px solid #e2e8f0;border-radius:7px;background:#fff;color:#64748b;font-size:16px;font-weight:700;cursor:pointer}
 .hist-cancel-btn:active{background:#f1f5f9}
 .hist-edit-hdr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px 14px;border-bottom:1px solid #f1f5f9}
-.hist-edit-hdr label{font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
-.hist-edit-hdr input{width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none}
+.hist-edit-hdr label{font-size:14px;font-weight:700;color:#64748b;display:block;margin-bottom:3px}
+.hist-edit-hdr input{width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:17px;outline:none}
 .hist-edit-hdr input:focus{border-color:#3b82f6}
-.hist-meas-tbl .edit-inp{width:68px;padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:12px;text-align:center;outline:none}
+.hist-meas-tbl .edit-inp{width:68px;padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:16px;text-align:center;outline:none}
 .hist-meas-tbl .edit-inp:focus{border-color:#3b82f6}
-.hist-meas-tbl select.edit-sel{padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:12px;outline:none}
+.hist-meas-tbl select.edit-sel{padding:5px 4px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:16px;outline:none}
 .hist-meas-tbl select.edit-sel:focus{border-color:#3b82f6}
 
 /* ── 관리도 ── */
 .hist-sub-toggle{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px;margin:12px 12px 0}
-.hst-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:12px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.hst-btn{flex:1;padding:8px 0;border:none;border-radius:6px;background:transparent;font-size:16px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
 .hst-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .spc-area{padding:12px}
 .spc-select-row{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px}
-.spc-select-row select{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;background:#fff}
+.spc-select-row select{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:17px;outline:none;background:#fff}
 .spc-select-row select:focus{border-color:#3b82f6}
 .spc-chart-wrap{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1.5px solid #e2e8f0}
-.spc-chart-title{font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:8px}
+.spc-chart-title{font-size:17px;font-weight:700;color:#1e3a5f;margin-bottom:8px}
 .spc-chart-box{position:relative;width:100%;height:220px}
 .spc-cpk-panel{background:#fff;border-radius:10px;padding:16px;border:1.5px solid #e2e8f0}
-.spc-cpk-title{font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:12px}
+.spc-cpk-title{font-size:17px;font-weight:700;color:#1e3a5f;margin-bottom:12px}
 .spc-cpk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .spc-cpk-item{text-align:center;padding:10px;background:#f8fafc;border-radius:8px}
-.spc-cpk-label{font-size:11px;color:#64748b;font-weight:600;margin-bottom:4px}
-.spc-cpk-val{font-size:20px;font-weight:800;color:#1e3a5f}
+.spc-cpk-label{font-size:14px;color:#64748b;font-weight:600;margin-bottom:4px}
+.spc-cpk-val{font-size:26px;font-weight:800;color:#1e3a5f}
 .spc-cpk-val.good{color:#16a34a}
 .spc-cpk-val.warn{color:#f59e0b}
 .spc-cpk-val.bad{color:#dc2626}
 .spc-info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px}
 .spc-info-item{text-align:center;padding:6px;background:#f1f5f9;border-radius:6px}
-.spc-info-label{font-size:10px;color:#94a3b8;font-weight:600}
-.spc-info-val{font-size:13px;font-weight:700;color:#334155;margin-top:2px}
-.spc-judge{text-align:center;margin-top:12px;padding:10px;border-radius:8px;font-size:14px;font-weight:700}
+.spc-info-label{font-size:13px;color:#94a3b8;font-weight:600}
+.spc-info-val{font-size:17px;font-weight:700;color:#334155;margin-top:2px}
+.spc-judge{text-align:center;margin-top:12px;padding:10px;border-radius:8px;font-size:18px;font-weight:700}
 .spc-judge.good{background:#dcfce7;color:#16a34a}
 .spc-judge.warn{background:#fef3c7;color:#92400e}
 .spc-judge.bad{background:#fee2e2;color:#dc2626}
 
-#setup-screen h2{font-size:22px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
-#setup-screen p{font-size:13px;color:#64748b;margin-bottom:28px}
+#setup-screen h2{font-size:29px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
+#setup-screen p{font-size:17px;color:#64748b;margin-bottom:28px}
 
 /* ── PIN 화면 ── */
 #pin-screen{display:none}
 #pin-screen.active{display:flex;flex-direction:column;align-items:center;padding:40px 16px}
-#pin-screen h2{font-size:20px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
-#pin-screen p{font-size:13px;color:#64748b;margin-bottom:28px}
+#pin-screen h2{font-size:26px;font-weight:800;color:#1e3a5f;margin-bottom:6px}
+#pin-screen p{font-size:17px;color:#64748b;margin-bottom:28px}
 
 .pin-dots{display:flex;gap:14px;margin-bottom:32px}
 .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #cbd5e1;background:transparent;transition:background .15s,border-color .15s}
 .pin-dot.filled{background:#1e3a5f;border-color:#1e3a5f}
 
 .pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px}
-.pin-btn{padding:18px 0;border:none;border-radius:12px;background:#f1f5f9;font-size:22px;font-weight:700;color:#1e293b;cursor:pointer;transition:background .1s}
+.pin-btn{padding:18px 0;border:none;border-radius:12px;background:#f1f5f9;font-size:29px;font-weight:700;color:#1e293b;cursor:pointer;transition:background .1s}
 .pin-btn:active{background:#dde3ec}
 .pin-btn.del{background:#fee2e2;color:#dc2626}
-.pin-err{color:#dc2626;font-size:13px;font-weight:600;margin-top:12px;min-height:20px}
+.pin-err{color:#dc2626;font-size:17px;font-weight:600;margin-top:12px;min-height:20px}
 
 /* ── 메인 화면 ── */
-.user-bar{display:flex;align-items:center;gap:8px;font-size:13px}
+.user-bar{display:flex;align-items:center;gap:8px;font-size:17px}
 .user-name{font-weight:700}
-.logout-btn{background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600}
+.logout-btn{background:rgba(255,255,255,.18);border:none;color:#fff;padding:5px 10px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600}
 .logout-btn:active{opacity:.7}
 
 /* 부품 선택 */
 .part-search-wrap{position:relative}
 .part-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:2px;display:none}
 .part-dropdown.open{display:block}
-.part-opt{padding:12px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:14px}
+.part-opt{padding:12px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:18px}
 .part-opt:last-child{border-bottom:none}
 .part-opt:active{background:#f0f2f5}
-.part-opt .pno{font-size:11px;color:#64748b;margin-top:2px}
-.selected-part{background:#eff6ff;border:1.5px solid #3b82f6;border-radius:8px;padding:12px 14px;font-size:14px;font-weight:600;color:#1e40af;display:none}
-.selected-part .pno{font-size:11px;color:#3b82f6;margin-top:2px;font-weight:400}
+.part-opt .pno{font-size:14px;color:#64748b;margin-top:2px}
+.selected-part{background:#eff6ff;border:1.5px solid #3b82f6;border-radius:8px;padding:12px 14px;font-size:18px;font-weight:600;color:#1e40af;display:none}
+.selected-part .pno{font-size:14px;color:#3b82f6;margin-top:2px;font-weight:400}
 
 /* 항목 카드 */
 .spec-card{background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;border:1.5px solid #e2e8f0;transition:border-color .2s}
@@ -318,19 +318,27 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .spec-card.ok{border-color:#86efac}
 .spec-hdr{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
 /* 항목 메모 */
-.note-btn{padding:4px 7px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:13px;cursor:pointer;color:#94a3b8;line-height:1;flex-shrink:0;margin-top:1px}
+.note-btn{padding:4px 7px;border:1.5px solid #e2e8f0;border-radius:6px;background:#fff;font-size:17px;cursor:pointer;color:#94a3b8;line-height:1;flex-shrink:0;margin-top:1px}
 .note-btn.has{border-color:#f59e0b;color:#f59e0b;background:#fffbeb}
+/* [v1.42] 항목별 관리도 바로가기 */
+.chart-btn{padding:4px 7px;border:1.5px solid #bfdbfe;border-radius:6px;background:#eff6ff;font-size:17px;cursor:pointer;color:#3b82f6;line-height:1;flex-shrink:0;margin-top:1px}
+.chart-btn:active{background:#dbeafe}
+/* [v1.43] 연동 카드 항목별 액션 행 (메모·관리도) */
+.linked-actions{margin-top:10px;border-top:1px solid #ede9fe;padding-top:6px}
+.linked-act-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.linked-act-label{flex:1;font-size:15px;color:#475569;min-width:0}
+.linked-act-label b{color:#7c3aed;font-weight:700;margin-right:3px}
 .note-area{margin-top:6px;display:none}
 .note-area.open{display:block}
-.note-area textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;resize:none;outline:none;font-family:inherit;color:#1e293b;background:#fafafa}
+.note-area textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:16px;resize:none;outline:none;font-family:inherit;color:#1e293b;background:#fafafa}
 .note-area textarea:focus{border-color:#f59e0b;background:#fff}
 .note-area textarea::placeholder{color:#cbd5e1}
-.spec-no{min-width:28px;height:28px;border-radius:7px;background:#1e3a5f;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.spec-no{min-width:28px;height:28px;border-radius:7px;background:#1e3a5f;color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .spec-info{flex:1}
-.spec-name{font-size:14px;font-weight:700;color:#1e293b}
-.spec-text{font-size:12px;color:#3b82f6;font-weight:600;margin-top:2px}
-.spec-method{font-size:11px;color:#94a3b8;margin-top:1px}
-.spec-result{font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.spec-name{font-size:18px;font-weight:700;color:#1e293b}
+.spec-text{font-size:16px;color:#3b82f6;font-weight:600;margin-top:2px}
+.spec-method{font-size:14px;color:#94a3b8;margin-top:1px}
+.spec-result{font-size:16px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
 .spec-result.ok{background:#dcfce7;color:#16a34a}
 .spec-result.ng{background:#fee2e2;color:#dc2626}
 .spec-result.empty{background:#f1f5f9;color:#94a3b8}
@@ -338,8 +346,8 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 /* 치수 입력 (가로 셀형 — 한 줄 최대 5칸) */
 .pts-grid{display:grid;gap:6px}
 .pt-cell{display:flex;flex-direction:column;gap:3px}
-.pt-label{font-size:10px;font-weight:700;color:#94a3b8;text-align:center}
-.pt-inp{width:100%;padding:10px 4px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:14px;text-align:center;outline:none}
+.pt-label{font-size:13px;font-weight:700;color:#94a3b8;text-align:center}
+.pt-inp{width:100%;padding:10px 4px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:18px;text-align:center;outline:none}
 .pt-inp:focus{border-color:#3b82f6}
 .pt-inp.ng{border-color:#fca5a5;background:#fff5f5;color:#dc2626}
 .pt-inp.ok{border-color:#86efac}
@@ -348,46 +356,46 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .pt-inp.touched{color:#1e3a8a;font-weight:800;background:#eff6ff;border-color:#3b82f6;font-style:normal}
 .pt-inp.touched.ng{color:#dc2626;background:#fff5f5;border-color:#fca5a5}
 .pt-inp.touched.ok{border-color:#22c55e;background:#f0fdf4}
-.lsl-usl{font-size:11px;color:#94a3b8;text-align:right;margin-top:6px}
+.lsl-usl{font-size:14px;color:#94a3b8;text-align:right;margin-top:6px}
 .lsl-usl span{color:#1e3a5f;font-weight:600}
 
 /* 부품 탭바 (헤더 아래 고정) */
 .tab-bar{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:#f0f2f5}
 .tab-bar::-webkit-scrollbar{display:none}
 .tab-bar::-webkit-scrollbar{display:none}
-.tab{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 13px;background:#e2e8f0;border-radius:9px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.tab{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 13px;background:#e2e8f0;border-radius:9px;font-size:16px;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .tab.active{background:#1e3a5f;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .tab.active .tab-close{background:rgba(255,255,255,.2);color:#fff}
-.tab-close{width:18px;height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.08);color:#64748b;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tab-close{width:18px;height:18px;border:none;border-radius:50%;background:rgba(0,0,0,.08);color:#64748b;font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .tab-close:active{background:rgba(0,0,0,.18)}
 
 /* 외관 토글 */
 .visual-toggle{display:flex;gap:10px}
-.vt-btn{flex:1;padding:14px;border:2px solid #e2e8f0;border-radius:10px;font-size:16px;font-weight:700;background:#f8fafc;color:#94a3b8;cursor:pointer;transition:all .15s}
+.vt-btn{flex:1;padding:14px;border:2px solid #e2e8f0;border-radius:10px;font-size:21px;font-weight:700;background:#f8fafc;color:#94a3b8;cursor:pointer;transition:all .15s}
 .vt-btn.ok-sel{border-color:#16a34a;background:#dcfce7;color:#16a34a}
 .vt-btn.ng-sel{border-color:#dc2626;background:#fee2e2;color:#dc2626}
 
 /* 모드 토글 + 칸수 조절 바 */
 .mode-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .mode-toggle{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;gap:2px}
-.mt-btn{padding:6px 14px;border:none;border-radius:6px;background:transparent;font-size:12px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
+.mt-btn{padding:6px 14px;border:none;border-radius:6px;background:transparent;font-size:16px;font-weight:700;color:#94a3b8;cursor:pointer;transition:all .15s}
 .mt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .cnt-ctrl{display:flex;align-items:center;gap:8px}
-.cnt-btn{width:32px;height:32px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:17px;font-weight:700;color:#1e3a5f;cursor:pointer;line-height:1}
+.cnt-btn{width:32px;height:32px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:22px;font-weight:700;color:#1e3a5f;cursor:pointer;line-height:1}
 .cnt-btn:active{background:#f1f5f9}
-.cnt-num{font-size:14px;font-weight:700;color:#1e3a5f;min-width:18px;text-align:center}
+.cnt-num{font-size:18px;font-weight:700;color:#1e3a5f;min-width:18px;text-align:center}
 
 /* 최솟값/최댓값 */
 .minmax-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.minmax-grid label{font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px}
+.minmax-grid label{font-size:16px;font-weight:700;color:#64748b;display:block;margin-bottom:4px}
 
 /* 저장 영역 */
 .save-area{padding:12px 12px 32px}
-.save-summary{background:#eff6ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;display:none}
+.save-summary{background:#eff6ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:17px;color:#1e40af;display:none}
 .save-summary .ng-cnt{color:#dc2626;font-weight:700}
 
 /* 로딩 */
-.loading{text-align:center;padding:40px 20px;color:#94a3b8;font-size:14px}
+.loading{text-align:center;padding:40px 20px;color:#94a3b8;font-size:18px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
@@ -435,14 +443,14 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
     <button class="pin-btn del" onclick="pinDel()">⌫</button>
   </div>
   <div class="pin-err" id="pin-err"></div>
-  <button onclick="resetSetup()" style="margin-top:20px;background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;text-decoration:underline">인증 초기화</button>
+  <button onclick="resetSetup()" style="margin-top:20px;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;text-decoration:underline">인증 초기화</button>
 </div>
 
 <!-- ③ 메인 화면 -->
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.40</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.47</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -470,7 +478,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <!-- 도면 버튼 바 (탭 있을 때만 표시) -->
       <div class="drawing-bar" id="drawing-bar" style="display:none">
         <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
+          <div style="font-size:16px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">③ 측정값 입력</div>
           <!-- IW/OW 등 variant 토글 (그룹 부품일 때만 표시) -->
           <div class="variant-toggle" id="variant-toggle" style="display:none"></div>
         </div>
@@ -498,10 +506,10 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div id="pending-add" style="display:none;margin-top:10px;padding:10px;background:#f0f7ff;border:1.5px solid #bfdbfe;border-radius:8px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <div>
-            <div id="pending-label" style="font-weight:700;font-size:13px;color:#1e40af"></div>
-            <div id="pending-pno" style="font-size:11px;color:#3b82f6;margin-top:2px"></div>
+            <div id="pending-label" style="font-weight:700;font-size:17px;color:#1e40af"></div>
+            <div id="pending-pno" style="font-size:14px;color:#3b82f6;margin-top:2px"></div>
           </div>
-          <button onclick="cancelPending()" style="border:none;background:#e2e8f0;color:#64748b;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">취소</button>
+          <button onclick="cancelPending()" style="border:none;background:#e2e8f0;color:#64748b;padding:5px 10px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer">취소</button>
         </div>
         <!-- 금형호기 태그 (금형 2벌 이상일 때만 표시) -->
         <div id="pending-mold-row" style="display:none;margin-bottom:8px">
@@ -510,7 +518,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         </div>
         <div style="display:flex;gap:8px;align-items:flex-end">
           <div style="flex:1">
-            <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(선택)</span></label>
+            <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:14px">(선택)</span></label>
             <input class="inp" id="pending-equip" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px"
               onkeydown="if(event.key==='Enter')confirmAddTab()">
           </div>
@@ -534,7 +542,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       </div>
       <div class="row2" style="margin-bottom:10px" id="insp-ho-mold-row">
         <div>
-          <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:11px">(직전값 자동)</span></label>
+          <label>설비호기 <span style="color:#94a3b8;font-weight:400;font-size:14px">(직전값 자동)</span></label>
           <input class="inp" id="insp-ho" type="text" inputmode="numeric" placeholder="예) 36, 45 …" style="margin-top:4px" onchange="persistDraft()">
         </div>
         <div>
@@ -549,7 +557,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         </select>
       </div>
       <div>
-        <label>비고 <span style="color:#94a3b8;font-weight:400;font-size:11px">(선택)</span></label>
+        <label>비고 <span style="color:#94a3b8;font-weight:400;font-size:14px">(선택)</span></label>
         <input class="inp" id="insp-remark" type="text" placeholder="특이사항 입력…" style="margin-top:4px" onchange="persistDraft()">
       </div>
     </div>
@@ -657,10 +665,10 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div id="hist-selected-part" style="display:none;margin-top:8px">
         <div class="selected-part" style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <div id="hist-sel-label" style="font-weight:700;font-size:13px;color:#1e40af"></div>
-            <div id="hist-sel-pno" class="pno" style="font-size:11px;color:#3b82f6;margin-top:2px"></div>
+            <div id="hist-sel-label" style="font-weight:700;font-size:17px;color:#1e40af"></div>
+            <div id="hist-sel-pno" class="pno" style="font-size:14px;color:#3b82f6;margin-top:2px"></div>
           </div>
-          <button onclick="clearHistPart()" style="border:none;background:#f1f5f9;color:#64748b;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">변경</button>
+          <button onclick="clearHistPart()" style="border:none;background:#f1f5f9;color:#64748b;padding:5px 10px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer">변경</button>
         </div>
       </div>
     </div>
@@ -673,7 +681,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
     <div id="hist-list-view">
       <!-- 날짜 필터 (부품 선택 후 표시) -->
       <div class="hist-filters" id="hist-filter-area" style="display:none">
-        <label>검사일 범위 <span style="font-weight:400;color:#94a3b8;font-size:11px">(부품 미선택 시 그날 전체)</span></label>
+        <label>검사일 범위 <span style="font-weight:400;color:#94a3b8;font-size:14px">(부품 미선택 시 그날 전체)</span></label>
         <div class="hist-range-chips" id="hist-range-chips">
           <button class="hist-range-chip" data-range="today" onclick="setHistRange('today')">오늘</button>
           <button class="hist-range-chip" data-range="7" onclick="setHistRange('7')">7일</button>
@@ -687,13 +695,13 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <!-- 설비호기 / 금형호기 필터 (조회 결과 안에서 추가로 거름) -->
         <div class="hist-date-row" style="margin-top:8px">
           <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">설비호기</label>
+            <label style="font-size:14px;font-weight:700;color:#64748b">설비호기</label>
             <select class="inp" id="hist-filter-ho" onchange="applyHistFilter()" style="margin-top:3px">
               <option value="">전체</option>
             </select>
           </div>
           <div>
-            <label style="font-size:11px;font-weight:700;color:#64748b">금형호기</label>
+            <label style="font-size:14px;font-weight:700;color:#64748b">금형호기</label>
             <select class="inp" id="hist-filter-mold" onchange="applyHistFilter()" style="margin-top:3px">
               <option value="">전체</option>
             </select>
@@ -751,19 +759,19 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <div class="part-dropdown" id="cfg-part-dropdown"></div>
       </div>
       <div id="cfg-selected-part" style="display:none;margin-top:8px;display:none;align-items:center;justify-content:space-between;gap:8px">
-        <div style="font-size:13px;font-weight:700;color:#1e40af" id="cfg-selected-part-label"></div>
-        <button onclick="deletePartCfg()" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🗑 부품 삭제</button>
+        <div style="font-size:17px;font-weight:700;color:#1e40af" id="cfg-selected-part-label"></div>
+        <button onclick="deletePartCfg()" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:7px;font-size:16px;font-weight:700;cursor:pointer;white-space:nowrap">🗑 부품 삭제</button>
       </div>
       <!-- 금형 본수 편집 (부품 선택 후 표시) -->
       <div id="cfg-mold-edit" style="display:none;margin-top:10px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <div>
-            <label style="font-size:12px;font-weight:700;color:#64748b">금형 본수</label>
-            <div style="font-size:10px;color:#94a3b8;margin-top:1px">측정 시 금형호기(1~N호기) 선택 개수</div>
+            <label style="font-size:16px;font-weight:700;color:#64748b">금형 본수</label>
+            <div style="font-size:13px;color:#94a3b8;margin-top:1px">측정 시 금형호기(1~N호기) 선택 개수</div>
           </div>
           <div class="cnt-ctrl" style="display:flex;align-items:center;gap:10px">
             <button class="cnt-btn" onclick="changeMoldCount(-1)">−</button>
-            <span class="cnt-num" id="cfg-mold-num" style="min-width:24px;text-align:center;font-size:16px;font-weight:800;color:#1e3a5f">1</span>
+            <span class="cnt-num" id="cfg-mold-num" style="min-width:24px;text-align:center;font-size:21px;font-weight:800;color:#1e3a5f">1</span>
             <button class="cnt-btn" onclick="changeMoldCount(1)">＋</button>
           </div>
         </div>
@@ -797,10 +805,10 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="cfg-fold-body">
       <div id="cfg-drawing-empty" style="display:none">
         <div style="text-align:center;padding:24px;border:2px dashed #cbd5e1;border-radius:10px;color:#94a3b8">
-          <div style="font-size:28px;margin-bottom:8px">📂</div>
-          <div style="font-size:13px">등록된 도면이 없습니다</div>
-          <div style="font-size:11px;margin-top:4px">권장: 가로 1000px 이상 PNG/JPG</div>
-          <div style="font-size:11px;margin-top:6px;color:#3b82f6;font-weight:700">💡 캡처 후 Ctrl+V로 바로 붙여넣기 가능</div>
+          <div style="font-size:36px;margin-bottom:8px">📂</div>
+          <div style="font-size:17px">등록된 도면이 없습니다</div>
+          <div style="font-size:14px;margin-top:4px">권장: 가로 1000px 이상 PNG/JPG</div>
+          <div style="font-size:14px;margin-top:6px;color:#3b82f6;font-weight:700">💡 캡처 후 Ctrl+V로 바로 붙여넣기 가능</div>
         </div>
         <label class="cfg-save-btn" style="display:block;text-align:center;margin-top:12px;cursor:pointer">
           📤 도면 이미지 업로드
@@ -810,7 +818,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       </div>
 
       <div id="cfg-drawing-editor" style="display:none">
-        <div style="font-size:12px;color:#64748b;margin-bottom:8px">
+        <div style="font-size:16px;color:#64748b;margin-bottom:8px">
           항목 번호 칩을 누른 뒤 도면에서 위치를 클릭하면 마커가 찍힙니다.
           <span id="cfg-active-marker" style="font-weight:700;color:#3b82f6"></span>
         </div>
@@ -818,7 +826,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <div id="cfg-marker-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
         <!-- 정렬 도구 -->
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;background:#f8fafc;border-radius:8px">
-          <span style="font-size:11px;font-weight:700;color:#64748b">정렬:</span>
+          <span style="font-size:14px;font-weight:700;color:#64748b">정렬:</span>
           <button class="align-btn" onclick="alignMarkers('left')">⬅ 좌</button>
           <button class="align-btn" onclick="alignMarkers('hcenter')">↔ 가로중앙</button>
           <button class="align-btn" onclick="alignMarkers('right')">우 ➡</button>
@@ -827,16 +835,16 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
           <button class="align-btn" onclick="alignMarkers('bottom')">하 ⬇</button>
           <button class="align-btn" onclick="alignMarkers('hdist')">↔ 가로균등</button>
           <button class="align-btn" onclick="alignMarkers('vdist')">↕ 세로균등</button>
-          <span id="align-sel-count" style="font-size:11px;color:#94a3b8;margin-left:auto">마커 클릭으로 선택(Shift=다중)</span>
+          <span id="align-sel-count" style="font-size:14px;color:#94a3b8;margin-left:auto">마커 클릭으로 선택(Shift=다중)</span>
         </div>
         <!-- 지우개 도구 -->
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;background:#fef9f9;border-radius:8px;border:1px solid #fecaca">
-          <span style="font-size:11px;font-weight:700;color:#64748b">🩹 흰색 지우개:</span>
+          <span style="font-size:14px;font-weight:700;color:#64748b">🩹 흰색 지우개:</span>
           <button class="align-btn" id="eraser-toggle" onclick="toggleEraser()" style="border-color:#fca5a5">지우개 끄기</button>
-          <span style="font-size:11px;color:#64748b">굵기</span>
+          <span style="font-size:14px;color:#64748b">굵기</span>
           <input type="range" id="eraser-size" min="8" max="60" value="20" style="width:90px">
           <button class="align-btn" onclick="saveErasedDrawing()" style="background:#16a34a;color:#fff;border-color:#16a34a">지운 내용 저장</button>
-          <span id="eraser-status" style="font-size:11px;color:#94a3b8;margin-left:auto">지우개 켜고 드래그하면 흰색으로 칠해집니다</span>
+          <span id="eraser-status" style="font-size:14px;color:#94a3b8;margin-left:auto">지우개 켜고 드래그하면 흰색으로 칠해집니다</span>
         </div>
         <!-- 도면 + 마커 오버레이 -->
         <div id="cfg-drawing-wrap" style="position:relative;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;cursor:crosshair;background:#f8fafc">
@@ -875,7 +883,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <span class="cfg-fold-arrow">▾</span>
       </div>
       <div class="cfg-fold-body">
-        <div style="font-size:11px;color:#94a3b8;margin-bottom:8px">측정값 입력 시 '다음' 누르면 넘어갈 순서 (끼우기 규칙)</div>
+        <div style="font-size:14px;color:#94a3b8;margin-bottom:8px">측정값 입력 시 '다음' 누르면 넘어갈 순서 (끼우기 규칙)</div>
         <div style="display:flex;gap:6px;margin-bottom:8px">
           <button class="seg-btn" id="cfg-order-press" onclick="setOrderProc('press')">🔧 프레스</button>
           <button class="seg-btn" id="cfg-order-mach" onclick="setOrderProc('machining')">⚙️ 가공</button>
@@ -889,7 +897,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
     <div class="card" style="margin-top:12px">
       <div class="card-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleReasonMgr()">
         <span>🏷️ 측정사유 관리</span>
-        <span id="reason-mgr-arrow" style="font-size:14px;color:#94a3b8;transition:transform .2s">▾</span>
+        <span id="reason-mgr-arrow" style="font-size:18px;color:#94a3b8;transition:transform .2s">▾</span>
       </div>
       <div id="reason-mgr-body" style="display:none;margin-top:10px">
         <div id="reason-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
@@ -1217,14 +1225,14 @@ function filterParts(q) {
         const rep = it.parts[0];
         const vlabels = it.parts.map(x => x.part_variant).filter(Boolean).join('/');
         return `<div class="part-opt" onmousedown="selectGroup('${it.group.replace(/'/g,"\\'")}')">
-          <div>${rep.part_name||'—'} <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${vlabels}</span>
-            ${rep.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+rep.customer+'</span>' : ''}</div>
+          <div>${rep.part_name||'—'} <span style="font-size:13px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px;font-weight:700">${vlabels}</span>
+            ${rep.customer ? '<span style="font-size:13px;color:#94a3b8">·&nbsp;'+rep.customer+'</span>' : ''}</div>
           <div class="pno">${it.group}${rep.material ? ' · '+rep.material : ''}</div>
         </div>`;
       } else {
         const p = it.part;
         return `<div class="part-opt" onmousedown="selectPart(${p.id})">
-          <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">·&nbsp;'+p.customer+'</span>' : ''}</div>
+          <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:13px;color:#94a3b8">·&nbsp;'+p.customer+'</span>' : ''}</div>
           <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div>
         </div>`;
       }
@@ -1821,16 +1829,16 @@ function renderTabBar() {
   if (!tabs.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = 'flex';
   bar.innerHTML = tabs.map((t, i) => {
-    const grpMark = t.isGroup ? ' <span style="font-size:9px;opacity:.7">⊞</span>' : '';
+    const grpMark = t.isGroup ? ' <span style="font-size:12px;opacity:.7">⊞</span>' : '';
     const machMark = t.procMode === 'machining' ? '<span class="tab-mach-badge">가공</span>' : '';
     // [v0.45] 세동 탭이면 시간대 슬롯 배지
     const sedongMark = t.sedong ? `<span class="tab-mach-badge" style="background:#0891b2">세동 ${sedongSlotLabel(t.slot)}</span>` : '';
     // 설비호기 있으면 설비호기만, 없으면 금형호기만 표시
     let hoMark = '';
     if (t.equip) {
-      hoMark = ` <span style="font-size:10px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">설${t.equip}</span>`;
+      hoMark = ` <span style="font-size:13px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">설${t.equip}</span>`;
     } else if (t.moldCount >= 2 && t.moldNo) {
-      hoMark = ` <span style="font-size:10px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">${t.moldNo}</span>`;
+      hoMark = ` <span style="font-size:13px;background:#1e40af;color:#fff;padding:0 5px;border-radius:4px">${t.moldNo}</span>`;
     }
     return `<div class="tab ${i === activeTabIdx ? 'active' : ''}" onclick="switchTab(${i})">
       ${t.label}${sedongMark}${machMark}${hoMark}${grpMark}
@@ -1898,6 +1906,22 @@ function renderLinkedCard(linkGroup) {
   return renderRowColCard(linkGroup, members);
 }
 
+// [v1.43] 연동 카드 하단 항목별 액션 행 (메모·관리도). toggleNote/setNote/openSpcFor 재사용.
+function linkedActions(members) {
+  return `<div class="linked-actions">${members.map(c => {
+    const inp = specInputs[c.id] || {};
+    return `
+    <div class="linked-act-row">
+      <span class="linked-act-label"><b>No.${c.item_no}</b> ${c.item_name}</span>
+      <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${c.id}" onclick="toggleNote(${c.id})" title="메모">📝</button>
+      ${c.is_visual ? '' : `<button class="chart-btn" id="chart-btn-${c.id}" onclick="openSpcFor(${c.id})" title="관리도">📊</button>`}
+    </div>
+    <div class="note-area ${inp.note ? 'open' : ''}" id="note-area-${c.id}">
+      <textarea rows="2" placeholder="특채 허용, 고객 요청 등 메모…" oninput="setNote(${c.id},this.value)">${inp.note || ''}</textarea>
+    </div>`;
+  }).join('')}</div>`;
+}
+
 // 패턴 B (형상측정기): 항목 여러 개가 모두 N포인트, 같은 i포인트끼리 한 행
 function renderGridCard(linkGroup, members) {
   const cols = members;  // [v1.25] 순서는 renderLinkedCard에서 activeGroupOrders로 이미 결정
@@ -1906,11 +1930,11 @@ function renderGridCard(linkGroup, members) {
 
   const nos = cols.map(c => `No.${c.item_no}`).join(', ');
   const headerCols = [`<th style="text-align:left">포인트</th>`];
-  cols.forEach(c => headerCols.push(`<th><span style="font-size:10px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+  cols.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
 
   let bodyRows = '';
   for (let i = 0; i < N; i++) {
-    let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${i+1}</td>`;
+    let cells = `<td style="text-align:left;font-size:14px;color:#64748b">${i+1}</td>`;
     cols.forEach(cs => {
       const cInp = specInputs[cs.id];
       const cVal = cInp.vals[i] ?? '';
@@ -1928,7 +1952,7 @@ function renderGridCard(linkGroup, members) {
       <div class="spec-hdr">
         <div class="spec-no" style="background:#7c3aed">🔗</div>
         <div class="spec-info">
-          <div class="spec-name">${cols.map(c=>`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join('  ')} <span style="font-size:10px;color:#7c3aed;font-weight:700">형상연동</span></div>
+          <div class="spec-name">${cols.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join('  ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">형상연동</span></div>
           <div class="spec-text">${specLines.join(' / ')}</div>
         </div>
       </div>
@@ -1938,6 +1962,7 @@ function renderGridCard(linkGroup, members) {
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
+      ${linkedActions(members)}
     </div>`;
 }
 
@@ -1950,8 +1975,8 @@ function renderRowColCard(linkGroup, members) {
   // 헤더: 기준 항목명(대표) + 연동 항목명들
   const rowName = rowSpecs[0]?.item_name?.replace(/\[.*?\]/,'').trim() || '기준';
   const rowNos = rowSpecs.map(r=>`No.${r.item_no}`).join('~');
-  const headerCols = [`<th style="text-align:left">위치</th>`, `<th><span style="font-size:10px;color:#a78bfa;font-weight:600">${rowNos}</span><br>${rowName}</th>`];
-  colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:10px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+  const headerCols = [`<th style="text-align:left">위치</th>`, `<th><span style="font-size:13px;color:#a78bfa;font-weight:600">${rowNos}</span><br>${rowName}</th>`];
+  colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
 
   // 각 행 렌더
   let bodyRows = '';
@@ -1964,7 +1989,7 @@ function renderRowColCard(linkGroup, members) {
     // 행 라벨: 기준 항목명의 [xxx] 부분 추출
     const posLabel = (rs.item_name.match(/\[(.*?)\]/) || [])[1] || `${i+1}`;
 
-    let cells = `<td style="text-align:left;font-size:11px;color:#64748b">${posLabel}</td>`;
+    let cells = `<td style="text-align:left;font-size:14px;color:#64748b">${posLabel}</td>`;
     cells += `<td><input class="pt-inp ${rCls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${rs.id}-0"
       value="${rVal}" placeholder="—" oninput="setPt(${rs.id},0,this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
     // 연동 항목들의 i번째 포인트
@@ -1988,7 +2013,7 @@ function renderRowColCard(linkGroup, members) {
       <div class="spec-hdr">
         <div class="spec-no" style="background:#7c3aed">🔗</div>
         <div class="spec-info">
-          <div class="spec-name"><span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:10px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join(', ')} <span style="font-size:10px;color:#7c3aed;font-weight:700">연동</span></div>
+          <div class="spec-name"><span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join(', ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">연동</span></div>
           <div class="spec-text">${specLines.join(' / ')}</div>
         </div>
       </div>
@@ -1998,6 +2023,7 @@ function renderRowColCard(linkGroup, members) {
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
+      ${linkedActions(members)}
     </div>`;
 }
 
@@ -2082,6 +2108,7 @@ function renderSpecCard(s) {
         <div class="spec-result ${resCls}" id="res-${s.id}">${resLabel}</div>
         <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${s.id}"
           onclick="toggleNote(${s.id})" title="메모">📝</button>
+        ${s.is_visual ? '' : `<button class="chart-btn" id="chart-btn-${s.id}" onclick="openSpcFor(${s.id})" title="관리도">📊</button>`}
       </div>
       <div class="note-area ${inp.note ? 'open' : ''}" id="note-area-${s.id}">
         <textarea rows="2" placeholder="특채 허용, 고객 요청 등 메모…"
@@ -3473,7 +3500,7 @@ function openDrawing() {
   }
   const imgUrl = `${sbUrl}/storage/v1/object/public/qc-drawings/${selectedPart.drawing_path}`;
   const wrap = document.getElementById('drawing-img-wrap');
-  wrap.innerHTML = '<div style="color:#94a3b8;font-size:14px">불러오는 중…</div>';
+  wrap.innerHTML = '<div style="color:#94a3b8;font-size:18px">불러오는 중…</div>';
 
   // ★ 모달을 먼저 열어야 wrap이 실제 레이아웃 크기를 가짐 (안 열면 rect=0 → 마커 좌상단 몰림)
   document.getElementById('drawing-modal-title').textContent = `${selectedPart.part_number} 도면`;
@@ -3600,7 +3627,7 @@ function openDrawing() {
       img.src = imgUrl + (imgUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
       return;
     }
-    wrap.innerHTML = '<div style="color:#94a3b8;font-size:14px;text-align:center;padding:20px">도면 이미지를 불러올 수 없습니다<br><span style="font-size:11px">'+selectedPart.drawing_path+'</span></div>';
+    wrap.innerHTML = '<div style="color:#94a3b8;font-size:18px;text-align:center;padding:20px">도면 이미지를 불러올 수 없습니다<br><span style="font-size:14px">'+selectedPart.drawing_path+'</span></div>';
   };
   img.src = imgUrl;
 }
@@ -3722,7 +3749,13 @@ document.addEventListener('click', e => {
 // 서브 네비 전환
 // ══════════════════════════════════
 const NAV_SCREENS = ['measure', 'hist', 'cfg'];
+let curNav = 'measure';                            // [v1.47] 현재 활성 화면 추적
+const navScrollY = { measure: 0, hist: 0, cfg: 0 }; // [v1.47] 화면별 스크롤 위치 독립 보존
+
 function switchNav(name) {
+  // [v1.47] 화면 전환 시 스크롤 독립 관리 — 떠나는 화면 저장, 들어가는 화면 복원.
+  //   (v1.46은 measure만 처리해서 hist/cfg에 직전 화면 스크롤이 흘러들던 문제 해결)
+  navScrollY[curNav] = window.scrollY;
   NAV_SCREENS.forEach(n => {
     document.getElementById(`${n}-screen`).classList.toggle('active', n === name);
     document.getElementById(`snav-${n}`).classList.toggle('active', n === name);
@@ -3731,8 +3764,11 @@ function switchNav(name) {
   document.getElementById('tab-bar').style.position = name === 'measure' ? '' : 'static';
   // [v0.50] 측정 화면에서만 최상단 바(브랜드/탭) 스크롤로 숨김
   document.body.classList.toggle('measure-active', name === 'measure');
+  curNav = name;
   // [v0.57] 이력조회 진입 시 날짜필터(기본 오늘) + 전체 조회
   if (name === 'hist') initHistView();
+  // 들어가는 화면의 스크롤 복원 (variant 전환과 동일한 이중 rAF로 레이아웃 반영 후)
+  requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, navScrollY[name] || 0)));
 }
 
 // [v1.0] 이력조회 진입 — 날짜필터 항상 표시, 기본 오늘, 부품 미선택이면 전체 조회
@@ -3794,7 +3830,7 @@ function filterPartsHist(q) {
   ).slice(0, 20);
   dd.innerHTML = matched.length
     ? matched.map(p => `<div class="part-opt" onmousedown="selectPartHist(${p.id})">
-        <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:10px;color:#94a3b8">· '+p.customer+'</span>' : ''}</div>
+        <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:13px;color:#94a3b8">· '+p.customer+'</span>' : ''}</div>
         <div class="pno">${p.part_number}${p.material ? ' · '+p.material : ''}</div></div>`).join('')
     : '<div class="part-opt" style="color:#94a3b8">검색 결과 없음</div>';
   dd.classList.add('open');
@@ -3957,7 +3993,7 @@ function renderHistList(inspList) {
         <span class="hist-expand-icon">▾</span>
       </div>
       <div class="hist-detail" id="hdetail-${idx}">
-        <div style="padding:12px;color:#94a3b8;font-size:12px;text-align:center">불러오는 중…</div>
+        <div style="padding:12px;color:#94a3b8;font-size:16px;text-align:center">불러오는 중…</div>
       </div>
     </div>`;
   }).join('');
@@ -3990,7 +4026,7 @@ async function toggleHistCard(idx) {
     histMeasCache[insp.id] = rows || [];
     detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
   } catch(e) {
-    detail.innerHTML = `<div style="padding:12px;color:#dc2626;font-size:12px;text-align:center">로드 실패: ${e.message}</div>`;
+    detail.innerHTML = `<div style="padding:12px;color:#dc2626;font-size:16px;text-align:center">로드 실패: ${e.message}</div>`;
   }
 }
 
@@ -4007,10 +4043,10 @@ function buildMeasDetail(rows, idx, editMode) {
       <div><label>호기</label><input type="text" id="he-ho-${idx}" value="${insp.ho || ''}" inputmode="numeric"></div>
     </div>
     <div style="padding:8px 14px;border-bottom:1px solid #f1f5f9">
-      <label style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:3px;display:block">비고</label>
+      <label style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:3px;display:block">비고</label>
       <input type="text" id="he-remark-${idx}" value="${(insp.remark||'').replace(/"/g,'&quot;')}"
         placeholder="특이사항…"
-        style="width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;outline:none"
+        style="width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:17px;outline:none"
         onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#e2e8f0'">
     </div>`;
   }
@@ -4047,14 +4083,14 @@ function measMaxX(rows, part) {
 }
 
 function buildMeasTable(rows, idx, editMode, part) {
-  if (!rows.length) return '<div style="padding:12px;color:#94a3b8;font-size:12px;text-align:center">측정 데이터 없음</div>';
+  if (!rows.length) return '<div style="padding:12px;color:#94a3b8;font-size:16px;text-align:center">측정 데이터 없음</div>';
 
   const usePart = part || histPart;
   const sedong = isSedongPart(usePart);          // [v0.57] 카드별 세동 판정
   const maxX = measMaxX(rows, usePart);
 
   let html = '<div class="hist-meas-scroll">';
-  if (sedong) html += '<div style="padding:6px 10px;font-size:11px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
+  if (sedong) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
   html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
   for (let i = 1; i <= maxX; i++) {
     const label = sedong ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
@@ -4067,7 +4103,7 @@ function buildMeasTable(rows, idx, editMode, part) {
     const res = isVis ? r.visual_result : (r.result || '—');
     const resCls = res === 'OK' ? 'ok-val' : res === 'NG' ? 'ng-val' : '';
 
-    html += `<tr><td>${r.item_no ?? ''}</td><td>${r.item_name || ''}</td><td style="font-size:11px;color:#3b82f6">${r.spec_text || ''}</td>`;
+    html += `<tr><td>${r.item_no ?? ''}</td><td>${r.item_name || ''}</td><td style="font-size:14px;color:#3b82f6">${r.spec_text || ''}</td>`;
 
     if (isVis) {
       if (editMode) {
@@ -4077,7 +4113,7 @@ function buildMeasTable(rows, idx, editMode, part) {
             <option value="NG"${r.visual_result === 'NG' ? ' selected' : ''}>NG</option>
           </select></td>`;
       } else {
-        html += `<td colspan="${maxX}" style="text-align:center;color:#64748b;font-size:11px">${r.visual_result}</td>`;
+        html += `<td colspan="${maxX}" style="text-align:center;color:#64748b;font-size:14px">${r.visual_result}</td>`;
       }
     } else {
       for (let i = 1; i <= maxX; i++) {
@@ -4095,7 +4131,7 @@ function buildMeasTable(rows, idx, editMode, part) {
     if (editMode) {
       html += `<td><input class="edit-inp" type="text" id="he-note-${idx}-${ri}" value="${noteVal.replace(/"/g,'&quot;')}" placeholder="메모…" style="width:90px"></td>`;
     } else {
-      html += `<td style="font-size:11px;color:#f59e0b;min-width:60px">${noteVal ? `📝 ${noteVal}` : ''}</td>`;
+      html += `<td style="font-size:14px;color:#f59e0b;min-width:60px">${noteVal ? `📝 ${noteVal}` : ''}</td>`;
     }
     html += `</tr>`;
   });
@@ -4236,15 +4272,15 @@ function toggleReasonMgr() {
 function renderReasonList() {
   const el = document.getElementById('reason-list');
   if (!reasons.length) {
-    el.innerHTML = '<div style="font-size:12px;color:#94a3b8">등록된 사유 없음</div>';
+    el.innerHTML = '<div style="font-size:16px;color:#94a3b8">등록된 사유 없음</div>';
     return;
   }
   el.innerHTML = reasons.map(r => `
     <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8fafc;border-radius:7px;border:1px solid #e2e8f0">
       <input type="text" value="${r.label}" id="reason-edit-${r.id}"
-        style="flex:1;border:none;background:transparent;font-size:13px;outline:none;color:#1e293b"
+        style="flex:1;border:none;background:transparent;font-size:17px;outline:none;color:#1e293b"
         onblur="updateReason(${r.id}, this.value)">
-      <button onclick="deleteReason(${r.id})" style="border:none;background:#fee2e2;color:#dc2626;width:26px;height:26px;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>
+      <button onclick="deleteReason(${r.id})" style="border:none;background:#fee2e2;color:#dc2626;width:26px;height:26px;border-radius:6px;font-size:16px;cursor:pointer;flex-shrink:0">🗑</button>
     </div>`).join('');
 }
 
@@ -4346,6 +4382,19 @@ function destroySpcCharts() {
   if (spcRChart) { spcRChart.destroy(); spcRChart = null; }
 }
 
+// [v1.42] 측정 화면 항목 카드 → 이력조회 관리도 바로가기
+//   현재 열려있는 부품(selectedPart)의 해당 항목(specId) X̄/R 관리도를 바로 띄움.
+async function openSpcFor(specId) {
+  if (!selectedPart) { toast('부품이 선택되지 않았어요'); return; }
+  const partId = selectedPart.id;
+  switchNav('hist');                    // 이력조회 탭으로 이동
+  await selectPartHist(partId);         // 부품 선택 + histSpecs 로드 + spc-spec-sel 채움
+  const sel = document.getElementById('spc-spec-sel');
+  if (sel) sel.value = String(specId);  // 옵션 채워진 뒤 항목 지정
+  switchHistView('spc');                // 관리도 뷰로 전환 (selectPartHist가 list로 끝나므로 덮음)
+  loadSpcData();                        // 관리도 렌더
+}
+
 // SPC 계수표 (n=2~10)
 const SPC_CONST = {
   2:  { d2:1.128, A2:1.880, D3:0, D4:3.267 },
@@ -4427,9 +4476,19 @@ async function loadSpcData() {
     const rBar = ranges.reduce((a,b) => a+b, 0) / ranges.length;    // R̄
 
     // 관리선
-    const xUCL = xbarBar + C.A2 * rBar;
-    const xCL  = xbarBar;
-    const xLCL = xbarBar - C.A2 * rBar;
+    // [v1.45] X̄ 관리선 = 규격한계선(스펙) 사용. 공차가 좁아 통계 관리선(X̿±A2R̄)은
+    //   대부분 NG로 잡혀 실무 판정에 부적합 → USL/LSL 그대로 사용. 없으면 통계식 fallback.
+    //   (R 관리도는 산포라 스펙 개념이 없어 통계식 그대로 둠)
+    let xUCL, xCL, xLCL;
+    if (spec.usl != null && spec.lsl != null) {
+      xUCL = Number(spec.usl);
+      xLCL = Number(spec.lsl);
+      xCL  = (Number(spec.usl) + Number(spec.lsl)) / 2;
+    } else {
+      xUCL = xbarBar + C.A2 * rBar;
+      xCL  = xbarBar;
+      xLCL = xbarBar - C.A2 * rBar;
+    }
     const rUCL = C.D4 * rBar;
     const rCL  = rBar;
     const rLCL = C.D3 * rBar;
@@ -4701,7 +4760,7 @@ function renderMarkerChips() {
     const placed = (s.marker_x != null && s.marker_y != null);
     const active = s.id === activeMarkerSpecId;
     return `<button onclick="pickMarker(${s.id})"
-      style="padding:6px 10px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid ${active?'#3b82f6':(placed?'#86efac':'#e2e8f0')};
+      style="padding:6px 10px;border-radius:7px;font-size:16px;font-weight:700;cursor:pointer;border:1.5px solid ${active?'#3b82f6':(placed?'#86efac':'#e2e8f0')};
       background:${active?'#3b82f6':(placed?'#dcfce7':'#fff')};color:${active?'#fff':(placed?'#16a34a':'#64748b')}">
       ${s.item_no} ${placed?'✓':''}
     </button>`;
@@ -5106,17 +5165,17 @@ async function renderCfgSpecs() {
       <div class="cfg-spec-hdr" onclick="toggleCfgEdit(${s.id})">
         <div class="cfg-no">${s.item_no??'—'}</div>
         <div class="cfg-name">${s.item_name||'—'}
-          <div style="font-size:11px;color:#94a3b8;font-weight:400;margin-top:1px">${s.spec_text||''}</div>
+          <div style="font-size:14px;color:#94a3b8;font-weight:400;margin-top:1px">${s.spec_text||''}</div>
         </div>
         <span class="cfg-badge ${s.process_type||'press'}">${s.process_type||'press'}</span>
         <!-- 순서 버튼 (이벤트 전파 막기) -->
         <div style="display:flex;flex-direction:column;gap:2px;margin-left:4px" onclick="event.stopPropagation()">
-          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:10px;cursor:pointer;line-height:1"
+          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:13px;cursor:pointer;line-height:1"
             onclick="moveSpec(${idx},-1)" ${idx===0?'disabled':''}>↑</button>
-          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:10px;cursor:pointer;line-height:1"
+          <button style="border:none;background:#f1f5f9;border-radius:4px;width:22px;height:18px;font-size:13px;cursor:pointer;line-height:1"
             onclick="moveSpec(${idx},+1)" ${idx===cfgSpecs.length-1?'disabled':''}>↓</button>
         </div>
-        <span style="font-size:16px;color:#94a3b8;margin-left:2px">›</span>
+        <span style="font-size:21px;color:#94a3b8;margin-left:2px">›</span>
       </div>
       <div class="cfg-edit-panel" id="cfgedit-${s.id}">
         <div class="cfg-row2">
@@ -5161,7 +5220,7 @@ async function renderCfgSpecs() {
   // 새 항목 입력 패널 (기본 숨김)
   const addPanel = `
     <div id="cfg-new-spec" style="display:none;background:#fff;border-radius:10px;border:2px dashed #3b82f6;padding:14px;margin:0 12px 8px">
-      <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:10px">새 항목 추가</div>
+      <div style="font-size:16px;font-weight:700;color:#3b82f6;margin-bottom:10px">새 항목 추가</div>
       <div class="cfg-row2" style="margin-bottom:8px">
         <div class="cfg-field"><label>항목 No.</label><input type="number" class="inp" id="ns-no" placeholder="예) 16"></div>
         <div class="cfg-field"><label>항목명 *</label><input type="text" class="inp" id="ns-name" placeholder="예) 외경"></div>
@@ -5295,14 +5354,14 @@ async function renderInputOrder() {
 
   // ── 미리보기(다음 흐름) ──
   const flow = buildFlowPreview(units, rules);
-  const previewHtml = `<div style="font-size:11px;color:#64748b;margin:2px 0 8px;line-height:1.7">
+  const previewHtml = `<div style="font-size:14px;color:#64748b;margin:2px 0 8px;line-height:1.7">
     ${flow.map(f => `<span style="display:inline-block;background:${f.inserted?'#fef3c7':'#f1f5f9'};border-radius:5px;padding:1px 7px;margin:1px 3px 1px 0;${f.inserted?'color:#92400e;font-weight:700':''}">${f.label}</span>`).join('→ ')}
   </div>`;
 
   // ── 규칙 목록 ──
   let rulesHtml;
   if (!rules.length) {
-    rulesHtml = `<div style="font-size:12px;color:#94a3b8;padding:6px 0">규칙 없음 (항목 번호 순서대로 입력)</div>`;
+    rulesHtml = `<div style="font-size:16px;color:#94a3b8;padding:6px 0">규칙 없음 (항목 번호 순서대로 입력)</div>`;
   } else {
     rulesHtml = rules.map((r, i) => {
       const u = units.find(x => x.type==='single' && x.item_no===r.item_no);
@@ -5323,18 +5382,18 @@ async function renderInputOrder() {
     .map(u=>`<option value="${u.item_no}">${u.label} (No.${u.item_no})</option>`).join('');
   const formHtml = `
     <div style="border-top:1px dashed #e2e8f0;margin-top:10px;padding-top:10px">
-      <div style="font-size:12px;font-weight:700;color:#3b82f6;margin-bottom:6px">＋ 끼우기 규칙 추가</div>
+      <div style="font-size:16px;font-weight:700;color:#3b82f6;margin-bottom:6px">＋ 끼우기 규칙 추가</div>
       <div style="display:flex;flex-direction:column;gap:6px">
-        <div><label style="font-size:11px;color:#64748b">이 항목을</label>
+        <div><label style="font-size:14px;color:#64748b">이 항목을</label>
           <select class="inp" id="rule-item" onchange="renderAnchorOpts()">${insertOpts}</select></div>
-        <div><label style="font-size:11px;color:#64748b">이 위치 뒤에 끼움</label>
+        <div><label style="font-size:14px;color:#64748b">이 위치 뒤에 끼움</label>
           <select class="inp" id="rule-anchor"></select></div>
       </div>
       <button class="btn-primary" style="width:100%;margin-top:8px" onclick="addRule()">규칙 추가</button>
     </div>`;
 
   document.getElementById('cfg-order-list').innerHTML =
-    `<div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
+    `<div style="font-size:14px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
     + previewHtml + rulesHtml + formHtml;
   document.getElementById('cfg-order-saved').textContent = '';
   renderAnchorOpts();
@@ -5449,7 +5508,7 @@ function renderLinkManager() {
 
   let groupsHtml = '';
   if (groupKeys.length === 0) {
-    groupsHtml = `<div style="font-size:12px;color:#94a3b8;padding:8px 0">아직 연동 그룹이 없습니다</div>`;
+    groupsHtml = `<div style="font-size:16px;color:#94a3b8;padding:8px 0">아직 연동 그룹이 없습니다</div>`;
   } else {
     groupsHtml = groupKeys.map(gk => {
       // [v1.25] 저장된 순서 우선, 없으면 item_no 오름차순
@@ -5462,17 +5521,17 @@ function renderLinkManager() {
       const ptn = isGrid ? '형상형' : '외경형';
       const memberRows = mem.map((s, i) => `
         <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #ede9fe">
-          <span style="flex:1;font-size:12px;color:#5b21b6">No.${s.item_no} ${s.item_name}</span>
-          <button onclick="moveGroupMember('${gk}',${s.id},-1)" ${i===0?'disabled':''} style="border:1px solid #ddd6fe;background:${i===0?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===0?'default':'pointer'};font-size:13px;line-height:1">▲</button>
-          <button onclick="moveGroupMember('${gk}',${s.id},1)" ${i===mem.length-1?'disabled':''} style="border:1px solid #ddd6fe;background:${i===mem.length-1?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===mem.length-1?'default':'pointer'};font-size:13px;line-height:1">▼</button>
+          <span style="flex:1;font-size:16px;color:#5b21b6">No.${s.item_no} ${s.item_name}</span>
+          <button onclick="moveGroupMember('${gk}',${s.id},-1)" ${i===0?'disabled':''} style="border:1px solid #ddd6fe;background:${i===0?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===0?'default':'pointer'};font-size:17px;line-height:1">▲</button>
+          <button onclick="moveGroupMember('${gk}',${s.id},1)" ${i===mem.length-1?'disabled':''} style="border:1px solid #ddd6fe;background:${i===mem.length-1?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===mem.length-1?'default':'pointer'};font-size:17px;line-height:1">▼</button>
         </div>`).join('');
       return `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
           <div style="flex:1">
-            <span style="font-size:10px;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700">${ptn}</span>
-            <span style="font-size:12px;color:#5b21b6;margin-left:6px">${mem.length}개 항목 · 입력 순서</span>
+            <span style="font-size:13px;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700">${ptn}</span>
+            <span style="font-size:16px;color:#5b21b6;margin-left:6px">${mem.length}개 항목 · 입력 순서</span>
           </div>
-          <button onclick="unlinkGroup('${gk.replace(/'/g,"\\'")}')" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">연동 해제</button>
+          <button onclick="unlinkGroup('${gk.replace(/'/g,"\\'")}')" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer">연동 해제</button>
         </div>
         ${memberRows}
       </div>`;
@@ -5481,10 +5540,10 @@ function renderLinkManager() {
 
   return `
     <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px;margin:0 12px 12px">
-      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:4px">🔗 연동 그룹 관리</div>
-      <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">한 번에 측정되는 항목들을 묶어서 입력 화면에서 그리드로 표시</div>
+      <div style="font-size:17px;font-weight:700;color:#1e293b;margin-bottom:4px">🔗 연동 그룹 관리</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:10px">한 번에 측정되는 항목들을 묶어서 입력 화면에서 그리드로 표시</div>
       ${groupsHtml}
-      <button onclick="openLinkCreator()" style="width:100%;border:1.5px dashed #7c3aed;background:#faf5ff;color:#7c3aed;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">＋ 새 연동 만들기</button>
+      <button onclick="openLinkCreator()" style="width:100%;border:1.5px dashed #7c3aed;background:#faf5ff;color:#7c3aed;padding:10px;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px">＋ 새 연동 만들기</button>
       <div id="link-creator" style="display:none;margin-top:10px;padding:12px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px"></div>
     </div>`;
 }
@@ -5500,30 +5559,30 @@ function openLinkCreator() {
   }
   panel.style.display = 'block';
   panel.innerHTML = `
-    <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:8px">묶을 항목 선택</div>
+    <div style="font-size:16px;font-weight:700;color:#5b21b6;margin-bottom:8px">묶을 항목 선택</div>
     <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:10px">
       ${avail.map(s => `
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:4px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:16px;cursor:pointer;padding:4px">
           <input type="checkbox" class="link-chk" value="${s.id}" style="width:16px;height:16px">
           <span style="font-weight:700;color:#7c3aed">No.${s.item_no}</span>
           <span>${s.item_name}</span>
-          <span style="color:#94a3b8;font-size:11px">(${s.measure_points||0}P)</span>
+          <span style="color:#94a3b8;font-size:14px">(${s.measure_points||0}P)</span>
         </label>`).join('')}
     </div>
-    <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:6px">연동 방식</div>
+    <div style="font-size:16px;font-weight:700;color:#5b21b6;margin-bottom:6px">연동 방식</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:14px;cursor:pointer">
         <input type="radio" name="link-pattern" value="grid" checked style="margin-top:2px">
         <span><b>형상형</b> — 묶은 항목이 모두 같은 포인트 수. 같은 포인트끼리 한 행<br><span style="color:#94a3b8">예: 형상측정기로 한 번에 거리/R/각도 측정</span></span>
       </label>
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;cursor:pointer">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:14px;cursor:pointer">
         <input type="radio" name="link-pattern" value="rowcol" style="margin-top:2px">
         <span><b>외경형</b> — 항목 여러 개(각 1포인트)가 기준, 1개 항목이 따라붙음<br><span style="color:#94a3b8">예: 외경 4항목 + 진원도 4포인트</span></span>
       </label>
     </div>
     <div id="link-rowcol-opt" style="display:none;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
-      <div style="font-size:11px;color:#5b21b6;margin-bottom:6px">따라붙는 항목(연동) 1개 선택:</div>
-      <select id="link-col-sel" class="inp" style="font-size:12px"></select>
+      <div style="font-size:14px;color:#5b21b6;margin-bottom:6px">따라붙는 항목(연동) 1개 선택:</div>
+      <select id="link-col-sel" class="inp" style="font-size:16px"></select>
     </div>
     <div class="cfg-btn-row">
       <button class="cfg-save-btn" onclick="createLinkGroup()">연동 생성</button>
