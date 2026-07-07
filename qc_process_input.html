@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.47</title>
+<title>공정검사 입력 v1.50</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -450,7 +450,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.47</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.50</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2232,6 +2232,7 @@ function openAdjustPanel(el) {
   document.getElementById('adj-panel-val').textContent = el.value !== '' ? el.value : '—';
   document.getElementById('adj-panel').classList.add('open');
   document.getElementById('numpad-panel').classList.remove('open');   // 숫자패드와 동시에 뜨지 않게
+  _skipDocClick = true;   // [v1.50] 이 여는 클릭이 바깥클릭 리스너에 잡혀 즉시 닫히지 않게
 }
 
 function closeAdjustPanel() {
@@ -2294,7 +2295,11 @@ function scrollInputIntoView(el) {
 }
 
 // [v0.51] 패널 밖 터치 시 닫기 (닫기 버튼 대체)
+// [v1.50] 패드 여는 그 클릭이 scrollInputIntoView 스크롤로 타겟이 빗나가 '바깥클릭'으로 오판→즉시 닫히던 문제:
+//   패드 열 때 _skipDocClick=true로 표시하고, 그 클릭 1회만 무시.
+let _skipDocClick = false;
 document.addEventListener('click', e => {
+  if (_skipDocClick) { _skipDocClick = false; return; }
   const np = document.getElementById('numpad-panel');
   const ap = document.getElementById('adj-panel');
   if (!np || !ap) return;
@@ -2331,6 +2336,7 @@ function openNumpad(el) {
 
   document.getElementById('numpad-panel').classList.add('open');
   document.getElementById('adj-panel').classList.remove('open');   // 증감패널과 동시에 뜨지 않게
+  _skipDocClick = true;   // [v1.50] 이 여는 클릭이 바깥클릭 리스너에 잡혀 즉시 닫히지 않게
 }
 
 function closeNumpad() {
@@ -2481,6 +2487,26 @@ function nextInputOf(el, dir = 1) {
   return seq[i + dir] || null;
 }
 
+// [v1.48] 현재 칸 이후(dir 방향) 첫 "미입력" 칸. 미입력 = prefilled(직전값 미확인) 또는 빈칸.
+//   측정 순서를 바꿔서(예: 3,4 먼저) 이미 확정한 칸은 건너뛰고 다음 미입력으로 바로 이동.
+function nextUnfilledInputOf(el, dir = 1) {
+  const seq = orderedInputs();
+  const i = seq.indexOf(el);
+  if (i < 0) return null;
+  for (let j = i + dir; j >= 0 && j < seq.length; j += dir) {
+    const c = seq[j];
+    if (c.classList.contains('prefilled') || c.value === '') return c;
+  }
+  // [v1.49] 정방향인데 뒤에 미입력이 없으면 앞쪽(처음~현재 전)까지 순환해서 찾음
+  if (dir > 0) {
+    for (let j = 0; j < i; j++) {
+      const c = seq[j];
+      if (c.classList.contains('prefilled') || c.value === '') return c;
+    }
+  }
+  return null;
+}
+
 // ✓ 다음 = 현재 칸 확정하고 화면상 다음 입력칸으로 이동 (그 칸 패널 자동 오픈)
 // [v0.60] 현재 칸 확정 — 값 있으면(기본값이든 입력값이든) "측정 확인"으로 touched 처리
 function confirmCurrentInput(el) {
@@ -2541,14 +2567,13 @@ function numNext() {
   const el = activeAdjEl;
   if (!el) { closeNumpad(); return; }
   confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
-  // [v1.20] 미입력 순회 모드면 전체 순서 무시하고 다음 미입력 칸으로
-  if (_inUntouchedMode) { closeNumpad(); nextUntouched(); return; }
-  const next = nextInputOf(el, 1);   // [v1.17] 규칙 반영 다음칸
+  // [v1.49] 항상 다음 미입력 칸으로 (nextUnfilledInputOf가 순환까지 처리 → 옛 _inUntouchedMode 큐 불필요)
+  const next = nextUnfilledInputOf(el, 1);
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행
   } else {
     closeNumpad();
-    jumpToFirstUntouched();
+    _goSaveBtn();   // 미입력 소진 → 저장 버튼으로
   }
 }
 
@@ -2571,14 +2596,13 @@ function ptInpKeyNav(e, el) {
   e.preventDefault();
   confirmCurrentInput(el);   // [v0.60] 키보드 Tab/Enter로 넘어가도 현재 값 측정 확정
   const dir = (isTab && e.shiftKey) ? -1 : 1;
-  // [v1.20] 미입력 순회 모드(정방향)면 전체 순서 무시하고 다음 미입력 칸으로
-  if (_inUntouchedMode && dir > 0) { el.blur(); nextUntouched(); return; }
-  const next = nextInputOf(el, dir);   // [v1.17] 규칙 반영
+  // [v1.49] 정방향은 다음 미입력 칸(순환 포함), 역방향(수정)은 바로 이전 칸
+  const next = (dir > 0) ? nextUnfilledInputOf(el, 1) : nextInputOf(el, dir);
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행되며 el.select() 로 전체 선택됨
   } else if (dir > 0) {
     el.blur();
-    jumpToFirstUntouched();
+    _goSaveBtn();
   }
 }
 
@@ -2598,14 +2622,13 @@ function adjConfirmNext() {
   const el = activeAdjEl;
   if (!el) { closeAdjustPanel(); return; }
   confirmCurrentInput(el);   // [v0.60] 다음 누르면 현재 값(직전값 그대로여도) 측정 확정
-  // [v1.20] 미입력 순회 모드면 전체 순서 무시하고 다음 미입력 칸으로
-  if (_inUntouchedMode) { closeAdjustPanel(); nextUntouched(); return; }
-  const next = nextInputOf(el, 1);   // [v1.17] 규칙 반영 다음칸
+  // [v1.49] 항상 다음 미입력 칸으로 (순환 포함)
+  const next = nextUnfilledInputOf(el, 1);
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동으로 다음 칸 패널을 염
   } else {
     closeAdjustPanel();
-    jumpToFirstUntouched();
+    _goSaveBtn();
   }
 }
 
