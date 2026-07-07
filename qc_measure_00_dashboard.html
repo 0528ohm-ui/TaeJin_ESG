@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.10</title>
+<title>측정기 종합현황 v1.12</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -51,6 +51,8 @@
   .bulk-btn:hover{transform:translateY(-2px);opacity:.92}
   .bulk-btn:active{transform:scale(.97)}
   .bulk-btn:disabled{opacity:.5;cursor:wait;transform:none}
+  .bulk-btn.all-done{opacity:.4;cursor:not-allowed;filter:grayscale(.4)}
+  .bulk-btn.all-done:hover{transform:none;opacity:.4}
   .bulk-btn .b-sub{font-size:10px;font-weight:500;opacity:.9}
   .bulk-btn.daily{background:linear-gradient(135deg,#0ea5e9,#0369a1)}
   .bulk-btn.weekly{background:linear-gradient(135deg,#f59e0b,#d97706)}
@@ -422,6 +424,26 @@ function renderStats(allStatus){
 // 전역 상태 캐시 (일괄저장에 재사용)
 let __allStatusCache = [];
 
+// 각 주기(일/주/월)별로 전체 장비가 이미 완료(ok) 상태인지 판정 → 완료면 버튼 비활성화
+function updateBulkButtons(allStatus){
+  const today = todayKST();
+  const btnMap = {1:'btnDaily', 7:'btnWeekly', 30:'btnMonthly'};
+  [1,7,30].forEach(function(period){
+    let allOk = true;
+    EQUIPMENTS.forEach(function(eq, i){
+      const s = allStatus[i];
+      const last = period===1 ? s.daily : (period===7 ? s.weekly : s.monthly);
+      const st = cellStatus(period, last, today);
+      if(st !== 'ok') allOk = false;
+    });
+    const btn = document.getElementById(btnMap[period]);
+    if(!btn) return;
+    btn.disabled = allOk;
+    btn.classList.toggle('all-done', allOk);
+    btn.title = allOk ? '이미 전체 완료됨' : '';
+  });
+}
+
 async function loadStatus(){
   document.getElementById('grid').innerHTML = '<div class="loading">⏳ 측정기 점검 현황 조회 중...</div>';
   document.getElementById('statsLine').textContent = '로딩...';
@@ -430,6 +452,7 @@ async function loadStatus(){
     __allStatusCache = allStatus;
     document.getElementById('grid').innerHTML = EQUIPMENTS.map((eq, i) => renderCard(eq, allStatus[i])).join('');
     renderStats(allStatus);
+    updateBulkButtons(allStatus);
   }catch(e){
     document.getElementById('grid').innerHTML = '<div class="empty" style="color:var(--ng)">❌ 조회 실패: '+e.message+'</div>';
   }
@@ -483,8 +506,9 @@ async function askBulk(period){
     return;
   }
 
-  // 일간일 때만 백필(빠진 평일) 자동 채움 안내
+  // 일간: 빠진 평일 자동 채움 안내 / 주간·월간: 지난 주·달 병합 안내
   let backfillDays = [];
+  let backfillBuckets = [];
   let backfillNote = '';
   if(period === 1){
     const recent = await getRecentBulkDate();
@@ -505,6 +529,22 @@ async function askBulk(period){
         '<span style="color:var(--text3);font-size:10px">· 각 평일에 일간 항목만 OK · 시간 랜덤 (08:30~12:00 또는 13:30~16:30) · 점검자: '+getCurrentInspector()+'</span>' +
         '</div>';
     }
+  } else if(period === 7 || period === 30){
+    const repEq = EQUIPMENTS[0].name;
+    const dates = await getEqDatesSince(repEq, BACKFILL_BASELINE);
+    const today = todayKST();
+    const bucketFn = (period===7) ? weekBucket : monthBucket;
+    backfillBuckets = lastDatePerBucket(dates, bucketFn, bucketFn(today));
+    if(backfillBuckets.length > 0){
+      const bucketLabel = (period===7) ? '주' : '달';
+      const dl = backfillBuckets.join(', ');
+      backfillNote =
+        '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.12);border-left:3px solid #f59e0b;border-radius:4px;font-size:12px;line-height:1.6">' +
+        '⚠ 지난 <b>'+backfillBuckets.length+bucketLabel+'</b> 자동 채움 (5/22~)<br>' +
+        '<span style="color:var(--text2);font-size:11px">'+dl+'</span><br>' +
+        '<span style="color:var(--text3);font-size:10px">· 각 '+bucketLabel+'의 마지막 일간 기록일에 '+periodLabel(period)+' 항목 병합 · 시간은 그날 이미 기록된 시간 그대로 유지 · 점검자: '+getCurrentInspector()+'</span>' +
+        '</div>';
+    }
   }
 
   const body =
@@ -515,7 +555,7 @@ async function askBulk(period){
     backfillNote +
     '<br><br>실행하시겠습니까?';
 
-  openModal('일괄 점검완료 확인', body, ()=>runBulk(period, backfillDays));
+  openModal('일괄 점검완료 확인', body, ()=>runBulk(period, backfillDays, backfillBuckets));
 }
 window.askBulk = askBulk;
 
@@ -670,6 +710,67 @@ function missingWeekdays(fromYmd, toYmd){
   return result;
 }
 
+// 실 데이터 시작일 (5/22부터 등록 시작 → 백필 기준일)
+const BACKFILL_BASELINE = '2026-05-22';
+
+// 특정 장비의 baseline 이후 존재하는 check_date 목록 (오름차순)
+async function getEqDatesSince(eqName, baseline){
+  try{
+    const url = SB_URL + '/rest/v1/qc_measure_log?select=check_date&equipment=eq.' +
+                encodeURIComponent(eqName) + '&check_date=gte.' + baseline + '&order=check_date.asc&limit=500';
+    const r = await fetch(url, {headers:SB_HEADERS});
+    if(!r.ok) return [];
+    const rows = await r.json();
+    return rows.map(function(row){ return row.check_date; });
+  }catch(e){ return []; }
+}
+
+// dates를 bucket(주=월요일 기준/달=YYYY-MM) 단위로 묶어 각 bucket의 마지막 날짜만 추출
+// excludeBucket(이번 주/이번 달)은 제외 → 그건 '오늘 일괄저장'에서 실제 오늘 날짜로 처리
+function lastDatePerBucket(dates, bucketFn, excludeBucket){
+  const map = {};
+  dates.forEach(function(d){
+    const b = bucketFn(d);
+    if(b === excludeBucket) return;
+    if(!map[b] || map[b] < d) map[b] = d;
+  });
+  return Object.keys(map).sort().map(function(k){ return map[k]; });
+}
+function weekBucket(d){ return mondayOf(d); }
+function monthBucket(d){ return String(d).slice(0,7); }
+
+// 주간/월간 항목을 기존 (eq,date) row에 병합. check_time은 절대 건드리지 않음
+// → 그 날짜에 이미 기록된(일간 백필 시 랜덤 배정된) 시간을 그대로 유지
+async function mergePeriodIntoDate(eqName, date, items, period){
+  const targetItems = items.filter(function(it){ return Number(it.period)===period; });
+  if(targetItems.length===0) return {skipped:true};
+  const okItems = {};
+  targetItems.forEach(function(it){ okItems[it.label] = 'OK'; });
+
+  const qUrl = SB_URL + '/rest/v1/qc_measure_log?select=id,items_json&equipment=eq.' +
+               encodeURIComponent(eqName) + '&check_date=eq.' + date + '&limit=1';
+  const qr = await fetch(qUrl, {headers:SB_HEADERS});
+  if(!qr.ok) throw new Error('조회실패 HTTP '+qr.status);
+  const exist = await qr.json();
+  if(!exist || exist.length===0) return {skipped:true}; // 그 날짜에 row 자체가 없으면 건너뜀
+
+  const cur = exist[0].items_json || {};
+  const merged = Object.assign({}, cur, okItems);
+  const ng = Object.values(merged).filter(function(v){ return v==='NG'; }).length;
+  const patchUrl = SB_URL + '/rest/v1/qc_measure_log?id=eq.' + exist[0].id;
+  const pr = await fetch(patchUrl, {
+    method:'PATCH',
+    headers: SB_HEADERS_POST,
+    body: JSON.stringify({ items_json: merged, ng_count: ng, result: ng>0?'NG':'OK' })
+    // check_time 필드 없음 → 기존 값 그대로 유지
+  });
+  if(!pr.ok){
+    const txt = await pr.text();
+    throw new Error('PATCH 실패 HTTP '+pr.status+' '+txt);
+  }
+  return {updated:true};
+}
+
 // 근무시간 내 랜덤 시각 (08:30~12:00 또는 13:30~16:30)
 function randomWorkTime(){
   const isAm = Math.random() < 0.5;
@@ -812,14 +913,16 @@ async function upsertEqLog(eqName, period, items){
   }
 }
 
-async function runBulk(period, backfillDays){
+async function runBulk(period, backfillDays, backfillBuckets){
   backfillDays = backfillDays || [];
+  backfillBuckets = backfillBuckets || [];
   const btnMap = {1:'btnDaily', 7:'btnWeekly', 30:'btnMonthly'};
   const btn = document.getElementById(btnMap[period]);
   if(btn){ btn.disabled = true; btn.textContent = '⏳ 저장 중...'; }
 
   let okEq = 0, skipEq = 0, totalItems = 0;
   let backfillOk = 0, backfillFail = 0;
+  let bucketOk = 0, bucketFail = 0;
   const errors = [];
 
   // 1) 일간 백필 (일간 버튼에서만 트리거) — 일간 항목만 채움. 주간/월간은 건드리지 않음.
@@ -842,6 +945,38 @@ async function runBulk(period, backfillDays){
         }catch(e){
           backfillFail++;
           console.error('백필 실패', eq.name, date, e);
+        }
+      }
+    }
+  }
+
+  // 1-b) 주간/월간 백필 (해당 버튼에서만 트리거) — 지난 주/달의 마지막 일간 기록일에 병합.
+  //      check_time은 건드리지 않음 → 그날 이미 기록된 시간 그대로 유지 (오늘 실제 시각으로 새로 찍지 않음)
+  if((period === 7 || period === 30) && backfillBuckets.length > 0){
+    const today = todayKST();
+    const bucketFn = (period===7) ? weekBucket : monthBucket;
+    const excludeBucket = bucketFn(today);
+    for(let i=0; i<EQUIPMENTS.length; i++){
+      const eq = EQUIPMENTS[i];
+      const cached = __allStatusCache[i];
+      let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
+      if(!items || items.length===0){
+        try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
+      }
+      if(!items || items.length === 0) continue;
+
+      // 장비별로 실제 존재하는 날짜 재조회 (대표장비와 다를 수 있어 안전하게 개별 확인)
+      let eqDates = [];
+      try{ eqDates = await getEqDatesSince(eq.name, BACKFILL_BASELINE); }catch(e){ eqDates = []; }
+      const eqBuckets = lastDatePerBucket(eqDates, bucketFn, excludeBucket);
+
+      for(const date of eqBuckets){
+        try{
+          const r = await mergePeriodIntoDate(eq.name, date, items, period);
+          if(!r.skipped) bucketOk++;
+        }catch(e){
+          bucketFail++;
+          console.error('주간/월간 백필 실패', eq.name, date, e);
         }
       }
     }
@@ -878,6 +1013,12 @@ async function runBulk(period, backfillDays){
   if(backfillDays.length > 0){
     msg += ' · 백필 '+backfillDays.length+'일 ('+backfillOk+'건';
     if(backfillFail > 0) msg += ' / 실패 '+backfillFail;
+    msg += ')';
+  }
+  if(backfillBuckets.length > 0){
+    const bucketLabel = (period===7) ? '주' : '달';
+    msg += ' · 지난 '+backfillBuckets.length+bucketLabel+' 병합 ('+bucketOk+'건';
+    if(bucketFail > 0) msg += ' / 실패 '+bucketFail;
     msg += ')';
   }
   if(errors.length > 0){
