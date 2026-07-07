@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.50</title>
+<title>공정검사 입력 v1.51</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -450,7 +450,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.50</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.51</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2280,16 +2280,26 @@ function switchInputMode() {
 // 입력칸을 화면 위쪽(약 30% 지점)으로 스크롤 — 하단 패널과 안 겹치고 무슨 값 넣는지 보이게
 function scrollInputIntoView(el) {
   requestAnimationFrame(() => {
-    // 입력칸이 속한 항목 카드 전체가 보이도록 카드 상단 기준 정렬
-    const card = (el.closest && (el.closest('.spec-card') || el.closest('.linked-card'))) || el;
+    // [v1.51] 카드 상단이 아니라 '지금 입력 중인 칸'을 패드 바로 위로 정렬.
+    //   글자 확대(v1.41)+가감패널 0.001행 추가(v1.35)로 패드가 커져 하단 칸이 가려지던 문제 해결.
+    const np = document.getElementById('numpad-panel');
+    const ap = document.getElementById('adj-panel');
+    const pad = np.classList.contains('open') ? np : (ap.classList.contains('open') ? ap : null);
+    const padTop = pad ? pad.getBoundingClientRect().top : window.innerHeight;
     // 화면 최상단에 실제 고정된 영역(sub-nav + sticky-group)의 최하단 y좌표
     let fixedBottom = 0;
     document.querySelectorAll('.sub-nav, .sticky-group').forEach(e => {
       const r = e.getBoundingClientRect();
       if (r.height > 0 && r.top < 120 && r.bottom > fixedBottom) fixedBottom = r.bottom;
     });
-    const cardTop = card.getBoundingClientRect().top;
-    const delta = cardTop - fixedBottom - 10;   // 카드 상단을 고정영역 바로 아래로
+    const margin = 14;
+    const r = el.getBoundingClientRect();
+    let delta = 0;
+    if (r.bottom > padTop - margin) {
+      delta = r.bottom - (padTop - margin);        // 패드에 가림 → 위로 스크롤(칸이 패드 바로 위로)
+    } else if (r.top < fixedBottom + margin) {
+      delta = r.top - (fixedBottom + margin);      // 상단 고정영역에 가림 → 아래로 스크롤
+    }
     if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: 'smooth' });
   });
 }
