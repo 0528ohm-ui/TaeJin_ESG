@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.51</title>
+<title>공정검사 입력 v1.52</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -450,7 +450,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.51</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.52</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2294,11 +2294,18 @@ function scrollInputIntoView(el) {
     });
     const margin = 14;
     const r = el.getBoundingClientRect();
+    // [v1.52] 입력순서가 위쪽 항목으로 거슬러 올라갈 때 항목 머리(번호/이름/규격)가 잘려 보이던 문제:
+    //   위로 이동 판단 기준을 입력칸이 아니라 카드(.spec-card) 상단으로 변경 → 카드 머리까지 노출.
+    //   단, 카드가 길어 머리를 다 보이게 내리면 입력칸이 패드에 가릴 수 있으므로
+    //   '입력칸 하단이 패드 위 margin까지'를 한도로 클램프 (입력칸 노출이 항상 우선).
+    const card = el.closest('.spec-card');
+    const cardTop = card ? card.getBoundingClientRect().top : r.top;
     let delta = 0;
     if (r.bottom > padTop - margin) {
       delta = r.bottom - (padTop - margin);        // 패드에 가림 → 위로 스크롤(칸이 패드 바로 위로)
-    } else if (r.top < fixedBottom + margin) {
-      delta = r.top - (fixedBottom + margin);      // 상단 고정영역에 가림 → 아래로 스크롤
+    } else if (cardTop < fixedBottom + margin) {
+      delta = cardTop - (fixedBottom + margin);    // 카드 머리가 상단 고정영역에 가림 → 아래로 스크롤
+      delta = Math.max(delta, r.bottom - (padTop - margin));  // 입력칸이 패드 밑으로 안 들어가게 한도
     }
     if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: 'smooth' });
   });
