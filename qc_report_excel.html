@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.39 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.43 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.39</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.43</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -1324,21 +1324,40 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
   //   [v0.38] 부강 전용 → SKF/우창 포함 전 회사 적용 (템플릿 구조 3사 완전 동일: 데이터29~, 하단89~97, B54:B93병합).
   {
     const filled = Math.min(meas.length, 30);
-    const lastDataRow = 29 + filled*2 - 1;   // 마지막으로 채워진 데이터 행
-    for(let r = lastDataRow + 1; r <= 88; r++){
+    // [v0.42] 배율/패딩 전면 재계산 — 템플릿 실측 기반
+    //   기존 문제: 행높이를 15pt 균일로 가정했으나 실측은 헤더 455.5pt/항목쌍 24pt/하단 110pt
+    //   → 20항목 기준 1155pt로 과대계산되어 59%로 인쇄(실제는 66% 가능) = 여백 과다의 주범.
+    //   여백도 기본(좌우0.75" 상하1")이 커서 함께 축소: 좌우0.25" 상하0.4" → 인쇄폭 559pt/높이 784pt.
+    //   가로 상한: 표폭 720pt 실측 → 559/720=77.6% → 안전빵 76.
+    //   세로 예산: 784pt → 안전빵 775.
+    const rowH = (r) => { const h = ws.getRow(r).height; return (h && h > 0) ? h : 15; };
+    let headH = 0; for(let r = 1; r <= 28; r++) headH += rowH(r);
+    let footH = 0; for(let r = 89; r <= 97; r++) footH += rowH(r);
+    const pairH = rowH(29) + rowH(30);                       // 항목 1개 = 2행 (데이터행 균일)
+    const CAP_W = 76;                                        // 가로 배율 상한(%)
+    // [v0.43] 세로 예산 775→758: 775(96.7% 사용)로는 Excel의 배율 적용 시 행높이 픽셀 반올림
+    //   누적으로 몇 pt 넘쳐 빈 2페이지가 생김 → 3%대 여유 확보. 20항목 74→72%, 나머지 75%.
+    const BUDGET_H = 758;                                    // 세로 인쇄가능 높이(pt, A4 784pt에 안전여유)
+    // [v0.40→v0.42] 항목 수가 적으면 빈 항목행을 남겨 여백 채움.
+    //   고정 15 대신 "가로 상한 배율에서 세로가 꽉 차는 항목 수"를 동적 계산 (현 실측으론 19).
+    const fillItems = Math.ceil((BUDGET_H / (CAP_W/100) - headH - footH) / pairH);
+    const visibleItems = Math.min(30, Math.max(filled, fillItems));
+    const lastVisibleRow = 29 + visibleItems*2 - 1;
+    for(let r = lastVisibleRow + 1; r <= 88; r++){
       try { ws.getRow(r).hidden = true; } catch(e){}
     }
-    // [v0.32] 1페이지 인쇄 — fitToPage가 Excel에서 파일을 깨뜨려(이미지 포함 시) 동적 scale로 대체.
-    //   행 높이 전부 15pt 가정(실측 12~13pt보다 커서 scale이 보수적=더 축소 → 1장 보장에 안전).
-    //   보이는 영역 = 헤더(1~28, 420pt) + 데이터(29~lastDataRow) + 하단(89~97, 135pt).
-    //   세로: A4 인쇄가능 ≈690pt에 맞춤 / 가로: 35열 → A4 1장에 ≈68%.
-    //   ※ scale 값만 변경하고 fitToPage/pageSetUpPr는 안 건드림 = v0.28~0.30과 같은 안전한 구조.
+    // [v0.32] fitToPage는 이미지 포함 시 파일이 깨져 동적 scale 사용. scale/margins/printOptions만 변경.
     if(ws.pageSetup){
-      const printH = 420 + (lastDataRow - 28) * 15 + 135;   // 보이는 행 높이합(pt)
-      const scaleV = Math.floor(690 / printH * 100);         // 세로 1장 맞춤 배율
-      let scale = Math.min(68, scaleV, 100);                 // 가로(68) 제약 + 확대 금지
+      ws.pageSetup.margins = { left:0.25, right:0.25, top:0.4, bottom:0.4, header:0.2, footer:0.2 };
+      // [v0.43] 인쇄영역 명시 — 사용범위 밖(이미지 앵커 등)으로 인쇄범위가 번지는 것 차단
+      ws.pageSetup.printArea = 'A1:AI97';
+      const printH = headH + visibleItems*pairH + footH;     // 보이는 영역 실제 높이(pt)
+      const scaleV = Math.floor(BUDGET_H / printH * 100);    // 세로 1장 맞춤 배율
+      let scale = Math.min(CAP_W, scaleV, 100);              // 가로 제약 + 확대 금지
       if(scale < 10) scale = 10;                             // Excel 최소값
       ws.pageSetup.scale = scale;
+      // [v0.41] 가로 중앙 정렬 — 남는 가로 여백 좌우 균등 배분
+      ws.pageSetup.horizontalCentered = true;
     }
   }
   return warnings;
