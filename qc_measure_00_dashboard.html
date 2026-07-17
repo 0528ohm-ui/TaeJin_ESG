@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.12</title>
+<title>측정기 종합현황 v1.13</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -569,21 +569,18 @@ async function sha256hex(s){
   return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 
-// 캐시된 인증 조회 (당일 자정 만료 → 날짜 바뀌면 재인증)
+// 캐시된 인증 조회 (만료 없음 — 헤더 '변경' 링크로 수동 재인증 전까지 이 기기에 영구 저장)
 function getPinAuth(){
   try{
     const a = JSON.parse(localStorage.getItem(PIN_AUTH_KEY)||'null');
-    if(!a || !a.name || !a.exp) return null;
-    if(Date.now() > a.exp) return null;
+    if(!a || !a.name) return null;
     return a;
   }catch(e){ return null; }
 }
 
-// 인증 성공 시 당일 자정까지 캐시
+// 인증 성공 시 이 기기에 영구 저장 (만료시각 없음)
 function setPinAuth(name){
-  const now = new Date();
-  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0,0,0,0).getTime();
-  try{ localStorage.setItem(PIN_AUTH_KEY, JSON.stringify({name:name, exp:midnight})); }catch(e){}
+  try{ localStorage.setItem(PIN_AUTH_KEY, JSON.stringify({name:name})); }catch(e){}
 }
 
 // PIN → user_pin.pin_hash 조회 → 이름 반환 (없으면 null)
