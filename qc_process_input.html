@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.52</title>
+<title>공정검사 입력 v1.55</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -450,7 +450,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.52</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.55</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1317,7 +1317,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
       `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark`);
     if (!lastInsp.length) return '';
     const lastRows = await sbAll('qc_shipping_measurement',
-      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,visual_result,note`);
+      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note`);
     const bySpec = {};
     lastRows.forEach(r => { bySpec[r.spec_id] = r; });
     loadedSpecs.forEach(s => {
@@ -1330,7 +1330,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
         if (r.visual_result) { inp.val = r.visual_result; inp.prefilledVal = true; }
         return;
       }
-      const xs = [r.x1, r.x2, r.x3, r.x4, r.x5, r.x6, r.x7, r.x8, r.x9, r.x10];
+      const xs = [r.x1, r.x2, r.x3, r.x4, r.x5, r.x6, r.x7, r.x8, r.x9, r.x10, r.x11, r.x12];
       if (inp.type === 'minmax') {
         const nonNull = xs.filter(v => v != null);
         if (sedong) {
@@ -1354,8 +1354,23 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
             inp.prefilled[0] = true;
           }
         } else {
-          for (let i = 0; i < inp.vals.length; i++) {
-            if (xs[i] != null) { inp.vals[i] = String(xs[i]); inp.prefilled[i] = true; }
+          // [v1.55] 측정칸수 > 5 인 항목(예: 12포인트)은 DB에 5개만 저장돼 있어
+          //   그대로 매핑하면 6칸 이후가 비어 증감 시작점이 없음.
+          //   → 저장된 실측값을 fillTo5 산포로 칸수만큼(measure_points) 펼쳐 prefill.
+          //   어차피 prefill은 증감 시작점 제공용이라 실측 재현이 아니어도 됨.
+          const cnt = inp.vals.length;   // 화면 칸수 = measure_points
+          if (cnt > 5) {
+            const seed = xs.filter(v => v != null);   // 저장된 값(보통 5개)
+            if (seed.length) {
+              const spread = fillTo5(seed.map(String), s.lsl, s.usl, cnt);
+              for (let i = 0; i < cnt; i++) {
+                if (spread[i] != null) { inp.vals[i] = String(spread[i]); inp.prefilled[i] = true; }
+              }
+            }
+          } else {
+            for (let i = 0; i < inp.vals.length; i++) {
+              if (xs[i] != null) { inp.vals[i] = String(xs[i]); inp.prefilled[i] = true; }
+            }
           }
         }
       }
@@ -2690,7 +2705,7 @@ function changeCount(id, delta) {
   const inp = specInputs[id];
   if (inp.type !== 'points') return;
   const n = inp.vals.length + delta;
-  if (n < 1 || n > 10) return;
+  if (n < 1 || n > 12) return;   // [v1.53] 최대 12포인트
   if (delta > 0) inp.vals.push('');
   else inp.vals.pop();
   refreshCard(id);
@@ -2842,10 +2857,13 @@ function gaussRand(mean, std) {
 //     2) 입력 1개 → 공차폭(usl-lsl)/10 을 표준편차로 산포 (항목 정밀도에 자동 맞춤, 규격 내 클램프)
 //     3) 공차 없는 항목(Max./Min. 류) → 값의 0.5%로 미세 산포 (대부분 0 근처라 같은 값 유지됨)
 //   소수자리: 최소 2자리 보장, 입력값이 더 정밀하면 그 자리수 유지.
-function fillTo5(inputVals, lsl, usl){
+function fillTo5(inputVals, lsl, usl, n){
+  // [v1.53] 목표 개수를 measure_points(n)로 일반화. 기본 5 → 5포인트 항목은 동작 100% 동일.
+  //   12포인트 같은 항목은 입력 그대로 12개 저장, 부족하면 12개까지 산포(산포 규칙은 종전 유지).
+  const target = n || 5;
   const vals = inputVals.filter(v => v!=null && v!=='' && !isNaN(parseFloat(v))).map(parseFloat);
-  if(vals.length === 0) return [null,null,null,null,null];
-  if(vals.length >= 5) return vals.slice(0,5);
+  if(vals.length === 0) return Array(target).fill(null);
+  if(vals.length >= target) return vals.slice(0, target);
 
   let dp = 2;  // 최소 2자리 보장 (1포인트도 자연 산포). 입력이 더 정밀하면 확장
   vals.forEach(v=>{ const s=String(v); const i=s.indexOf('.'); if(i>=0) dp=Math.max(dp, s.length-i-1); });
@@ -2875,14 +2893,14 @@ function fillTo5(inputVals, lsl, usl){
 
   const out = vals.slice();
   let guard = 0;
-  while(out.length < 5 && guard < 1000){
+  while(out.length < target && guard < 1000){
     guard++;
     let v = gaussRand(mean, std);
     if(v < lo) v = lo;
     if(v > hi) v = hi;
     out.push(parseFloat(v.toFixed(dp)));
   }
-  while(out.length < 5) out.push(parseFloat(mean.toFixed(dp)));  // 안전망
+  while(out.length < target) out.push(parseFloat(mean.toFixed(dp)));  // 안전망
   return out;
 }
 
@@ -3041,7 +3059,7 @@ async function sendToGoogleSheet(baseDateStr){
 
     // 2) 측정값 / spec / part 조회 (필요한 것만, in 필터)
     const meas = await sbAll('qc_shipping_measurement',
-      `inspection_id=in.(${inspIds.join(',')})&select=inspection_id,spec_id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result&order=inspection_id.asc,item_no.asc`);
+      `inspection_id=in.(${inspIds.join(',')})&select=inspection_id,spec_id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result&order=inspection_id.asc,item_no.asc`);
     const specs = await sbAll('qc_part_spec',
       `id=in.(${[...new Set(meas.map(m=>m.spec_id).filter(Boolean))].join(',')})&select=id,measure_zone,lsl,usl,is_visual`);
     const parts = await sbAll('qc_part',
@@ -3069,8 +3087,8 @@ async function sendToGoogleSheet(baseDateStr){
         spec_text: m.spec_text, lsl: sp.lsl, usl: sp.usl
       };
       const xs = isVisual
-        ? [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10].map(v=> v!=null ? v : (m.visual_result||'OK'))
-        : [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10];
+        ? [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10,m.x11,m.x12].map(v=> v!=null ? v : (m.visual_result||'OK'))
+        : [m.x1,m.x2,m.x3,m.x4,m.x5,m.x6,m.x7,m.x8,m.x9,m.x10,m.x11,m.x12];
       if(isVisual && xs.every(v=>v==null)){
         for(let k=0;k<5;k++) xs[k] = m.visual_result || 'OK';
       }
@@ -3460,7 +3478,6 @@ async function saveAll() {
           spec_text: s.spec_text,
           visual_result: null,
           x1:null, x2:null, x3:null, x4:null, x5:null,
-          x6:null, x7:null, x8:null, x9:null, x10:null,
           note: inp.note && inp.note.trim() ? inp.note.trim() : null
         };
         if (s.is_visual) {
@@ -3468,13 +3485,14 @@ async function saveAll() {
         } else if (inp.type === 'minmax') {
           const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
           if (!isNaN(mn) && !isNaN(mx)) {
-            // [v0.44] 최소/최대 입력 → 항상 5개 (measure_points 무관하게 고정)
+            // [v0.44] 최소/최대 입력 → 항상 5개 (min/max 방식은 measure_points 무관 5개 고정)
             const pts = fillMinMax(mn, mx, 5);
             pts.forEach((val, i) => { row[`x${i+1}`] = val; });
           }
         } else {
-          // [v0.44] 포인트 입력(1~5개) → fillTo5로 항상 5개 채워 저장
-          const filled = fillTo5(inp.vals, s.lsl, s.usl);
+          // [v1.54] 저장은 항상 5개 고정. 입력 화면은 measure_points칸(1~12)이지만
+          //         이력/엑셀/구글시트가 5칸 포맷이므로 저장은 fillTo5로 5개 산포.
+          const filled = fillTo5(inp.vals, s.lsl, s.usl, 5);
           filled.forEach((val, i) => { if (val != null) row[`x${i+1}`] = val; });
         }
         mRows.push(row);
@@ -4062,7 +4080,7 @@ async function toggleHistCard(idx) {
 
   // 측정값 로드 (id 포함)
   try {
-    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,result,note`);
+    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note`);
     histMeasCache[insp.id] = rows || [];
     detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
   } catch(e) {
@@ -4115,7 +4133,7 @@ function measMaxX(rows, part) {
   if (isSedongPart(part || histPart)) return 9;
   let maxX = 0;
   rows.forEach(r => {
-    for (let i = 10; i >= 1; i--) {
+    for (let i = 12; i >= 1; i--) {   // [v1.53] x11·x12까지 훑기(12포인트 항목)
       if (r[`x${i}`] != null) { if (i > maxX) maxX = i; break; }
     }
   });
@@ -4468,7 +4486,7 @@ async function loadSpcData() {
     // 해당 부품의 모든 검사에서 이 항목 측정값 가져오기 (최근 25건)
     // inspection 테이블 조인 (날짜 가져오기)
     const mRows = await sbAll('qc_shipping_measurement',
-      `spec_id=eq.${specId}&select=inspection_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,inspection:qc_shipping_inspection(inspection_date,part_id)&order=inspection_id.desc`);
+      `spec_id=eq.${specId}&select=inspection_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,inspection:qc_shipping_inspection(inspection_date,part_id)&order=inspection_id.desc`);
 
     // part_id 필터 + 날짜순 정렬 + 최근 25건
     const filtered = mRows
@@ -4487,7 +4505,7 @@ async function loadSpcData() {
     const labels = [];
     filtered.forEach(r => {
       const vals = [];
-      for (let i = 1; i <= 10; i++) {
+      for (let i = 1; i <= 12; i++) {   // [v1.53] x11·x12 포함
         if (r[`x${i}`] != null) vals.push(Number(r[`x${i}`]));
       }
       if (vals.length >= 2) {
@@ -5232,7 +5250,7 @@ async function renderCfgSpecs() {
           <div class="cfg-field"><label>USL</label>
             <input type="text" inputmode="decimal" id="cfgf-usl-${s.id}" value="${s.usl??''}"></div>
           <div class="cfg-field"><label>측정칸수</label>
-            <input type="number" min="1" max="10" id="cfgf-pts-${s.id}" value="${s.measure_points??5}" ${s.is_visual?'disabled':''}></div>
+            <input type="number" min="1" max="12" id="cfgf-pts-${s.id}" value="${s.measure_points??5}" ${s.is_visual?'disabled':''}></div>
         </div>
         <div class="cfg-row2">
           <div class="cfg-field"><label>공정 구분</label>
@@ -5272,7 +5290,7 @@ async function renderCfgSpecs() {
       <div class="cfg-row3" style="margin-bottom:8px">
         <div class="cfg-field"><label>LSL</label><input type="text" inputmode="decimal" class="inp" id="ns-lsl"></div>
         <div class="cfg-field"><label>USL</label><input type="text" inputmode="decimal" class="inp" id="ns-usl"></div>
-        <div class="cfg-field"><label>측정칸수</label><input type="number" class="inp" id="ns-pts" value="5" min="0" max="10"></div>
+        <div class="cfg-field"><label>측정칸수</label><input type="number" class="inp" id="ns-pts" value="5" min="0" max="12"></div>
       </div>
       <div class="cfg-row2" style="margin-bottom:10px">
         <div class="cfg-field"><label>공정 구분</label>
