@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.13</title>
+<title>측정기 종합현황 v1.14</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -531,10 +531,15 @@ async function askBulk(period){
     }
   } else if(period === 7 || period === 30){
     const repEq = EQUIPMENTS[0].name;
-    const dates = await getEqDatesSince(repEq, BACKFILL_BASELINE);
+    const rows = await getEqRowsSince(repEq, BACKFILL_BASELINE);
     const today = todayKST();
     const bucketFn = (period===7) ? weekBucket : monthBucket;
-    backfillBuckets = lastDatePerBucket(dates, bucketFn, bucketFn(today));
+    let repItems = (__allStatusCache[0] && __allStatusCache[0].items && __allStatusCache[0].items.length)
+                     ? __allStatusCache[0].items : (DEFAULT_CHECKLIST_DB[repEq]||[]);
+    if(!repItems || repItems.length===0){
+      try{ repItems = await getEqItems(repEq); }catch(e){ repItems = []; }
+    }
+    backfillBuckets = pendingBackfillDates(rows, bucketFn, bucketFn(today), repItems, period);
     if(backfillBuckets.length > 0){
       const bucketLabel = (period===7) ? '주' : '달';
       const dl = backfillBuckets.join(', ');
@@ -711,15 +716,40 @@ function missingWeekdays(fromYmd, toYmd){
 const BACKFILL_BASELINE = '2026-05-22';
 
 // 특정 장비의 baseline 이후 존재하는 check_date 목록 (오름차순)
-async function getEqDatesSince(eqName, baseline){
+async function getEqRowsSince(eqName, baseline){
   try{
-    const url = SB_URL + '/rest/v1/qc_measure_log?select=check_date&equipment=eq.' +
+    const url = SB_URL + '/rest/v1/qc_measure_log?select=check_date,items_json&equipment=eq.' +
                 encodeURIComponent(eqName) + '&check_date=gte.' + baseline + '&order=check_date.asc&limit=500';
     const r = await fetch(url, {headers:SB_HEADERS});
     if(!r.ok) return [];
-    const rows = await r.json();
-    return rows.map(function(row){ return row.check_date; });
+    return await r.json();
   }catch(e){ return []; }
+}
+
+// 해당 주기(period) 항목이 이미 기록된 bucket 집합
+// → 그 주/달은 백필 대상에서 제외 (같은 주에 두 날짜로 중복 기록되는 것 방지)
+function bucketsAlreadyDone(rows, bucketFn, items, period){
+  const labels = items.filter(function(it){ return Number(it.period)===period; })
+                      .map(function(it){ return it.label; });
+  const done = {};
+  rows.forEach(function(row){
+    const j = row.items_json || {};
+    for(let k=0; k<labels.length; k++){
+      if(Object.prototype.hasOwnProperty.call(j, labels[k])){
+        done[bucketFn(row.check_date)] = true;
+        break;
+      }
+    }
+  });
+  return done;
+}
+
+// 백필 대상 날짜 산출: 이번 주/달 제외 + 이미 기록된 주/달 제외
+function pendingBackfillDates(rows, bucketFn, excludeBucket, items, period){
+  const done = bucketsAlreadyDone(rows, bucketFn, items, period);
+  const dates = rows.map(function(r){ return r.check_date; });
+  return lastDatePerBucket(dates, bucketFn, excludeBucket)
+           .filter(function(d){ return !done[bucketFn(d)]; });
 }
 
 // dates를 bucket(주=월요일 기준/달=YYYY-MM) 단위로 묶어 각 bucket의 마지막 날짜만 추출
@@ -962,10 +992,11 @@ async function runBulk(period, backfillDays, backfillBuckets){
       }
       if(!items || items.length === 0) continue;
 
-      // 장비별로 실제 존재하는 날짜 재조회 (대표장비와 다를 수 있어 안전하게 개별 확인)
-      let eqDates = [];
-      try{ eqDates = await getEqDatesSince(eq.name, BACKFILL_BASELINE); }catch(e){ eqDates = []; }
-      const eqBuckets = lastDatePerBucket(eqDates, bucketFn, excludeBucket);
+      // 장비별로 실제 기록 재조회 (대표장비와 다를 수 있어 안전하게 개별 확인)
+      // 이미 그 주/달에 해당 주기 기록이 있으면 제외 → 같은 주에 두 날짜로 중복 기록 방지
+      let eqRows = [];
+      try{ eqRows = await getEqRowsSince(eq.name, BACKFILL_BASELINE); }catch(e){ eqRows = []; }
+      const eqBuckets = pendingBackfillDates(eqRows, bucketFn, excludeBucket, items, period);
 
       for(const date of eqBuckets){
         try{
