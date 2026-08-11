@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.55</title>
+<title>공정검사 입력 v1.56</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -450,7 +450,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.55</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.56</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1047,8 +1047,35 @@ async function sbAll(path, params = '') {
 }
 
 // ══════════════════════════════════
-// 설정 저장
+// [v1.56] 표시번호(disp_no) — 화면·성적서에 보이는 항목 번호
+//   item_no는 영구 고정 내부 ID라 항목을 중간에 추가하면 번호가 띄엄띄엄해짐.
+//   → 파트 전체 spec을 sort_order로 정렬한 순서(0,1,2…)를 표시번호로 사용.
+//   공정(press/machining) 필터와 무관하게 "전체 기준 통일번호"이므로
+//   같은 항목은 어느 화면·성적서에서나 같은 번호로 나옴.
+//   ※ item_no 자체는 절대 바꾸지 않음(마커·링크규칙·저장 payload는 계속 item_no 사용)
 // ══════════════════════════════════
+const dispNoCache = {};   // { part_id: { item_no: disp_no } }
+
+async function loadDispNoMap(partId) {
+  if (dispNoCache[partId]) return dispNoCache[partId];
+  const all = await sbAll('qc_part_spec',
+    `part_id=eq.${partId}&order=sort_order&select=item_no,sort_order`);
+  const map = {};
+  all.forEach((s, i) => { map[s.item_no] = i; });
+  dispNoCache[partId] = map;
+  return map;
+}
+
+// spec/measurement 배열에 disp_no 필드를 붙여줌
+function applyDispNo(rows, map) {
+  (rows || []).forEach(r => { r.disp_no = map[r.item_no] ?? r.item_no; });
+  return rows;
+}
+
+// 표시용 번호 꺼내기(없으면 item_no로 폴백)
+function dno(o) { return o?.disp_no ?? o?.item_no ?? '—'; }
+
+
 async function saveSetup() {
   const url = document.getElementById('sb-url').value.trim().replace(/\/$/, '');
   const key = document.getElementById('sb-key').value.trim();
@@ -1392,6 +1419,8 @@ async function loadVariant(part) {
     'qc_part_spec',
     `part_id=eq.${part.id}&${typeFilter}&order=sort_order&select=*`
   );
+  // [v1.56] 전체 기준 통일 표시번호 주입
+  applyDispNo(loadedSpecs, await loadDispNoMap(part.id));
   // [v0.45] 세동이면 9시간대 모드 (포인트 기본 1칸)
   const sedong = isSedongPart(part);
   const inputs = buildInputs(loadedSpecs, sedong);
@@ -1927,7 +1956,7 @@ function linkedActions(members) {
     const inp = specInputs[c.id] || {};
     return `
     <div class="linked-act-row">
-      <span class="linked-act-label"><b>No.${c.item_no}</b> ${c.item_name}</span>
+      <span class="linked-act-label"><b>No.${dno(c)}</b> ${c.item_name}</span>
       <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${c.id}" onclick="toggleNote(${c.id})" title="메모">📝</button>
       ${c.is_visual ? '' : `<button class="chart-btn" id="chart-btn-${c.id}" onclick="openSpcFor(${c.id})" title="관리도">📊</button>`}
     </div>
@@ -1943,9 +1972,9 @@ function renderGridCard(linkGroup, members) {
   // 행 수 = 최대 포인트 수 (각 항목 measure_points 기준)
   const N = Math.max(...cols.map(c => specInputs[c.id]?.vals?.length || c.measure_points || 4));
 
-  const nos = cols.map(c => `No.${c.item_no}`).join(', ');
+  const nos = cols.map(c => `No.${dno(c)}`).join(', ');
   const headerCols = [`<th style="text-align:left">포인트</th>`];
-  cols.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+  cols.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${dno(c)}</span><br>${c.item_name}</th>`));
 
   let bodyRows = '';
   for (let i = 0; i < N; i++) {
@@ -1967,7 +1996,7 @@ function renderGridCard(linkGroup, members) {
       <div class="spec-hdr">
         <div class="spec-no" style="background:#7c3aed">🔗</div>
         <div class="spec-info">
-          <div class="spec-name">${cols.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join('  ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">형상연동</span></div>
+          <div class="spec-name">${cols.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${dno(c)}</span> ${c.item_name}`).join('  ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">형상연동</span></div>
           <div class="spec-text">${specLines.join(' / ')}</div>
         </div>
       </div>
@@ -1989,9 +2018,9 @@ function renderRowColCard(linkGroup, members) {
 
   // 헤더: 기준 항목명(대표) + 연동 항목명들
   const rowName = rowSpecs[0]?.item_name?.replace(/\[.*?\]/,'').trim() || '기준';
-  const rowNos = rowSpecs.map(r=>`No.${r.item_no}`).join('~');
+  const rowNos = rowSpecs.map(r=>`No.${dno(r)}`).join('~');
   const headerCols = [`<th style="text-align:left">위치</th>`, `<th><span style="font-size:13px;color:#a78bfa;font-weight:600">${rowNos}</span><br>${rowName}</th>`];
-  colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${c.item_no}</span><br>${c.item_name}</th>`));
+  colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${dno(c)}</span><br>${c.item_name}</th>`));
 
   // 각 행 렌더
   let bodyRows = '';
@@ -2028,7 +2057,7 @@ function renderRowColCard(linkGroup, members) {
       <div class="spec-hdr">
         <div class="spec-no" style="background:#7c3aed">🔗</div>
         <div class="spec-info">
-          <div class="spec-name"><span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${c.item_no}</span> ${c.item_name}`).join(', ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">연동</span></div>
+          <div class="spec-name"><span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${dno(c)}</span> ${c.item_name}`).join(', ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">연동</span></div>
           <div class="spec-text">${specLines.join(' / ')}</div>
         </div>
       </div>
@@ -2114,7 +2143,7 @@ function renderSpecCard(s) {
   return `
     <div class="spec-card ${cardCls}" id="sc-${s.id}">
       <div class="spec-hdr">
-        <div class="spec-no">${s.item_no ?? '—'}</div>
+        <div class="spec-no">${dno(s)}</div>
         <div class="spec-info">
           <div class="spec-name">${s.item_name || '—'}</div>
           <div class="spec-text">${s.spec_text || ''}</div>
@@ -2242,7 +2271,7 @@ function openAdjustPanel(el) {
   scrollInputIntoView(el);   // [v0.51] 입력칸을 화면 위쪽으로 (패널과 안 겹치게)
 
   const posLabel = slot.kind === 'min' ? '최솟값' : slot.kind === 'max' ? '최댓값' : `X${slot.idx + 1}`;
-  document.getElementById('adj-item-name').textContent = `No.${s.item_no ?? '—'} ${s.item_name || ''}`;
+  document.getElementById('adj-item-name').textContent = `No.${dno(s)} ${s.item_name || ''}`;
   document.getElementById('adj-pos-label').textContent = posLabel;
   document.getElementById('adj-panel-val').textContent = el.value !== '' ? el.value : '—';
   document.getElementById('adj-panel').classList.add('open');
@@ -3001,7 +3030,7 @@ function _build37(part, spec, xs, dateYmd, isVisual, visualResult){
   row[3]  = part.part_name || '';            // D 부품명
   row[4]  = part.material || '';             // E 재질
   row[5]  = 1;                               // F 도면Eco
-  row[6]  = spec.item_no;                    // G No.
+  row[6]  = dno(spec);                       // G No. [v1.56] 표시번호
   row[7]  = spec.item_name || '';            // H 항목
   row[8]  = spec.measure_zone || '';         // I 측정구간
   row[9]  = spec.inspection_method || '';    // J 검사방법
@@ -3428,7 +3457,7 @@ async function saveAll() {
   targets.forEach(v => {
     v.specs.forEach(s => {
       if (calcResult(s, v.inputs[s.id]) === 'NG') {
-        ngNames.push((s.item_name || `항목${s.item_no}`));
+        ngNames.push((s.item_name || `항목${dno(s)}`));
       }
     });
   });
@@ -3592,7 +3621,7 @@ function openDrawing() {
 
     // ── 마커 좌표(px) 준비 ──
     const pts = markersData.map(s => ({
-      no: s.item_no,
+      no: dno(s),
       ox: s.marker_x * NW, oy: s.marker_y * NH,   // 원래(앵커) 위치
       x: s.marker_x * NW,  y: s.marker_y * NH      // 표시 위치(분산으로 이동될 수 있음)
     }));
@@ -3923,9 +3952,10 @@ async function selectPartHist(id) {
   // SPC용 spec 항목 로드 (치수 항목만)
   try {
     histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=sort_order&select=id,item_no,item_name,spec_text,lsl,usl,measure_points,sort_order`);
+    applyDispNo(histSpecs, await loadDispNoMap(id));   // [v1.56]
     const sel = document.getElementById('spc-spec-sel');
     sel.innerHTML = '<option value="">항목 선택…</option>'
-      + histSpecs.map(s => `<option value="${s.id}">${s.item_no}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
+      + histSpecs.map(s => `<option value="${s.id}">${dno(s)}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
   } catch(e) {
     toast('항목 로드 실패: ' + e.message);
   }
@@ -4081,6 +4111,12 @@ async function toggleHistCard(idx) {
   // 측정값 로드 (id 포함)
   try {
     const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note`);
+    // [v1.56] 표시번호 주입 + 표시순서(sort_order 기준)로 재정렬
+    if (insp.part_id) {
+      const dmap = await loadDispNoMap(insp.part_id);
+      applyDispNo(rows, dmap);
+      (rows || []).sort((a, b) => (a.disp_no ?? 0) - (b.disp_no ?? 0));
+    }
     histMeasCache[insp.id] = rows || [];
     detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, false);
   } catch(e) {
@@ -4161,7 +4197,7 @@ function buildMeasTable(rows, idx, editMode, part) {
     const res = isVis ? r.visual_result : (r.result || '—');
     const resCls = res === 'OK' ? 'ok-val' : res === 'NG' ? 'ng-val' : '';
 
-    html += `<tr><td>${r.item_no ?? ''}</td><td>${r.item_name || ''}</td><td style="font-size:14px;color:#3b82f6">${r.spec_text || ''}</td>`;
+    html += `<tr><td>${dno(r)}</td><td>${r.item_name || ''}</td><td style="font-size:14px;color:#3b82f6">${r.spec_text || ''}</td>`;
 
     if (isVis) {
       if (editMode) {
@@ -4733,6 +4769,7 @@ async function selectPartCfg(id) {
   try {
     // 설정 탭은 전체 spec (process_type 구분 없이)
     cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=sort_order`);
+    applyDispNo(cfgSpecs, await loadDispNoMap(id));   // [v1.56]
     renderCfgSpecs();
     renderCfgDrawing();   // 도면 관리 카드 렌더
   } catch(e) {
@@ -4820,7 +4857,7 @@ function renderMarkerChips() {
     return `<button onclick="pickMarker(${s.id})"
       style="padding:6px 10px;border-radius:7px;font-size:16px;font-weight:700;cursor:pointer;border:1.5px solid ${active?'#3b82f6':(placed?'#86efac':'#e2e8f0')};
       background:${active?'#3b82f6':(placed?'#dcfce7':'#fff')};color:${active?'#fff':(placed?'#16a34a':'#64748b')}">
-      ${s.item_no} ${placed?'✓':''}
+      ${dno(s)} ${placed?'✓':''}
     </button>`;
   }).join('');
 }
@@ -4829,7 +4866,7 @@ function pickMarker(specId) {
   activeMarkerSpecId = (activeMarkerSpecId === specId) ? null : specId;
   const s = cfgSpecs.find(x => x.id === specId);
   document.getElementById('cfg-active-marker').textContent =
-    activeMarkerSpecId ? `→ ${s.item_no}번 (${s.item_name}) 위치 클릭` : '';
+    activeMarkerSpecId ? `→ ${dno(s)}번 (${s.item_name}) 위치 클릭` : '';
   renderMarkerChips();
 }
 
@@ -4847,7 +4884,7 @@ async function onDrawingClick(e) {
 
   try {
     await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: { marker_x: s.marker_x, marker_y: s.marker_y } });
-    document.getElementById('cfg-drawing-status').textContent = `✓ ${s.item_no}번 마커 저장됨`;
+    document.getElementById('cfg-drawing-status').textContent = `✓ ${dno(s)}번 마커 저장됨`;
     setTimeout(() => { document.getElementById('cfg-drawing-status').textContent = ''; }, 1500);
     activeMarkerSpecId = null;
     document.getElementById('cfg-active-marker').textContent = '';
@@ -4867,7 +4904,7 @@ function renderMarkers() {
   const layer = document.getElementById('cfg-marker-layer');
   const placed = cfgSpecs.filter(s => s.marker_x != null && s.marker_y != null);
   layer.innerHTML = placed.map(s => {
-    const big = String(s.item_no).length >= 2;
+    const big = String(dno(s)).length >= 2;
     const sz = big ? 28 : 24;
     const fs = big ? 12 : 13;
     const sel = selectedMarkers.has(s.id);
@@ -4875,7 +4912,7 @@ function renderMarkers() {
       style="position:absolute;left:${s.marker_x*100}%;top:${s.marker_y*100}%;transform:translate(-50%,-50%);
       width:${sz}px;height:${sz}px;border-radius:50%;background:${sel?'#2563eb':'#dc2626'};color:#fff;font-size:${fs}px;font-weight:700;
       display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.5);
-      cursor:grab;pointer-events:auto;${sel?'outline:2px solid #93c5fd;outline-offset:2px':''}">${s.item_no}</div>`;
+      cursor:grab;pointer-events:auto;${sel?'outline:2px solid #93c5fd;outline-offset:2px':''}">${dno(s)}</div>`;
   }).join('');
 
   // 드래그 + 선택 바인딩
@@ -5221,7 +5258,7 @@ async function renderCfgSpecs() {
   const rows = cfgSpecs.map((s, idx) => `
     <div class="cfg-spec-row" id="cfgrow-${s.id}">
       <div class="cfg-spec-hdr" onclick="toggleCfgEdit(${s.id})">
-        <div class="cfg-no">${s.item_no??'—'}</div>
+        <div class="cfg-no">${dno(s)}</div>
         <div class="cfg-name">${s.item_name||'—'}
           <div style="font-size:14px;color:#94a3b8;font-weight:400;margin-top:1px">${s.spec_text||''}</div>
         </div>
@@ -5353,10 +5390,10 @@ function buildUnits(specs) {
       const rows = Math.max(...mem.map(specRowCount));
       units.push({ type:'group', key:'g:'+s.link_group, link_group:s.link_group,
         members:mem, rows, label:mem.map(m=>m.item_name).join(' + '),
-        nos:mem.map(m=>'No.'+m.item_no).join(',') });
+        nos:mem.map(m=>'No.'+dno(m)).join(',') });
     } else {
       units.push({ type:'single', key:'s:'+s.item_no, item_no:s.item_no, spec:s,
-        rows:specRowCount(s), label:s.item_name||'—', nos:'No.'+s.item_no });
+        rows:specRowCount(s), label:s.item_name||'—', nos:'No.'+dno(s) });
     }
   });
   return units;
@@ -5437,7 +5474,7 @@ async function renderInputOrder() {
   // ── 규칙 추가 폼 ──
   // 끼울 후보 = single unit 전체 / 기준 = group + single (자기 자신 제외)
   const insertOpts = units.filter(u=>u.type==='single')
-    .map(u=>`<option value="${u.item_no}">${u.label} (No.${u.item_no})</option>`).join('');
+    .map(u=>`<option value="${u.item_no}">${u.label} (No.${u.spec?dno(u.spec):u.item_no})</option>`).join('');
   const formHtml = `
     <div style="border-top:1px dashed #e2e8f0;margin-top:10px;padding-top:10px">
       <div style="font-size:16px;font-weight:700;color:#3b82f6;margin-bottom:6px">＋ 끼우기 규칙 추가</div>
@@ -5579,7 +5616,7 @@ function renderLinkManager() {
       const ptn = isGrid ? '형상형' : '외경형';
       const memberRows = mem.map((s, i) => `
         <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #ede9fe">
-          <span style="flex:1;font-size:16px;color:#5b21b6">No.${s.item_no} ${s.item_name}</span>
+          <span style="flex:1;font-size:16px;color:#5b21b6">No.${dno(s)} ${s.item_name}</span>
           <button onclick="moveGroupMember('${gk}',${s.id},-1)" ${i===0?'disabled':''} style="border:1px solid #ddd6fe;background:${i===0?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===0?'default':'pointer'};font-size:17px;line-height:1">▲</button>
           <button onclick="moveGroupMember('${gk}',${s.id},1)" ${i===mem.length-1?'disabled':''} style="border:1px solid #ddd6fe;background:${i===mem.length-1?'#f5f3ff':'#fff'};color:#7c3aed;width:24px;height:24px;border-radius:4px;cursor:${i===mem.length-1?'default':'pointer'};font-size:17px;line-height:1">▼</button>
         </div>`).join('');
@@ -5622,7 +5659,7 @@ function openLinkCreator() {
       ${avail.map(s => `
         <label style="display:flex;align-items:center;gap:8px;font-size:16px;cursor:pointer;padding:4px">
           <input type="checkbox" class="link-chk" value="${s.id}" style="width:16px;height:16px">
-          <span style="font-weight:700;color:#7c3aed">No.${s.item_no}</span>
+          <span style="font-weight:700;color:#7c3aed">No.${dno(s)}</span>
           <span>${s.item_name}</span>
           <span style="color:#94a3b8;font-size:14px">(${s.measure_points||0}P)</span>
         </label>`).join('')}
@@ -5671,7 +5708,7 @@ function updateColSelector() {
   const sel = document.getElementById('link-col-sel');
   const opts = checked.map(id => {
     const s = cfgSpecs.find(x => x.id === id);
-    return `<option value="${id}">No.${s.item_no} ${s.item_name} (${s.measure_points||0}P)</option>`;
+    return `<option value="${id}">No.${dno(s)} ${s.item_name} (${s.measure_points||0}P)</option>`;
   });
   sel.innerHTML = opts.join('');
 }
