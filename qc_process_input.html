@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.64</title>
+<title>공정검사 입력 v1.67</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -478,7 +478,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.64</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.67</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1375,8 +1375,10 @@ function countUnmeasured(variant) {
 async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false) {
   try {
     const lastInsp = await sbAll('qc_shipping_inspection',
-      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark`);
+      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark,slot_no`);
     if (!lastInsp.length) return '';
+    // [v1.67] 세동이라도 건별 저장(slot_no 있음)이면 x1~x5가 실측 원본 → 일반 제품과 동일 매핑
+    if (sedong && lastInsp[0].slot_no != null) sedong = false;
     const lastRows = await sbAll('qc_shipping_measurement',
       `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note`);
     const bySpec = {};
@@ -2908,6 +2910,100 @@ function sedongSlotLabel(idx) {
   return h != null ? `${h}시` : '—';
 }
 
+// ── [v1.67] 결정론적 난수 ──────────────────────────────
+//   세동 일별 뷰·구글시트는 "빈 시간대"를 계산으로 채우는데, 매번 새 난수를 쓰면
+//   조회할 때마다 값이 달라짐(시트는 7일치를 재전송하므로 특히 문제).
+//   → (부품·날짜·항목·슬롯)을 시드로 고정 → 몇 번을 다시 계산해도 항상 같은 값.
+function _hash32(str) {                       // FNV-1a 32bit
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function _mulberry32(a) {                     // 시드 기반 균등난수 [0,1)
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1) >>> 0;
+    t ^= (t + Math.imul(t ^ (t >>> 7), t | 61)) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// 시드 문자열 → 정규분포 난수 1개 (gaussRand의 결정론 버전)
+function seededGauss(seedStr, mean, std) {
+  const r = _mulberry32(_hash32(String(seedStr)));
+  const u = 1 - r(), v = r();
+  return mean + Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * std;
+}
+
+// ── [v1.67] 세동 건별 저장 구조 대응 ────────────────────
+//   신구조: inspection 1건 = 시간대 1슬롯(inspection.slot_no), 측정행은 일반 제품과 동일(x1~x5 + input_count)
+//   구구조(slot_no=null): 하루 1행에 x1~x9가 곧 시간대 슬롯
+//
+// 측정행 → 그 슬롯의 대표값 1개 (실측분만 평균)
+function sedongRepFromRow(r) {
+  if (!r) return null;
+  const ic = r.input_count;
+  let vals = [];
+  if (ic === -2) {
+    // 최소/최대 입력 → 저장된 5칸 중 최소·최대 두 값의 평균
+    const nums = [];
+    for (let i = 1; i <= 5; i++) if (r[`x${i}`] != null) nums.push(Number(r[`x${i}`]));
+    if (!nums.length) return null;
+    vals = [Math.min(...nums), Math.max(...nums)];
+  } else {
+    const n = (ic != null && ic > 0) ? ic : 5;   // input_count 없으면(구데이터) 전체
+    for (let i = 1; i <= n; i++) if (r[`x${i}`] != null) vals.push(Number(r[`x${i}`]));
+  }
+  if (!vals.length) return null;
+  let dp = 2;
+  vals.forEach(v => { const s = String(v), i = s.indexOf('.'); if (i >= 0) dp = Math.max(dp, s.length - i - 1); });
+  return parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(dp));
+}
+
+// 하루치 inspection들 → 항목(spec)별 9슬롯 재구성
+//   반환: { [spec_id]: { …측정행메타, slots:[9], real:[9] } }  ※ slots는 빈칸 채움 완료
+//   limBySpec: { [spec_id]: {lsl, usl} } (없으면 spec_text 파싱 폴백)
+function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec) {
+  const bySpec = {};
+  (insps || []).forEach(insp => {
+    const slotNo = insp.slot_no;
+    (measBy[insp.id] || []).forEach(r => {
+      let e = bySpec[r.spec_id];
+      if (!e) e = bySpec[r.spec_id] = Object.assign({}, r, { slots: new Array(9).fill(null), real: new Array(9).fill(false) });
+      if (r.result === 'NG') e.result = 'NG';
+      if (r.visual_result != null && (e.visual_result == null || r.visual_result === 'NG')) e.visual_result = r.visual_result;
+      if (r.note && !e.note) e.note = r.note;
+
+      if (slotNo == null) {
+        // 구구조: x1~x9 = 시간대 슬롯
+        for (let n = 0; n < 9; n++) {
+          if (e.slots[n] == null && r[`x${n + 1}`] != null) { e.slots[n] = Number(r[`x${n + 1}`]); e.real[n] = true; }
+        }
+      } else if (slotNo >= 1 && slotNo <= 9) {
+        // 신구조: 이 검사 = 1슬롯. 실측 평균을 그 자리에
+        const rep = sedongRepFromRow(r);
+        if (rep != null) { e.slots[slotNo - 1] = rep; e.real[slotNo - 1] = true; }
+      }
+    });
+  });
+
+  // 빈 슬롯 채움 — 결정론적(시드 고정)이라 다시 그려도 같은 값
+  Object.values(bySpec).forEach(e => {
+    if (e.visual_result != null) return;   // 외관 항목은 채우지 않음
+    const lim = (limBySpec && limBySpec[e.spec_id]) || {};
+    let lsl = lim.lsl, usl = lim.usl;
+    if (lsl == null || usl == null) {
+      const ps = _parseSpec(e.spec_text);
+      if (ps) { if (lsl == null) lsl = ps.lo; if (usl == null) usl = ps.hi; }
+    }
+    e.slots = sedongFillSlots(e.slots, lsl, usl, `${partId}|${dateStr}|${e.spec_id}`);
+  });
+  return bySpec;
+}
+
 function gaussRand(mean, std) {
   const u = 1 - Math.random(), v = Math.random();
   return mean + Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * std;
@@ -3114,7 +3210,7 @@ async function sendToGoogleSheet(baseDateStr){
 
     // 1) 7일치 inspection 조회
     const insps = await sbAll('qc_shipping_inspection',
-      `inspection_date=gte.${fromStr}&inspection_date=lte.${baseDateStr}&select=id,part_id,inspection_date&order=inspection_date.asc,id.asc`);
+      `inspection_date=gte.${fromStr}&inspection_date=lte.${baseDateStr}&select=id,part_id,inspection_date,slot_no&order=inspection_date.asc,id.asc`);
     if(!insps.length) return;
 
     const inspIds = insps.map(i=>i.id);
@@ -3122,7 +3218,7 @@ async function sendToGoogleSheet(baseDateStr){
 
     // 2) 측정값 / spec / part 조회 (필요한 것만, in 필터)
     const meas = await sbAll('qc_shipping_measurement',
-      `inspection_id=in.(${inspIds.join(',')})&select=inspection_id,spec_id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result&order=inspection_id.asc,item_no.asc`);
+      `inspection_id=in.(${inspIds.join(',')})&select=inspection_id,spec_id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,input_count&order=inspection_id.asc,item_no.asc`);
     const specs = await sbAll('qc_part_spec',
       `id=in.(${[...new Set(meas.map(m=>m.spec_id).filter(Boolean))].join(',')})&select=id,measure_zone,lsl,usl,is_visual`);
     const parts = await sbAll('qc_part',
@@ -3134,9 +3230,25 @@ async function sendToGoogleSheet(baseDateStr){
 
     // 3) 측정행 → 37열, 고객사 webhook별로 그룹핑
     const groups = {};   // url → { values:[], dates:Set }
+
+    // [v1.67] 세동은 "하루 = 9시간대 1행" 포맷이 시트 규격.
+    //   건별 저장(inspection당 1슬롯)으로 바뀌었으므로 전송 전에 (부품·날짜) 단위로 9칸 재구성.
+    //   구구조(slot_no=null, 하루 1행)도 같은 함수가 그대로 흡수 → 분기 불필요.
+    const sedongDayBuckets = {};   // `${part_id}|${date}` → { part, date, insps:[], measBy:{} }
+    const inspById = {}; insps.forEach(i => { inspById[i.id] = i; });
+
     for(const m of meas){
       const part = partByInspId[m.inspection_id];
       if(!part) continue;
+      if(isSedongPart(part)){
+        const insp = inspById[m.inspection_id];
+        const bk = `${part.id}|${insp.inspection_date}`;
+        if(!sedongDayBuckets[bk]) sedongDayBuckets[bk] = { part, date: insp.inspection_date, insps: [], measBy: {} };
+        const b = sedongDayBuckets[bk];
+        if(!b.measBy[insp.id]){ b.measBy[insp.id] = []; b.insps.push(insp); }
+        b.measBy[insp.id].push(m);
+        continue;   // 세동은 아래 병합 루프에서 처리
+      }
       const url = webhookFor(part.customer);   // [v0.53] 고객사별 시트
       if(!url) continue;                       // test 등 스킵
       const dateYmd = (dateByInspId[m.inspection_id]||'').replace(/-/g,'');
@@ -3158,10 +3270,48 @@ async function sendToGoogleSheet(baseDateStr){
       const verdict = isVisual ? (m.visual_result||'OK') : (m.result||'OK');
       const row37 = _build37(part, spec, xs, dateYmd, isVisual, verdict);
 
-      if(!groups[url]) groups[url] = { values: [], dates: new Set() };
+      if(!groups[url]) groups[url] = { values: [], dates: new Set(), dateParts: new Map() };
       // [v0.43] 기존 매크로는 모든 셀을 문자열(CStr)로 전송 → 동일하게 문자열화 (빈칸은 '')
       groups[url].values.push(row37.map(v => (v==null ? '' : String(v))));
       groups[url].dates.add(Number(dateYmd));
+      // [v1.67] (날짜+부품번호) 조합 — 신버전 Apps Script의 중복제거 키
+      groups[url].dateParts.set(`${dateYmd}|${part.part_number||''}`, { date: dateYmd, partNo: String(part.part_number||'') });
+    }
+
+    // [v1.67] 세동 버킷 → (부품·날짜·항목) 1행으로 병합해 37열 생성
+    const limBySpec = {};
+    Object.keys(specById).forEach(id => { limBySpec[id] = { lsl: specById[id].lsl, usl: specById[id].usl }; });
+
+    for(const bk of Object.keys(sedongDayBuckets)){
+      const b = sedongDayBuckets[bk];
+      const url = webhookFor(b.part.customer);
+      if(!url) continue;
+      const dateYmd = (b.date || '').replace(/-/g,'');
+      if(dateYmd.length!==8) continue;
+
+      const bySpec = buildSedongDaySlots(b.insps, b.measBy, b.part.id, b.date, limBySpec);
+      const items = Object.values(bySpec).sort((a,b2) => (a.item_no ?? 0) - (b2.item_no ?? 0));
+
+      for(const it of items){
+        const sp = specById[it.spec_id] || {};
+        const isVisual = (sp.is_visual === true) || (it.item_no === 0) || (it.inspection_method === '육안');
+        const spec = {
+          item_no: it.item_no, item_name: it.item_name,
+          measure_zone: sp.measure_zone || '', inspection_method: it.inspection_method,
+          spec_text: it.spec_text, lsl: sp.lsl, usl: sp.usl
+        };
+        // 9시간대 값 → X~AG(1~10) 앞 9칸. 10번째는 종전과 동일하게 공란.
+        const xs = isVisual
+          ? new Array(9).fill(it.visual_result || 'OK').concat([null,null,null])
+          : it.slots.concat([null,null,null]);
+        const verdict = isVisual ? (it.visual_result||'OK') : (it.result||'OK');
+        const row37 = _build37(b.part, spec, xs, dateYmd, isVisual, verdict);
+
+        if(!groups[url]) groups[url] = { values: [], dates: new Set(), dateParts: new Map() };
+        groups[url].values.push(row37.map(v => (v==null ? '' : String(v))));
+        groups[url].dates.add(Number(dateYmd));
+        groups[url].dateParts.set(`${dateYmd}|${b.part.part_number||''}`, { date: dateYmd, partNo: String(b.part.part_number||'') });
+      }
     }
 
     const urls = Object.keys(groups);
@@ -3172,9 +3322,14 @@ async function sendToGoogleSheet(baseDateStr){
     for(const url of urls){
       const g = groups[url];
       if(!g.values.length) continue;
+      // [v1.67] Apps Script 버전이 시트마다 달라서 두 키를 함께 보냄.
+      //   구버전: dateList(날짜만)로 그 날짜 행 전체를 지우고 재삽입
+      //   신버전: datePartList(날짜+부품번호)로 해당 조합만 지우고 재삽입
+      //   각 스크립트는 자기가 아는 키만 읽고 나머지는 무시 → 스크립트 수정 없이 양쪽 호환.
       const payload = {
         values: g.values,
         dateList: [...g.dates].sort((a,b)=>a-b),
+        datePartList: [...g.dateParts.values()],
         mode: 'last7days'
       };
       await fetch(url, {
@@ -3185,7 +3340,7 @@ async function sendToGoogleSheet(baseDateStr){
       });
       totalRows += g.values.length;
     }
-    console.log(`[구글시트] ${totalRows}행 / ${urls.length}개 고객사 시트 전송 시도 완료`);
+    console.log(`[구글시트] ${totalRows}행 / ${urls.length}개 고객사 시트 전송 시도 완료 (no-cors라 성공 여부는 시트에서 확인)`);
   }catch(e){
     // 전송 실패는 저장에 영향 없음 — 콘솔에만 남김
     console.warn('[구글시트] 전송 실패(무시):', e);
@@ -3218,18 +3373,10 @@ function sedongRepVal(inp) {
   return parseFloat((nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(dp));
 }
 
-// 측정행 기본형 (x 전부 null) — extra로 채울 칸/값 덮어쓰기
-function sedongBaseRow(iid, s, extra) {
-  const row = {
-    inspection_id: iid, spec_id: s.id, item_no: s.item_no, item_name: s.item_name,
-    inspection_method: s.inspection_method, spec_text: s.spec_text,
-    visual_result: null,
-    x1:null, x2:null, x3:null, x4:null, x5:null, x6:null, x7:null, x8:null, x9:null, x10:null,
-    note: null
-  };
-  return Object.assign(row, extra || {});
-}
-
+// [v1.67] 세동 저장 — 측정 1건 = inspection 1건 (slot_no에 시간대 보존)
+//   v1.66까지는 같은 날 inspection을 재사용하고 x{slot} 칸만 채웠음(하루 1행).
+//   → 건별 이력에서 실측 원본이 안 보여서, 일반 제품과 동일한 저장 규칙으로 통일.
+//   저장 규칙: x1~x5 5칸 정규화 + input_count(실측 칸 수). 9칸 재구성은 표시·전송 시점에서 처리.
 async function saveSedong(t) {
   const date   = document.getElementById('insp-date').value;
   const time   = document.getElementById('insp-time').value;
@@ -3238,7 +3385,6 @@ async function saveSedong(t) {
   const reason = document.getElementById('insp-reason').value;
   const remark = document.getElementById('insp-remark').value.trim();
   const slot   = t.slot;
-  const xcol   = `x${slot}`;
 
   if (!date) { toast('검사일을 입력하세요'); return; }
   if (!slot || slot < 1 || slot > 9) { toast('세동 시간대 슬롯 오류'); return; }
@@ -3273,67 +3419,56 @@ async function saveSedong(t) {
     const savedLabels = [];
 
     for (const v of targets) {
-      // 1. 오늘 + 이 부품의 기존 inspection 조회 (세동 부품은 하루 1건 원칙)
-      const existing = await sbAll('qc_shipping_inspection',
-        `part_id=eq.${v.part.id}&inspection_date=eq.${date}&order=id.desc&limit=1&select=id`);
-
-      let iid;
-      if (existing.length) {
-        // ── 누적: 기존 inspection에 이 슬롯 칸만 채움 (메타는 첫 저장값 유지, 안 건드림) ──
-        iid = existing[0].id;
-        const exRows = await sbAll('qc_shipping_measurement',
-          `inspection_id=eq.${iid}&select=id,spec_id`);
-        const ridBySpec = {}; exRows.forEach(r => ridBySpec[r.spec_id] = r.id);
-
-        for (const s of v.specs) {
-          const inp = v.inputs[s.id];
-          const rid = ridBySpec[s.id];
-          if (s.is_visual) {
-            // 외관: visual_result 최신값으로 갱신 (행 없으면 생성)
-            const body = { visual_result: inp.val || 'OK', note: (inp.note && inp.note.trim()) ? inp.note.trim() : null };
-            if (rid) await sbFetch(`qc_shipping_measurement?id=eq.${rid}`, { method: 'PATCH', body });
-            else await sbFetch('qc_shipping_measurement', { method: 'POST', body: [sedongBaseRow(iid, s, body)] });
-            continue;
-          }
-          const rv = sedongRepVal(inp);
-          if (rv == null) {
-            // 이 슬롯 미입력 → 칸 안 건드림. 행 자체가 없으면 빈 행만 만들어 둠(이후 슬롯 PATCH 대상 확보)
-            if (!rid) await sbFetch('qc_shipping_measurement', { method: 'POST', body: [sedongBaseRow(iid, s, {})] });
-            continue;
-          }
-          const note = (inp.note && inp.note.trim()) ? inp.note.trim() : null;
-          if (rid) await sbFetch(`qc_shipping_measurement?id=eq.${rid}`, { method: 'PATCH', body: { [xcol]: rv, note } });
-          else await sbFetch('qc_shipping_measurement', { method: 'POST', body: [sedongBaseRow(iid, s, { [xcol]: rv, note })] });
+      // 1. 검사 INSERT — 슬롯당 1건 (같은 날 기존 건 재사용 안 함)
+      const inspRows = await sbFetch('qc_shipping_inspection', {
+        method: 'POST', prefer: 'return=representation',
+        body: {
+          part_id: v.part.id, inspection_date: date, inspection_time: time || null,
+          ho: ho !== '' ? ho : null, mold_no: mold !== '' ? mold : null,
+          reason: reason !== '' ? reason : null, remark: remark !== '' ? remark : null,
+          inspector: auth.name,
+          process_type: t.procMode || 'press',
+          slot_no: slot                       // [v1.67] 시간대 슬롯 1~9
         }
-      } else {
-        // ── 신규: inspection + 전체 measurement 행 생성 (이 슬롯 칸만 값, 나머지 null) ──
-        const inspRows = await sbFetch('qc_shipping_inspection', {
-          method: 'POST', prefer: 'return=representation',
-          body: {
-            part_id: v.part.id, inspection_date: date, inspection_time: time || null,
-            ho: ho !== '' ? ho : null, mold_no: mold !== '' ? mold : null,
-            reason: reason !== '' ? reason : null, remark: remark !== '' ? remark : null,
-            inspector: auth.name
+      });
+      const iid = inspRows[0].id;
+
+      // 2. 측정값 INSERT — 일반 제품과 동일 규칙
+      const mRows = [];
+      for (const s of v.specs) {
+        const inp = v.inputs[s.id];
+        const row = {
+          inspection_id: iid, spec_id: s.id, item_no: s.item_no, item_name: s.item_name,
+          inspection_method: s.inspection_method, spec_text: s.spec_text,
+          visual_result: null,
+          x1:null, x2:null, x3:null, x4:null, x5:null,
+          input_count: null,
+          note: inp.note && inp.note.trim() ? inp.note.trim() : null
+        };
+        if (s.is_visual) {
+          row.visual_result = inp.val || 'OK';
+        } else if (inp.type === 'minmax') {
+          const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+          if (!isNaN(mn) && !isNaN(mx)) {
+            fillMinMax(mn, mx, 5).forEach((val, i) => { row[`x${i+1}`] = val; });
+            row.input_count = -2;             // 최소/최대 입력 표식
           }
-        });
-        iid = inspRows[0].id;
-        const mRows = v.specs.map(s => {
-          const inp = v.inputs[s.id];
-          const extra = {};
-          if (s.is_visual) extra.visual_result = inp.val || 'OK';
-          else { const rv = sedongRepVal(inp); if (rv != null) extra[xcol] = rv; }
-          if (inp.note && inp.note.trim()) extra.note = inp.note.trim();
-          return sedongBaseRow(iid, s, extra);
-        });
-        await sbFetch('qc_shipping_measurement', { method: 'POST', body: mRows });
+        } else {
+          fillTo5(inp.vals, s.lsl, s.usl, 5).forEach((val, i) => { if (val != null) row[`x${i+1}`] = val; });
+          const realN = (inp.vals || []).filter(x => x !== '' && x != null && !isNaN(parseFloat(x))).length;
+          row.input_count = realN || null;    // 실제 입력 칸 수(1~3 등)
+        }
+        mRows.push(row);
       }
-      // [v1.33] 같은 기기 한정: 이 슬롯의 칸별 원본을 캐시 → 다음 슬롯 열 때 칸별 prefill
+      await sbFetch('qc_shipping_measurement', { method: 'POST', body: mRows });
+
+      // [v1.33] 같은 기기 한정: 이 슬롯의 칸별 원본 캐시 → 다음 슬롯 열 때 칸별 prefill
       sedongRawSave(v.part.id, date, slot, v.specs, v.inputs);
       savedLabels.push(v.part.part_variant || v.part.part_number);
     }
 
     toast(`✅ ${sedongSlotLabel(slot)} 저장 완료 (${savedLabels.join(', ')})`);
-    // 세동은 구글시트 전송 안 함 — 마감 시점에 한 번에 보냄
+    // 세동은 구글시트 전송 안 함 — 마감 시점에 하루치를 9칸으로 묶어 한 번에 보냄
 
     const savedIdx = activeTabIdx;
     setTimeout(() => closeTab(savedIdx, null, true), 500);
@@ -3346,12 +3481,14 @@ async function saveSedong(t) {
 }
 
 // ══════════════════════════════════
-// [v0.47] 세동 마감 — 17시 지난 미마감 기록 빈 슬롯 가짜채우기 + 구글시트 전송
+// [v1.67] 세동 마감 — 17시 지난 미마감 기록 감지 → 마감 플래그 + 구글시트 전송
 //   서버 없이 "페이지 열 때 감지" 방식 (pg_cron 권한 이슈 회피).
+//   빈 시간대 채움은 DB에 쓰지 않고 표시·전송 시점에 결정론적으로 계산.
 // ══════════════════════════════════
 
 // 9칸(x1~x9) 중 실측 슬롯은 그대로, 빈 슬롯만 채움. fillTo5와 동일 원칙(실측 min~max·공차/10·규격 클램프).
-function sedongFillSlots(slots, lsl, usl) {
+//   [v1.67] seedBase 주면 결정론적 난수 사용(같은 입력 → 항상 같은 결과). 없으면 종전 랜덤.
+function sedongFillSlots(slots, lsl, usl, seedBase) {
   const real = slots.filter(v => v != null && !isNaN(v));
   if (real.length === 0) return slots.slice();   // 실측 0개 → 못 채움(비워둠)
   let dp = 2;
@@ -3372,7 +3509,7 @@ function sedongFillSlots(slots, lsl, usl) {
   const out = slots.slice();
   for (let i = 0; i < out.length; i++) {
     if (out[i] != null) continue;   // 실측 슬롯 유지
-    let v = gaussRand(mean, std);
+    let v = seedBase ? seededGauss(`${seedBase}#${i + 1}`, mean, std) : gaussRand(mean, std);
     if (v < lo) v = lo;
     if (v > hi) v = hi;
     out[i] = parseFloat(v.toFixed(dp));
@@ -3380,8 +3517,13 @@ function sedongFillSlots(slots, lsl, usl) {
   return out;
 }
 
-// 페이지 열 때: 17시 지난 미마감 세동 기록 감지 → 빈 슬롯 채움 → sedong_closed=true → 구글시트 전송
-//   과거 날짜는 무조건, 오늘 날짜는 현재 17:30(=1050분) 지났을 때만. 전부 try-catch라 실패해도 메인 무해.
+// [v1.67] 페이지 열 때: 17시 지난 미마감 세동 기록 감지 → 마감 처리 + 구글시트 전송
+//   v1.66까지는 빈 시간대에 가짜값을 DB에 PATCH로 써넣었음.
+//   → 건별 저장으로 바뀌면서 "그 값을 어느 검사 건에 쓸 것인가"가 성립하지 않고,
+//     건별 화면이 실측 원본이어야 하므로 DB에는 실측만 남긴다.
+//   빈 시간대 채움은 표시(일별 뷰)·전송(구글시트) 시점에 결정론적 난수로 계산 →
+//   다시 계산해도 항상 같은 값이라 시트가 흔들리지 않음.
+//   여기서 하는 일은 (1) sedong_closed 세우기 (2) 그 날짜 구글시트 전송뿐.
 async function checkSedongClose() {
   try {
     if (!allParts || !allParts.length) return;
@@ -3405,46 +3547,15 @@ async function checkSedongClose() {
     );
     if (!targets.length) return;
 
-    const closedDates = new Set();
-    let cnt = 0;
-    for (const insp of targets) {
-      const rows = await sbAll('qc_shipping_measurement',
-        `inspection_id=eq.${insp.id}&select=id,spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9`);
-      const specIds = [...new Set(rows.map(r => r.spec_id).filter(Boolean))];
-      const specMap = {};
-      if (specIds.length) {
-        const specs = await sbAll('qc_part_spec', `id=in.(${specIds.join(',')})&select=id,lsl,usl,is_visual,spec_text`);
-        specs.forEach(s => specMap[s.id] = s);
-      }
-      for (const r of rows) {
-        const sp = specMap[r.spec_id] || {};
-        if (sp.is_visual) continue;   // 외관/게이지 항목은 채우지 않음 (visual_result 1건 유지)
-        // [v0.48] 규격 한계: lsl/usl 우선, 없으면 spec_text 파싱 fallback (NG 가짜값 생성 방지)
-        let lsl = sp.lsl, usl = sp.usl;
-        if (lsl == null || usl == null) {
-          const ps = _parseSpec(sp.spec_text);
-          if (ps) { if (lsl == null) lsl = ps.lo; if (usl == null) usl = ps.hi; }
-        }
-        const slots = [r.x1,r.x2,r.x3,r.x4,r.x5,r.x6,r.x7,r.x8,r.x9].map(v => v == null ? null : Number(v));
-        const realCount = slots.filter(v => v != null).length;
-        if (realCount === 0 || realCount === 9) continue;   // 0개=비워둠 / 9개=이미 참
-        const filled = sedongFillSlots(slots, lsl, usl);
-        const patch = {};
-        for (let i = 0; i < 9; i++) { if (slots[i] == null && filled[i] != null) patch[`x${i+1}`] = filled[i]; }
-        if (Object.keys(patch).length) {
-          await sbFetch(`qc_shipping_measurement?id=eq.${r.id}`, { method: 'PATCH', body: patch });
-        }
-      }
-      await sbFetch(`qc_shipping_inspection?id=eq.${insp.id}`, { method: 'PATCH', body: { sedong_closed: true } });
-      closedDates.add(insp.inspection_date);
-      cnt++;
-    }
+    const closedDates = [...new Set(targets.map(i => i.inspection_date))];
 
-    if (cnt > 0) {
-      // 빈칸 채운 후 완성된 데이터를 마감 날짜마다 전송 (기존 매크로 재활용)
-      for (const d of closedDates) await sendToGoogleSheet(d);
-      toast(`🔒 세동 ${cnt}건 마감·전송 완료 (${[...closedDates].join(', ')})`);
-    }
+    // 여러 건이라도 PATCH 1회 (id=in.(...))
+    const ids = targets.map(i => i.id).join(',');
+    await sbFetch(`qc_shipping_inspection?id=in.(${ids})`, { method: 'PATCH', body: { sedong_closed: true } });
+
+    // 마감 날짜별 전송 (세동은 sendToGoogleSheet 안에서 하루 9칸으로 병합됨)
+    for (const d of closedDates) await sendToGoogleSheet(d);
+    toast(`🔒 세동 ${targets.length}건 마감·전송 완료 (${closedDates.join(', ')})`);
   } catch (e) {
     console.warn('[세동 마감] 실패(무시):', e);
   }
@@ -3541,6 +3652,9 @@ async function saveAll() {
           spec_text: s.spec_text,
           visual_result: null,
           x1:null, x2:null, x3:null, x4:null, x5:null,
+          // [v1.66] 실제로 입력한 개수(산포 전). 건별 이력에서 실측만 구분해 보여주기 위한 표시용 메타.
+          //   저장되는 x1~x5 값 자체는 종전과 동일 → 성적서·웹훅·트리거 무영향.
+          input_count: null,
           note: inp.note && inp.note.trim() ? inp.note.trim() : null
         };
         if (s.is_visual) {
@@ -3551,12 +3665,15 @@ async function saveAll() {
             // [v0.44] 최소/최대 입력 → 항상 5개 (min/max 방식은 measure_points 무관 5개 고정)
             const pts = fillMinMax(mn, mx, 5);
             pts.forEach((val, i) => { row[`x${i+1}`] = val; });
+            row.input_count = -2;              // [v1.66] 최소/최대 입력 표식
           }
         } else {
           // [v1.54] 저장은 항상 5개 고정. 입력 화면은 measure_points칸(1~12)이지만
           //         이력/엑셀/구글시트가 5칸 포맷이므로 저장은 fillTo5로 5개 산포.
           const filled = fillTo5(inp.vals, s.lsl, s.usl, 5);
           filled.forEach((val, i) => { if (val != null) row[`x${i+1}`] = val; });
+          const realN = (inp.vals || []).filter(x => x !== '' && x != null && !isNaN(parseFloat(x))).length;
+          row.input_count = realN || null;     // [v1.66] 실제 입력 칸 수
         }
         mRows.push(row);
       }
@@ -4024,7 +4141,7 @@ async function loadHistData() {
 
   try {
     // [v0.57] 부품 선택했으면 그 부품, 안 했으면 그 날짜범위 전체 부품
-    let qs = `inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,part_id,inspection_date,inspection_time,ho,mold_no,reason,remark,inspector,result,process_type`;
+    let qs = `inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,part_id,inspection_date,inspection_time,ho,mold_no,reason,remark,inspector,result,process_type,slot_no`;
     if (histPart) qs = `part_id=eq.${histPart.id}&` + qs;
     histInspections = await sbAll('qc_shipping_inspection', qs);
 
@@ -4080,10 +4197,9 @@ function applyHistFilter() {
     document.getElementById('hist-mode-toggle').style.display = 'none';
   } else {
     document.getElementById('hist-empty').style.display = 'none';
-    // [v1.57] 세동은 기존 9슬롯 방식 유지 → 일별 토글 숨김
-    const sedong = filtered.some(i => isSedongPart(i.part));
-    document.getElementById('hist-mode-toggle').style.display = sedong ? 'none' : 'flex';
-    if (!sedong && histMode === 'day') { dayMeasCache = {}; renderDayList(filtered); }
+    // [v1.65] 세동 포함 전 제품 일별 기본. 부품 미선택(전체 조회)에서도 동일.
+    document.getElementById('hist-mode-toggle').style.display = 'flex';
+    if (histMode === 'day') { dayMeasCache = {}; renderDayList(filtered); }
     else renderHistList(filtered);
   }
 }
@@ -4095,6 +4211,7 @@ function applyHistFilter() {
 //   · 4건 이상이면 초과분은 중=최솟값, 종=최댓값으로 갱신
 //   · 슬롯이 비면 마지막 검사의 x2·x3 등 저장된 실측값으로 채움(새로 만들어내지 않음)
 // ══════════════════════════════════
+let specLimCache = {};         // [v1.67] part_id → { spec_id: {lsl, usl} } (세동 빈 슬롯 채움용)
 let histMode = 'day';          // 'day' | 'each'
 let dayGroups = [];            // 일별 그룹 배열
 let dayMeasCache = {};         // 그룹키 → 슬롯별 측정 데이터
@@ -4299,9 +4416,15 @@ async function toggleDayCard(gi) {
       ? 'qc_machining_measurement' : 'qc_shipping_measurement';
     const ids = g.insps.map(i => i.id).join(',');
     const rows = await sbAll(table,
-      `inspection_id=in.(${ids})&select=id,inspection_id,spec_id,item_no,item_name,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note`);
+      `inspection_id=in.(${ids})&select=id,inspection_id,spec_id,item_no,item_name,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count`);
 
     if (g.part_id) await loadDispNoMap(g.part_id);   // [v1.57] 표시번호 확보
+    // [v1.67] 세동: 빈 시간대 채움에 lsl/usl 필요 → 부품 단위 1회만 조회
+    if (isSedongPart(g.part) && g.part_id && !specLimCache[g.part_id]) {
+      const sp = await sbAll('qc_part_spec', `part_id=eq.${g.part_id}&select=id,lsl,usl`);
+      const m = {}; (sp || []).forEach(s => { m[s.id] = { lsl: s.lsl, usl: s.usl }; });
+      specLimCache[g.part_id] = m;
+    }
 
     // inspection_id별로 묶기
     const measBy = {};
@@ -4347,7 +4470,46 @@ function fillSlotTimes(slot) {
   return out;
 }
 
+
+// [v1.67] 세동 일별 표 — 9시간대(8~17시) 열.
+//   신구조(건별 저장)든 구구조(하루 1행)든 buildSedongDaySlots가 9칸으로 재구성.
+//   빈 시간대는 결정론적 난수로 채움 → 몇 번을 다시 열어도 같은 값.
+function buildDaySedongTable(g, measBy) {
+  const bySpec = buildSedongDaySlots(g.insps, measBy, g.part_id, g.date, specLimCache[g.part_id]);
+
+  let items = Object.values(bySpec);
+  const dmap = dispNoCache[g.part_id];
+  if (dmap) { applyDispNo(items, dmap); items.sort((a, b) => (a.disp_no ?? 0) - (b.disp_no ?? 0)); }
+  else items.sort((a, b) => (a.item_no ?? 0) - (b.item_no ?? 0));
+
+  let html = `<div class="day-wrap"><div class="hist-meas-scroll">
+    <div style="padding:6px 2px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>
+    <table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>`;
+  for (let n = 0; n < 9; n++) html += `<th>${SEDONG_SLOTS[n]}시</th>`;
+  html += `<th>판정</th></tr></thead><tbody>`;
+
+  items.forEach(it => {
+    const isVisual = it.visual_result != null;
+    const res = it.result || (isVisual ? it.visual_result : '') || '—';
+    const resCls = res === 'OK' ? 'ok' : res === 'NG' ? 'ng' : '';
+    html += `<tr><td>${dno(it)}</td>
+      <td style="text-align:left">${it.item_name || ''}</td>
+      <td style="text-align:left;color:#3b82f6">${it.spec_text || ''}</td>`;
+    for (let n = 1; n <= 9; n++) {
+      const v = isVisual ? it.visual_result : it.slots[n - 1];
+      html += `<td>${v == null || v === '' ? '—' : v}</td>`;
+    }
+    html += `<td class="${resCls}">${res}</td></tr>`;
+  });
+
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
 function buildDayTable(g, measBy) {
+  // [v1.65] 세동은 하루 1건에 x1~x9가 시간대 슬롯 → 기존 9열 형식 유지
+  if (isSedongPart(g.part)) return buildDaySedongTable(g, measBy);
+
   const slot = g._slot || assignSlots(g.insps);
 
   // 항목 목록 — 검사들에 등장한 spec을 표시번호 순으로
@@ -4463,7 +4625,7 @@ async function toggleHistCard(idx) {
 
   // 측정값 로드 (id 포함)
   try {
-    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note`);
+    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count`);
     // [v1.56] 표시번호 주입 + 표시순서(sort_order 기준)로 재정렬
     if (insp.part_id) {
       const dmap = await loadDispNoMap(insp.part_id);
@@ -4499,7 +4661,7 @@ function buildMeasDetail(rows, idx, editMode) {
   }
 
   // 측정 테이블
-  html += buildMeasTable(rows, idx, editMode, insp && insp.part);   // [v0.57] 카드 부품 기준 세동 판정
+  html += buildMeasTable(rows, idx, editMode, insp && insp.part, insp);   // [v0.57] 카드 부품 기준 세동 판정 / [v1.67] insp = 슬롯 판정
 
   // 툴바
   if (editMode) {
@@ -4518,8 +4680,9 @@ function buildMeasDetail(rows, idx, editMode) {
 
 // [v0.48] 측정 표시 칸 수: 세동이면 9시간대(x1~x9) 고정, 일반은 사용된 최대칸
 // [v0.57] part 인자로 카드별 세동 판정 (전체 조회 시 부품마다 다름)
-function measMaxX(rows, part) {
-  if (isSedongPart(part || histPart)) return 9;
+// [v1.67] insp.slot_no가 있으면 세동 건별 저장(신구조) → 일반 제품과 동일한 X1..Xn 규칙
+function measMaxX(rows, part, insp) {
+  if (isSedongPart(part || histPart) && !(insp && insp.slot_no != null)) return 9;
   let maxX = 0;
   rows.forEach(r => {
     for (let i = 12; i >= 1; i--) {   // [v1.53] x11·x12까지 훑기(12포인트 항목)
@@ -4529,18 +4692,22 @@ function measMaxX(rows, part) {
   return maxX === 0 ? 5 : maxX;
 }
 
-function buildMeasTable(rows, idx, editMode, part) {
+function buildMeasTable(rows, idx, editMode, part, insp) {
   if (!rows.length) return '<div style="padding:12px;color:#94a3b8;font-size:16px;text-align:center">측정 데이터 없음</div>';
 
   const usePart = part || histPart;
   const sedong = isSedongPart(usePart);          // [v0.57] 카드별 세동 판정
-  const maxX = measMaxX(rows, usePart);
+  // [v1.67] 세동이라도 slot_no가 있으면 "그 시간대 1건"이므로 9시간대 펼침이 아님
+  const sedongSlotMode = sedong && insp && insp.slot_no != null;
+  const sedongWide = sedong && !sedongSlotMode;
+  const maxX = measMaxX(rows, usePart, insp);
 
   let html = '<div class="hist-meas-scroll">';
-  if (sedong) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
+  if (sedongWide) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
+  else if (sedongSlotMode) html += `<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 순회검사 — ${sedongSlotLabel(insp.slot_no)} 타임 실측</div>`;
   html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
   for (let i = 1; i <= maxX; i++) {
-    const label = sedong ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
+    const label = sedongWide ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
     html += `<th>${label}</th>`;
   }
   html += '<th>판정</th><th>메모</th></tr></thead><tbody>';
@@ -4563,12 +4730,33 @@ function buildMeasTable(rows, idx, editMode, part) {
         html += `<td colspan="${maxX}" style="text-align:center;color:#64748b;font-size:14px">${r.visual_result}</td>`;
       }
     } else {
+      // [v1.66] 건별은 실제 입력분만 표시.
+      //   input_count > 0 이면 그 개수만, -2(최소/최대 입력)면 min·max 두 값만.
+      //   null(이전 데이터)은 정보가 없으므로 종전대로 전부 표시.
+      const ic = r.input_count;
+      let showIdx = null;                       // null = 전부 표시
+      if (!editMode && ic != null) {
+        if (ic === -2) {
+          const nums = [];
+          for (let i = 1; i <= maxX; i++) if (r[`x${i}`] != null) nums.push({ i, v: parseFloat(r[`x${i}`]) });
+          if (nums.length) {
+            const mn = nums.reduce((a, b) => b.v < a.v ? b : a);
+            const mx = nums.reduce((a, b) => b.v > a.v ? b : a);
+            showIdx = new Set([mn.i, mx.i]);
+          }
+        } else if (ic > 0) {
+          showIdx = new Set();
+          for (let i = 1; i <= ic && i <= maxX; i++) showIdx.add(i);
+        }
+      }
+
       for (let i = 1; i <= maxX; i++) {
         const v = r[`x${i}`];
         if (editMode) {
           html += `<td><input class="edit-inp" type="text" inputmode="decimal" id="he-x-${idx}-${ri}-${i}" value="${v != null ? fmtNum(v) : ''}"></td>`;
         } else {
-          html += `<td>${v != null ? fmtNum(v) : ''}</td>`;
+          const hide = showIdx && !showIdx.has(i);
+          html += `<td>${(!hide && v != null) ? fmtNum(v) : ''}</td>`;
         }
       }
     }
