@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.68</title>
+<title>공정검사 입력 v1.70</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -507,7 +507,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.68</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.70</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -3207,6 +3207,9 @@ function fillTo5(inputVals, lsl, usl, n){
 
   let dp = 2;  // 최소 2자리 보장 (1포인트도 자연 산포). 입력이 더 정밀하면 확장
   vals.forEach(v=>{ const s=String(v); const i=s.indexOf('.'); if(i>=0) dp=Math.max(dp, s.length-i-1); });
+  // [v1.69] 상한 4자리. 입력값에 부동소수점 잔재(예: 3.6500000000000004)가 섞이면
+  //   dp가 16~18로 튀어 산포값 x2~x5까지 전부 오염됨. 측정 현실상 4자리면 충분.
+  dp = Math.min(dp, 4);
 
   const realMin = Math.min(...vals), realMax = Math.max(...vals);
   const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
@@ -3231,7 +3234,7 @@ function fillTo5(inputVals, lsl, usl, n){
     if(lo > hi){ lo = hi = mean; }   // 공차가 0.02 미만이라 범위 역전 시 → 평균 고정
   }
 
-  const out = vals.slice();
+  const out = vals.map(v => parseFloat(v.toFixed(dp)));   // [v1.69] 입력값도 dp로 정규화
   let guard = 0;
   while(out.length < target && guard < 1000){
     guard++;
@@ -3247,11 +3250,11 @@ function fillTo5(inputVals, lsl, usl, n){
 function fillMinMax(minV, maxV, count = 5) {
   const mean = (minV + maxV) / 2;
   const std = (maxV - minV) / 6;
-  const dp = Math.max(
+  const dp = Math.min(4, Math.max(   // [v1.69] 상한 4자리 (fillTo5와 동일 이유)
     (minV.toString().split('.')[1] || '').length,
     (maxV.toString().split('.')[1] || '').length
-  );
-  const pts = [minV];
+  ));
+  const pts = [parseFloat(minV.toFixed(dp))];
   for (let i = 0; i < count - 2; i++) {
     let v;
     let attempts = 0;
@@ -3259,7 +3262,7 @@ function fillMinMax(minV, maxV, count = 5) {
     while ((v < minV || v > maxV) && attempts < 100);
     pts.push(parseFloat(v.toFixed(dp)));
   }
-  pts.push(maxV);
+  pts.push(parseFloat(maxV.toFixed(dp)));
   return pts;
 }
 
@@ -4593,8 +4596,11 @@ async function toggleDayCard(gi) {
   if (dayMeasCache[g.key]) { detail.innerHTML = dayMeasCache[g.key]; return; }
 
   try {
-    const table = g.process_type === 'machining'
-      ? 'qc_machining_measurement' : 'qc_shipping_measurement';
+    // [v1.70] 측정값은 프레스·가공 구분 없이 qc_shipping_measurement 한 곳에 저장됨.
+    //   기존엔 process_type='machining'이면 qc_machining_measurement를 조회했으나,
+    //   그 테이블은 초기 테스트 잔재 7행(inspection_id=1, 실제 검사건 없음)만 있는 죽은 테이블.
+    //   → 가공 검사 카드가 항상 빈 표로 뜨던 원인. 분기 제거.
+    const table = 'qc_shipping_measurement';
     const ids = g.insps.map(i => i.id).join(',');
     const rows = await sbAll(table,
       `inspection_id=in.(${ids})&select=id,inspection_id,spec_id,item_no,item_name,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count`);
