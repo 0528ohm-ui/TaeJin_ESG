@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.72</title>
+<title>공정검사 입력 v1.79</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -507,7 +507,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.72</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.79</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -609,7 +609,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       </div>
       <div style="margin-bottom:10px">
         <label>측정사유</label>
-        <select class="inp" id="insp-reason" style="margin-top:4px" onchange="persistDraft()">
+        <select class="inp" id="insp-reason" style="margin-top:4px" onchange="onReasonChange()">
           <option value="">선택 안 함</option>
         </select>
       </div>
@@ -1867,12 +1867,34 @@ function renderSedongBanner(t) {
   if (!el) return;
   if (!t || !t.sedong) { el.style.display = 'none'; el.innerHTML = ''; return; }
   // [v1.34] 슬롯 직접 선택 — 늦게 측정한 제품을 실제 시간대 칸에 넣을 수 있게 (기본값=탭 생성 시각 슬롯)
-  const opts = SEDONG_SLOTS.map((h, i) =>
+  // [v1.76] 셋업(slot 0) 추가. 사유가 '초품'이면 셋업으로 자동 선택됨
+  const opts = `<option value="0" ${t.slot === 0 ? 'selected' : ''}>셋업(초품)</option>`
+    + SEDONG_SLOTS.map((h, i) =>
     `<option value="${i + 1}" ${t.slot === i + 1 ? 'selected' : ''}>${h}시</option>`).join('');
+  const isSetup = t.slot === 0;
   el.style.display = 'block';
-  el.innerHTML = `🕘 <b>세동 9시간대 순회검사</b> — 시간대 `
+  el.innerHTML = `🕘 <b>세동 순회검사</b> — 시간대 `
     + `<select class="sd-slot-sel" onchange="changeSedongSlot(this.value)">${opts}</select> 입력 중`
-    + `<span class="sd-sub">저장 시 <b>x${t.slot}</b> 칸에 누적 · 같은 날 같은 부품이면 기존 이력에 합쳐짐 · 늦게 측정했으면 실제 시간대로 바꿔 저장</span>`;
+    + `<span class="sd-sub">${isSetup
+        ? '<b>셋업(초품)</b>으로 저장 · 일별 뷰 맨 앞 셋업 칸에 들어가며, 이 시각 이전 시간대는 채우지 않음'
+        : `저장 시 <b>${sedongSlotLabel(t.slot)}</b> 칸에 누적 · 같은 날 같은 부품이면 기존 이력에 합쳐짐 · 늦게 측정했으면 실제 시간대로 바꿔 저장`}</span>`;
+}
+
+// [v1.76] 사유 변경 — 세동에서 '초품'을 고르면 셋업 슬롯(0)으로 자동 전환.
+//   '초품'을 해제하면 현재 시각 슬롯으로 되돌림.
+function onReasonChange() {
+  const t = tabs[activeTabIdx];
+  const v = document.getElementById('insp-reason').value;
+  if (t && t.sedong) {
+    if (v === '초품' && t.slot !== 0) {
+      t.slot = 0;
+      renderSedongBanner(t);
+    } else if (v !== '초품' && t.slot === 0) {
+      t.slot = sedongSlotIdx();
+      renderSedongBanner(t);
+    }
+  }
+  persistDraft();
 }
 
 // [v1.34] 세동 슬롯 수동 변경 — 현재 탭의 slot 갱신 후 배너만 다시 그림
@@ -1880,7 +1902,7 @@ function changeSedongSlot(val) {
   const t = tabs[activeTabIdx];
   if (!t || !t.sedong) return;
   const n = parseInt(val, 10);
-  if (!n || n < 1 || n > 9) return;
+  if (isNaN(n) || n < 0 || n > 9) return;   // [v1.76] 0 = 셋업
   t.slot = n;
   renderSedongBanner(t);
   persistDraft();   // 변경된 슬롯도 임시저장에 반영
@@ -3085,10 +3107,18 @@ function sedongSlotIdx(date = new Date()) {
   return 9;                 // 16:30~      → 17시 (17:30↑ 포함, 늦은 시각 전부 17시로)
 }
 
-// 슬롯 번호(1~9) → "8시" 라벨
+// 슬롯 번호(0~9) → "셋업" / "8시" 라벨   [v1.76] 0 = 셋업
 function sedongSlotLabel(idx) {
+  if (Number(idx) === 0) return '셋업';
   const h = SEDONG_SLOTS[idx - 1];
   return h != null ? `${h}시` : '—';
+}
+
+// [v1.76] 슬롯 인덱스(0~9) → 그 슬롯의 기준 시각(분). 셋업은 실제 검사시각을 쓰므로 null
+function sedongSlotMin(idx) {
+  if (Number(idx) === 0) return null;
+  const h = SEDONG_SLOTS[idx - 1];
+  return h != null ? h * 60 : null;
 }
 
 // ── [v1.67] 결정론적 난수 ──────────────────────────────
@@ -3147,28 +3177,76 @@ function sedongRepFromRow(r) {
 // 하루치 inspection들 → 항목(spec)별 9슬롯 재구성
 //   반환: { [spec_id]: { …측정행메타, slots:[9], real:[9] } }  ※ slots는 빈칸 채움 완료
 //   limBySpec: { [spec_id]: {lsl, usl} } (없으면 spec_text 파싱 폴백)
+// [v1.76] slots 배열은 10칸. index 0 = 셋업, 1~9 = 8~17시.
+//   셋업(slot_no=0)은 사유 '초품' 검사이며, 그 시각 이전 시간대는 채우지 않는다
+//   (15시에 셋업한 날 8~14시 순회검사가 있었던 것처럼 보이면 안 되므로).
 function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec) {
   const bySpec = {};
+  let setupMin = null;                    // 셋업 검사 시각(분)
+
   (insps || []).forEach(insp => {
     const slotNo = insp.slot_no;
+    if (Number(slotNo) === 0) {
+      const t = String(insp.inspection_time || '');
+      const hh = parseInt(t.substring(0, 2), 10), mm = parseInt(t.substring(3, 5), 10);
+      if (!isNaN(hh)) { const v = hh * 60 + (isNaN(mm) ? 0 : mm); if (setupMin == null || v < setupMin) setupMin = v; }
+    }
     (measBy[insp.id] || []).forEach(r => {
       let e = bySpec[r.spec_id];
-      if (!e) e = bySpec[r.spec_id] = Object.assign({}, r, { slots: new Array(9).fill(null), real: new Array(9).fill(false) });
+      if (!e) e = bySpec[r.spec_id] = Object.assign({}, r,
+        { slots: new Array(10).fill(null), real: new Array(10).fill(false), vslots: new Array(10).fill(null) });
       if (r.result === 'NG') e.result = 'NG';
       if (r.visual_result != null && (e.visual_result == null || r.visual_result === 'NG')) e.visual_result = r.visual_result;
       if (r.note && !e.note) e.note = r.note;
 
-      if (slotNo == null) {
-        // 구구조: x1~x9 = 시간대 슬롯
-        for (let n = 0; n < 9; n++) {
-          if (e.slots[n] == null && r[`x${n + 1}`] != null) { e.slots[n] = Number(r[`x${n + 1}`]); e.real[n] = true; }
+      // [v1.78] 외관·게이지 판정도 슬롯별로 기록.
+      //   종전엔 visual_result 하나를 전 슬롯에 그대로 뿌려서, 검사하지 않은 시간대에도
+      //   OK가 찍혔음(측정값은 비어 있는데 판정만 있는 모순).
+      if (r.visual_result != null) {
+        if (slotNo == null) {
+          for (let n2 = 1; n2 <= 9; n2++) if (e.vslots[n2] == null) e.vslots[n2] = r.visual_result;
+        } else if (slotNo >= 0 && slotNo <= 9) {
+          if (e.vslots[slotNo] == null || r.visual_result === 'NG') e.vslots[slotNo] = r.visual_result;
         }
-      } else if (slotNo >= 1 && slotNo <= 9) {
-        // 신구조: 이 검사 = 1슬롯. 실측 평균을 그 자리에
+      }
+
+      if (slotNo == null) {
+        // 구구조: x1~x9 = 시간대 슬롯 → slots[1..9]
+        for (let n = 0; n < 9; n++) {
+          if (e.slots[n + 1] == null && r[`x${n + 1}`] != null) { e.slots[n + 1] = Number(r[`x${n + 1}`]); e.real[n + 1] = true; }
+        }
+      } else if (slotNo >= 0 && slotNo <= 9) {
+        // 신구조: 이 검사 = 1슬롯 (0=셋업). 실측 평균을 그 자리에
         const rep = sedongRepFromRow(r);
-        if (rep != null) { e.slots[slotNo - 1] = rep; e.real[slotNo - 1] = true; }
+        if (rep != null) { e.slots[slotNo] = rep; e.real[slotNo] = true; }
       }
     });
+  });
+
+  // [v1.76] 셋업 시각이 속한 슬롯까지 채움 대상에서 제외.
+  //   시각 단순비교가 아니라 슬롯 구간으로 자르는 이유:
+  //   8시 슬롯은 08:00~08:29 구간이라 08:10 셋업이면 그 구간은 이미 셋업이 차지한 것이고,
+  //   14:30 셋업인데 15시 칸(14:30~15:29)을 채우면 셋업 30분 만에 순회검사한 셈이 됨.
+  //   판정 기준을 입력 때(sedongSlotIdx)와 동일하게 맞춘다.
+  //   셋업 칸(0) 자체도 실측이 없으면 만들어내지 않음 — 셋업은 실제로 한 검사만 의미가 있음.
+  const skip = new Set([0]);
+  if (setupMin != null) {
+    const d = new Date(2000, 0, 1, Math.floor(setupMin / 60), setupMin % 60);
+    const setupSlot = sedongSlotIdx(d);
+    for (let n = 1; n <= setupSlot; n++) skip.add(n);
+  }
+
+  // [v1.79] 외관·게이지: 숫자 항목을 채운 시간대는 함께 OK로 채운다.
+  //   그 시간대에 검사가 있었던 것으로 표시하는 이상 외관만 비어 있으면 앞뒤가 안 맞음.
+  //   반대로 skip된 시간대(셋업 이전 등)는 숫자도 외관도 비운다.
+  Object.values(bySpec).forEach(e => {
+    if (e.visual_result == null) return;              // 외관 항목만 대상
+    const base = e.vslots.find(v => v != null);       // 그날 실제 판정(없으면 채우지 않음)
+    if (base == null) return;
+    for (let i = 1; i <= 9; i++) {
+      if (skip.has(i)) continue;
+      if (e.vslots[i] == null) e.vslots[i] = e.visual_result === 'NG' ? 'OK' : (e.visual_result || 'OK');
+    }
   });
 
   // 빈 슬롯 채움 — 결정론적(시드 고정)이라 다시 그려도 같은 값
@@ -3180,7 +3258,7 @@ function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec) {
       const ps = _parseSpec(e.spec_text);
       if (ps) { if (lsl == null) lsl = ps.lo; if (usl == null) usl = ps.hi; }
     }
-    e.slots = sedongFillSlots(e.slots, lsl, usl, `${partId}|${dateStr}|${e.spec_id}`);
+    e.slots = sedongFillSlots(e.slots, lsl, usl, `${partId}|${dateStr}|${e.spec_id}`, skip);
   });
   return bySpec;
 }
@@ -3484,10 +3562,13 @@ async function sendToGoogleSheet(baseDateStr){
           measure_zone: sp.measure_zone || '', inspection_method: it.inspection_method,
           spec_text: it.spec_text, lsl: sp.lsl, usl: sp.usl
         };
-        // 9시간대 값 → X~AG(1~10) 앞 9칸. 10번째는 종전과 동일하게 공란.
+        // [v1.76] X~AG(1~10): 앞 9칸 = 8~17시(종전 위치 그대로), 10번째(AG) = 셋업.
+        //   셋업을 맨 앞에 넣으면 기존 시트에 쌓인 8~17시 열이 전부 한 칸씩 밀리므로 뒤에 붙인다.
+        //   [v1.78] 외관도 슬롯별 판정(vslots)을 그대로 전송 — 검사 없는 시간대는 공란
         const xs = isVisual
-          ? new Array(9).fill(it.visual_result || 'OK').concat([null,null,null])
-          : it.slots.concat([null,null,null]);
+          ? (it.vslots || new Array(10).fill(null)).slice(1, 10)
+              .concat([(it.vslots || [])[0], null, null])
+          : it.slots.slice(1, 10).concat([it.slots[0], null, null]);
         const verdict = isVisual ? (it.visual_result||'OK') : (it.result||'OK');
         const row37 = _build37(b.part, spec, xs, dateYmd, isVisual, verdict);
 
@@ -3571,7 +3652,7 @@ async function saveSedong(t) {
   const slot   = t.slot;
 
   if (!date) { toast('검사일을 입력하세요'); return; }
-  if (!slot || slot < 1 || slot > 9) { toast('세동 시간대 슬롯 오류'); return; }
+  if (slot == null || slot < 0 || slot > 9) { toast('세동 시간대 슬롯 오류'); return; }   // [v1.76] 0 = 셋업
 
   // 저장 대상 variant (그룹이면 입력 있는 것, 단일이면 [0])
   let targets;
@@ -3672,7 +3753,7 @@ async function saveSedong(t) {
 
 // 9칸(x1~x9) 중 실측 슬롯은 그대로, 빈 슬롯만 채움. fillTo5와 동일 원칙(실측 min~max·공차/10·규격 클램프).
 //   [v1.67] seedBase 주면 결정론적 난수 사용(같은 입력 → 항상 같은 결과). 없으면 종전 랜덤.
-function sedongFillSlots(slots, lsl, usl, seedBase) {
+function sedongFillSlots(slots, lsl, usl, seedBase, skipIdx) {
   const real = slots.filter(v => v != null && !isNaN(v));
   if (real.length === 0) return slots.slice();   // 실측 0개 → 못 채움(비워둠)
   let dp = 2;
@@ -3693,6 +3774,7 @@ function sedongFillSlots(slots, lsl, usl, seedBase) {
   const out = slots.slice();
   for (let i = 0; i < out.length; i++) {
     if (out[i] != null) continue;   // 실측 슬롯 유지
+    if (skipIdx && skipIdx.has(i)) continue;   // [v1.76] 셋업 이전 시간대·셋업칸은 비워둠
     let v = seedBase ? seededGauss(`${seedBase}#${i + 1}`, mean, std) : gaussRand(mean, std);
     if (v < lo) v = lo;
     if (v > hi) v = hi;
@@ -4462,7 +4544,10 @@ function measVal(row) {
 // 그룹 + spec별 슬롯값 산출
 //   measBy: inspection_id → 측정행 배열
 //   반환: { setup:{v,fill,row}, first:{…}, mid:{…}, last:{…} }  fill=true면 채워넣은 값
-function calcSlotValues(slot, specId, measBy) {
+// [v1.79] fillTimes: 시각이 산출되지 않은(=검사가 없었다고 판단한) 슬롯은 값도 채우지 않는다.
+//   v1.74에서 셋업 이후 자리가 없는 슬롯의 시각을 비웠는데 값은 계속 채워져,
+//   "시간 —, 사유 —, 값만 있음"이라는 모순된 표시가 됐음.
+function calcSlotValues(slot, specId, measBy, fillTimes) {
   const rowOf = insp => insp
     ? ((measBy[insp.id] || []).find(r => String(r.spec_id) === String(specId)) || null)
     : null;
@@ -4493,6 +4578,8 @@ function calcSlotValues(slot, specId, measBy) {
     let nth = 2;   // x1은 대표값으로 이미 쓰였으므로 x2부터
     ['first', 'mid', 'last'].forEach(k => {
       if (out[k].v != null) return;
+      // [v1.79] 실측도 없고 시각도 산출 안 된 슬롯 → 그 시간대엔 검사가 없었던 것
+      if (fillTimes && !slot[k] && !fillTimes[k]) return;
       let v = null;
       while (nth <= 12 && v == null) { v = donor[`x${nth}`]; nth++; }
       if (v == null) v = measVal(donor);          // 그래도 없으면 대표값 복제
@@ -4567,7 +4654,7 @@ function renderDayList(inspList) {
 
         </div>
         <div class="hist-meta">
-          ${!histPart && g.part ? `<span class="hist-chip" style="background:#dbeafe;color:#1e40af;font-weight:700">${g.part.part_number || g.part.part_name}</span>` : ''}
+          ${!histPart && g.part ? `<span class="hist-chip" style="background:#dbeafe;color:#1e40af;font-weight:700">${isSedongPart(g.part) ? (g.part.part_name || g.part.part_number) : (g.part.part_number || g.part.part_name)}</span>` : ''}
           ${hos.length ? `<span class="hist-chip">설비 ${hos.join(',')}</span>` : ''}
           ${g.process_type === 'machining'
             ? `<span class="hist-chip" style="background:#fef3c7;color:#92400e;font-weight:700">⚙️ 가공</span>`
@@ -4630,32 +4717,55 @@ async function toggleDayCard(gi) {
 // [v1.63] 빈 슬롯의 표시용 시간 산출
 //   슬롯별 시간 구간(초 08~12 / 중 12~16 / 종 16~19) 안에서,
 //   앞뒤 실측 시각과 겹치지 않게 배치
-function fillSlotTimes(slot) {
+function fillSlotTimes(slot, seedBase) {
   const toMin = t => { if (!t) return null; const [h,m] = String(t).split(':'); return (+h)*60 + (+m||0); };
   const toStr = v => `${String(Math.floor(v/60)).padStart(2,'0')}:${String(Math.round(v%60)).padStart(2,'0')}`;
-  const ZONE = { first: [8*60, 12*60], mid: [12*60, 16*60], last: [16*60, 19*60] };
+  // [v1.74] 종 구간 상한을 18:30으로 조정(종전 19:00).
+  //   랜덤화하면서 19시까지 열어두니 종이 18시 넘게 잡히는 날이 생겨 현실과 안 맞았음.
+  const ZONE = { first: [8*60, 12*60], mid: [12*60, 16*60], last: [16*60, 18*60+30] };
 
   const keys = ['first','mid','last'];
   const known = {};
   keys.forEach(k => { known[k] = slot[k] ? toMin(slot[k].inspection_time) : null; });
 
+  // [v1.73] 셋업 시각을 하한으로 사용.
+  //   종전엔 셋업을 보지 않아 셋업 15:14인 날에도 초=10:00·중=14:00이 만들어져
+  //   "셋업보다 이른 순회검사"라는 불가능한 시각이 표시됐음.
+  // [v1.74] 셋업 이후 자리가 없는 슬롯은 아예 비움(null).
+  //   15시에 셋업한 날 20~30분 간격으로 초·중·종을 억지로 채우면 현실과 안 맞음.
+  const setupMin = slot.setup ? toMin(slot.setup.inspection_time) : null;
+  let floor = setupMin;             // 직전 슬롯(실측이든 채움이든) 시각 = 다음 슬롯의 하한
+
+  const MIN_GAP  = 20;              // 슬롯 간 최소 간격(분)
+  const MIN_ROOM = 60;              // 이만큼 구간이 안 남으면 그 슬롯은 만들지 않음
+
   const out = {};
   keys.forEach((k, i) => {
-    if (known[k] != null) { out[k] = null; return; }   // 실측 있음
+    if (known[k] != null) { out[k] = null; floor = known[k]; return; }   // 실측 있음
     let [lo, hi] = ZONE[k];
 
     // 앞 슬롯 실측이 더 늦으면 그 뒤로, 뒷 슬롯 실측이 더 이르면 그 앞으로
     const prev = i > 0 ? known[keys[i-1]] : null;
     const next = i < 2 ? known[keys[i+1]] : null;
-    if (prev != null && prev >= lo) lo = prev + 20;
-    if (next != null && next <= hi) hi = next - 20;
-    if (hi < lo) hi = lo + 10;
+    if (prev != null && prev >= lo) lo = prev + MIN_GAP;
+    if (next != null && next <= hi) hi = next - MIN_GAP;
+    if (floor != null && lo < floor + MIN_GAP) lo = floor + MIN_GAP;
 
-    const v = Math.round(((lo + hi) / 2) / 5) * 5;      // 구간 가운데, 5분 단위
-    out[k] = toStr(Math.max(8*60, Math.min(19*60, v)));
+    // [v1.74] 구간이 확보되지 않으면 비움
+    if (hi - lo < MIN_ROOM) { out[k] = null; return; }
+
+    // [v1.74] 구간 중앙 고정 대신 시드 기반으로 흩뿌림 (매번 같은 값 → 재조회·재전송에도 안정)
+    //   가장자리에 붙지 않게 구간의 20~80% 사이에서 뽑음.
+    let r = 0.5;
+    if (seedBase) r = 0.2 + _mulberry32(_hash32(`${seedBase}#slot:${k}`))() * 0.6;
+    const v = Math.round((lo + (hi - lo) * r) / 5) * 5;   // 5분 단위
+    const clamped = Math.max(8*60, Math.min(19*60, v));
+    out[k] = toStr(clamped);
+    floor = clamped;
   });
   return out;
 }
+
 
 
 // [v1.67] 세동 일별 표 — 9시간대(8~17시) 열.
@@ -4669,9 +4779,16 @@ function buildDaySedongTable(g, measBy) {
   if (dmap) { applyDispNo(items, dmap); items.sort((a, b) => (a.disp_no ?? 0) - (b.disp_no ?? 0)); }
   else items.sort((a, b) => (a.item_no ?? 0) - (b.item_no ?? 0));
 
+  // [v1.77] 셋업 열은 항상 표시 (기존 종이 양식과 동일).
+  //   값은 금형 교체일에 실제로 셋업 검사를 한 날에만 들어가고, 나머지 날은 비어 있음.
+  //   → 채움값을 만들지 않으므로 "매일 셋업한 것처럼" 보이지 않음.
+  const setupInsp = (g.insps || []).find(i => Number(i.slot_no) === 0);
+  const setupTime = setupInsp ? String(setupInsp.inspection_time || '').substring(0, 5) : '';
+
   let html = `<div class="day-wrap"><div class="hist-meas-scroll">
-    <div style="padding:6px 2px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>
+    <div style="padding:6px 2px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 순회검사 (8~17시)${setupInsp ? ` · 셋업 ${setupTime}` : ''}</div>
     <table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>`;
+  html += `<th style="background:#fef3c7;color:#92400e">셋업</th>`;
   for (let n = 0; n < 9; n++) html += `<th>${SEDONG_SLOTS[n]}시</th>`;
   html += `<th>판정</th></tr></thead><tbody>`;
 
@@ -4682,8 +4799,14 @@ function buildDaySedongTable(g, measBy) {
     html += `<tr><td>${dno(it)}</td>
       <td style="text-align:left">${it.item_name || ''}</td>
       <td style="text-align:left;color:#3b82f6">${it.spec_text || ''}</td>`;
+    {
+      // [v1.77] 셋업 칸 — 실측이 있을 때만 값
+      // [v1.78] 외관도 그 슬롯에 실제 검사가 있어야 판정 표시
+      const sv = isVisual ? (it.vslots ? it.vslots[0] : null) : it.slots[0];
+      html += `<td style="background:#fffbeb">${sv == null || sv === '' ? '—' : sv}</td>`;
+    }
     for (let n = 1; n <= 9; n++) {
-      const v = isVisual ? it.visual_result : it.slots[n - 1];
+      const v = isVisual ? (it.vslots ? it.vslots[n] : null) : it.slots[n];   // [v1.76] slots는 10칸(0=셋업)
       html += `<td>${v == null || v === '' ? '—' : v}</td>`;
     }
     html += `<td class="${resCls}">${res}</td></tr>`;
@@ -4710,7 +4833,7 @@ function buildDayTable(g, measBy) {
   else items.sort((a, b) => (a.item_no ?? 0) - (b.item_no ?? 0));
 
   // 슬롯 메타 (시간·사유·로트)
-  const fillTimes = fillSlotTimes(slot);
+  const fillTimes = fillSlotTimes(slot, `${g.part_id}|${g.date}`);   // [v1.74] 결정론 시드
   // 빈 슬롯 표시값: 시간은 산출값, 사유는 순회, 비고는 비움
   const metaRow = (label, fn, cls, fallback) =>
     `<tr><td class="lbl">${label}</td>` +
@@ -4735,7 +4858,7 @@ function buildDayTable(g, measBy) {
     <th>판정</th></tr></thead><tbody>`;
 
   items.forEach(it => {
-    const vals = calcSlotValues(slot, it.spec_id, measBy);
+    const vals = calcSlotValues(slot, it.spec_id, measBy, fillTimes);
     // 판정: 이 항목이 어느 검사에서든 NG면 NG
     let res = '—';
     for (const k of SLOT_KEYS) {
@@ -4763,7 +4886,8 @@ function buildDayTable(g, measBy) {
         // [v1.60] 육안 항목: 값이 없는 슬롯은 그날 기록된 결과로 채움
         let vr = cell.row?.visual_result;
         // 초·중·종은 채움(시간·사유와 동일 기준). 셋업은 초품 검사가 있을 때만.
-        if (vr == null && k !== 'setup') vr = visualFallback;
+        // [v1.79] 시각이 산출되지 않은 슬롯은 검사 자체가 없었던 것 → 외관도 비움
+        if (vr == null && k !== 'setup' && fillTimes[k]) vr = visualFallback;
         html += `<td>${vr || '—'}</td>`;
       } else {
         const shown = cell.v == null ? '—' : cell.v;
@@ -4914,7 +5038,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
 
   let html = '<div class="hist-meas-scroll">';
   if (sedongWide) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
-  else if (sedongSlotMode) html += `<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 순회검사 — ${sedongSlotLabel(insp.slot_no)} 타임 실측</div>`;
+  else if (sedongSlotMode) html += `<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 ${Number(insp.slot_no) === 0 ? '<b>셋업(초품)</b> 실측' : `순회검사 — ${sedongSlotLabel(insp.slot_no)} 타임 실측`}</div>`;
   html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
   for (let i = 1; i <= maxX; i++) {
     const label = sedongWide ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
