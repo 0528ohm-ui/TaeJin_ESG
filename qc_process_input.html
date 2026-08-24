@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.79</title>
+<title>공정검사 입력 v1.83</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -312,6 +312,20 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .spc-select-row{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px}
 .spc-select-row select{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:17px;outline:none;background:#fff}
 .spc-select-row select:focus{border-color:#3b82f6}
+/* [v1.80] 최근 측정값 스트립 */
+.spc-recent{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;margin-bottom:2px;-webkit-overflow-scrolling:touch}
+.spc-recent:empty{display:none}
+.spc-recent-item{flex:0 0 auto;min-width:74px;border:1.5px solid #e2e8f0;border-radius:9px;padding:6px 8px;background:#f8fafc;text-align:center}
+.spc-recent-item.ng{border-color:#fca5a5;background:#fff5f5}
+.spc-recent-item.newest{border-color:#3b82f6;background:#eff6ff}
+.spc-recent-d{font-size:11px;color:#94a3b8;line-height:1.3}
+.spc-recent-t{font-size:10.5px;color:#cbd5e1;line-height:1.3}
+.spc-recent-v{font-size:16px;font-weight:800;color:#1e293b;line-height:1.4;margin-top:1px}
+.spc-recent-item.ng .spc-recent-v{color:#dc2626}
+.spc-recent-m{font-size:10px;color:#7c3aed;line-height:1.2}
+/* [v1.83] 측정사유 — 순회는 흐리게, 특이사유는 강조 */
+.spc-recent-r{font-size:10px;font-weight:800;color:#b45309;background:#fef3c7;border-radius:5px;padding:1px 4px;margin-top:3px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spc-recent-r.routine{color:#94a3b8;background:transparent;font-weight:600}
 .spc-chart-wrap{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;border:1.5px solid #e2e8f0}
 .spc-chart-title{font-size:17px;font-weight:700;color:#1e3a5f;margin-bottom:8px}
 .spc-chart-box{position:relative;width:100%;height:220px}
@@ -507,7 +521,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.79</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.83</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -808,9 +822,17 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
             <option value="">항목 선택…</option>
           </select>
         </div>
+        <!-- [v1.80] 금형호기 필터 — 금형이 2개 이상인 부품만 노출 -->
+        <div class="spc-select-row" id="spc-mold-row" style="display:none;margin-top:6px">
+          <select id="spc-mold-sel" onchange="loadSpcData()">
+            <option value="">전체 금형</option>
+          </select>
+        </div>
         <!-- Xbar 차트 -->
         <div class="spc-chart-wrap" id="spc-xbar-wrap" style="display:none">
           <div class="spc-chart-title">X̄ 관리도</div>
+          <!-- [v1.80] 최근 측정값 스트립 — 날짜·시간·값을 최신순으로 -->
+          <div class="spc-recent" id="spc-recent"></div>
           <div class="spc-chart-box"><canvas id="spc-xbar-canvas"></canvas></div>
         </div>
         <!-- R 차트 -->
@@ -4368,7 +4390,7 @@ async function selectPartHist(id) {
 
   // SPC용 spec 항목 로드 (치수 항목만)
   try {
-    histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=sort_order&select=id,item_no,item_name,spec_text,lsl,usl,measure_points,sort_order`);
+    histSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&is_visual=eq.false&order=sort_order&select=id,item_no,item_name,spec_text,lsl,usl,measure_points,sort_order,inspection_method`);   // [v1.81] 표시 자릿수 판정용
     applyDispNo(histSpecs, await loadDispNoMap(id));   // [v1.56]
     const sel = document.getElementById('spc-spec-sel');
     sel.innerHTML = '<option value="">항목 선택…</option>'
@@ -4392,6 +4414,11 @@ function clearHistPart() {
   document.getElementById('spc-r-wrap').style.display = 'none';
   document.getElementById('spc-cpk-panel').style.display = 'none';
   document.getElementById('spc-spec-sel').innerHTML = '<option value="">항목 선택…</option>';
+  // [v1.80] 부품이 바뀌면 금형 필터·최근값 스트립도 초기화
+  const _ms = document.getElementById('spc-mold-sel');
+  if (_ms) { _ms.innerHTML = '<option value="">전체 금형</option>'; _ms.value = ''; }
+  const _mr = document.getElementById('spc-mold-row'); if (_mr) _mr.style.display = 'none';
+  const _sr = document.getElementById('spc-recent');  if (_sr) _sr.innerHTML = '';
   // [v0.57] 부품 해제 → 그날 전체 조회로 복귀
   loadHistData();
 }
@@ -5384,13 +5411,40 @@ async function loadSpcData() {
   try {
     // 해당 부품의 모든 검사에서 이 항목 측정값 가져오기 (최근 25건)
     // inspection 테이블 조인 (날짜 가져오기)
+    // [v1.80] 금형호기별로 나눠 보기 위해 mold_no·시각도 함께 조회
     const mRows = await sbAll('qc_shipping_measurement',
-      `spec_id=eq.${specId}&select=inspection_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,inspection:qc_shipping_inspection(inspection_date,part_id)&order=inspection_id.desc`);
+      `spec_id=eq.${specId}&select=inspection_id,result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,inspection:qc_shipping_inspection(inspection_date,inspection_time,part_id,mold_no,ho,reason)&order=inspection_id.desc`);   // [v1.83] reason 포함
 
-    // part_id 필터 + 날짜순 정렬 + 최근 25건
-    const filtered = mRows
-      .filter(r => r.inspection?.part_id === histPart.id)
-      .reverse()           // 오래된 순
+    const mine = mRows.filter(r => r.inspection?.part_id === histPart.id);
+
+    // [v1.80] 금형 목록 채우기 (2개 이상일 때만 필터 노출)
+    const moldSel = document.getElementById('spc-mold-sel');
+    const moldRow = document.getElementById('spc-mold-row');
+    const molds = [...new Set(mine.map(r => r.inspection?.mold_no).filter(v => v != null && v !== '').map(String))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const prevMold = moldSel.value;
+    if (molds.length >= 2) {
+      moldSel.innerHTML = '<option value="">전체 금형</option>'
+        + molds.map(m => `<option value="${m}">금형 ${/호기$/.test(String(m)) ? m : m + '호기'}</option>`).join('');
+      if (molds.includes(prevMold)) moldSel.value = prevMold;
+      moldRow.style.display = 'block';
+    } else {
+      moldSel.innerHTML = '<option value="">전체 금형</option>';
+      moldRow.style.display = 'none';
+    }
+    const filterMold = moldSel.value;
+
+    // [v1.82] 검사일 기준 정렬. 종전엔 inspection_id 순(=저장된 순서)을 썼는데,
+    //   과거분을 나중에 입력하면 id는 크고 날짜는 이르러서 시간축이 뒤엉켰음
+    //   (6월 → 1월 → 6월처럼). 관리도는 시간 순서가 판독의 전제라 날짜로 정렬한다.
+    const filtered = mine
+      .filter(r => !filterMold || String(r.inspection?.mold_no ?? '') === filterMold)
+      .sort((a, b) => {
+        const ka = `${a.inspection?.inspection_date || ''} ${a.inspection?.inspection_time || ''}`;
+        const kb = `${b.inspection?.inspection_date || ''} ${b.inspection?.inspection_time || ''}`;
+        if (ka !== kb) return ka < kb ? -1 : 1;
+        return (a.inspection_id || 0) - (b.inspection_id || 0);   // 같은 시각이면 저장순
+      })
       .slice(-25);         // 최근 25건
 
     if (!filtered.length) {
@@ -5402,6 +5456,7 @@ async function loadSpcData() {
     // 서브그룹 구성: 각 행의 x1~xn 에서 null 아닌 값 추출
     const subgroups = [];
     const labels = [];
+    const metas = [];   // [v1.80] 최근값 스트립용 — 날짜·시각·금형·판정
     filtered.forEach(r => {
       const vals = [];
       for (let i = 1; i <= 12; i++) {   // [v1.53] x11·x12 포함
@@ -5409,9 +5464,28 @@ async function loadSpcData() {
       }
       if (vals.length >= 2) {
         subgroups.push(vals);
-        labels.push((r.inspection?.inspection_date || '').substring(5).replace('-', '/')); // MM/DD
+        labels.push(r.inspection?.inspection_date || '');   // [v1.82] 일단 원본, 아래에서 연도 혼재 여부 보고 포맷
+        metas.push({
+          fullDate: r.inspection?.inspection_date || '',
+          date: (r.inspection?.inspection_date || '').substring(5).replace('-', '/'),
+          time: (r.inspection?.inspection_time || '').substring(0, 5),
+          mold: r.inspection?.mold_no ?? null,
+          reason: r.inspection?.reason ?? null,
+          result: r.result
+        });
       }
     });
+
+    // [v1.82] 여러 해에 걸친 데이터면 라벨에 연도를 넣어 구분 (예: 26/01/23)
+    const years = [...new Set(labels.map(d => d.substring(0, 4)).filter(Boolean))];
+    const multiYear = years.length > 1;
+    for (let i = 0; i < labels.length; i++) {
+      const d = labels[i];
+      labels[i] = multiYear
+        ? `${d.substring(2, 4)}/${d.substring(5).replace('-', '/')}`   // YY/MM/DD
+        : d.substring(5).replace('-', '/');                            // MM/DD
+      if (metas[i]) metas[i].year = multiYear ? d.substring(0, 4) : null;
+    }
 
     if (subgroups.length < 2) {
       document.getElementById('spc-empty').textContent = '관리도 작성에 데이터가 부족합니다 (최소 2건)';
@@ -5451,8 +5525,10 @@ async function loadSpcData() {
     const rLCL = C.D3 * rBar;
 
     // 차트 렌더링
-    renderSpcChart('xbar', labels, xbars, xUCL, xCL, xLCL, 'X̄');
-    renderSpcChart('r', labels, ranges, rUCL, rCL, rLCL, 'R');
+    // [v1.80] 최근 10건 스트립 (최신이 왼쪽). 값은 그 검사의 X̄
+    renderSpcRecent(metas, xbars, xUCL, xLCL, !!filterMold, spec.inspection_method);
+    renderSpcChart('xbar', labels, xbars, xUCL, xCL, xLCL, 'X̄', metas);
+    renderSpcChart('r', labels, ranges, rUCL, rCL, rLCL, 'R', metas);
     document.getElementById('spc-xbar-wrap').style.display = 'block';
     document.getElementById('spc-r-wrap').style.display = 'block';
 
@@ -5523,7 +5599,63 @@ async function loadSpcData() {
   }
 }
 
-function renderSpcChart(type, labels, data, ucl, cl, lcl, prefix) {
+// [v1.81] 측정 장비별 표시 소수 자릿수.
+//   장비 분해능에 맞춰 자름. 목록에 없거나 미지정이면 2자리.
+//   육안·게이지 등 판정 항목은 애초에 관리도 대상이 아니라 여기 없음.
+const METHOD_DP = {
+  '3차원 측정기': 3,
+  '형상 측정기': 3,
+  '비접촉 측정기': 3,
+  'V/C': 2,
+  'H/G': 2,
+  'M/M': 2,
+  '조도 측정기': 2,
+  '진원도 측정기': 2,
+  '가우스메타': 2
+};
+// [v1.83] 일상 순회검사 사유 — 이건 흐리게, 나머지(소재교환·금형교체·초품 등)는 강조.
+//   소재나 금형이 바뀐 시점은 치수가 틀어지기 쉬워서 관리도에서 바로 눈에 띄어야 함.
+function isRoutineReason(r) {
+  const t = String(r || '').trim();
+  return t === '' || t === '순회' || t === '정기' || t === '정기검사' || t === '순회검사';
+}
+
+function methodDp(method) {
+  const d = METHOD_DP[String(method || '').trim()];
+  return d != null ? d : 2;
+}
+
+// [v1.80] X̄ 관리도 위 최근 측정값 스트립 — 최신 10건을 왼쪽부터
+//   측정하다가 그 항목 값이 어떻게 움직였는지 차트를 읽지 않고도 바로 보게 함.
+function renderSpcRecent(metas, xbars, ucl, lcl, moldFiltered, method) {
+  const box = document.getElementById('spc-recent');
+  if (!box) return;
+  if (!metas || !metas.length) { box.innerHTML = ''; return; }
+
+  // [v1.81] 자릿수는 측정 장비 기준으로 고정.
+  //   X̄는 포인트 평균이라 그대로 두면 소수가 길게 늘어져 읽기 어려움.
+  const dp = methodDp(method);
+
+  const items = metas.map((m, i) => ({ m, v: xbars[i] }))
+    .slice(-10)      // 최근 10건
+    .reverse();      // 최신이 왼쪽
+
+  box.innerHTML = items.map((it, idx) => {
+    const out = (ucl != null && it.v > ucl) || (lcl != null && it.v < lcl);
+    const cls = ['spc-recent-item'];
+    if (out || it.m.result === 'NG') cls.push('ng');
+    if (idx === 0) cls.push('newest');
+    return `<div class="${cls.join(' ')}">
+      <div class="spc-recent-d">${it.m.year ? `${it.m.year.substring(2)}/` : ''}${it.m.date || '—'}</div>
+      <div class="spc-recent-t">${it.m.time || '&nbsp;'}</div>
+      <div class="spc-recent-v">${it.v.toFixed(dp)}</div>
+      ${(!moldFiltered && it.m.mold != null) ? `<div class="spc-recent-m">금형 ${String(it.m.mold).replace(/호기$/, '')}</div>` : ''}
+      ${it.m.reason ? `<div class="spc-recent-r${isRoutineReason(it.m.reason) ? ' routine' : ''}">${it.m.reason}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderSpcChart(type, labels, data, ucl, cl, lcl, prefix, metas) {
   const canvasId = type === 'xbar' ? 'spc-xbar-canvas' : 'spc-r-canvas';
   const ctx = document.getElementById(canvasId).getContext('2d');
 
@@ -5544,14 +5676,22 @@ function renderSpcChart(type, labels, data, ucl, cl, lcl, prefix) {
         backgroundColor: '#1e3a5f',
         borderWidth: 2,
         pointRadius: 3,
-        pointBackgroundColor: data.map(v =>
-          (v > ucl || v < lcl) ? '#dc2626' : '#1e3a5f'
+        // [v1.83] 소재교환·금형교체 등 특이사유 지점은 주황 마름모로 강조.
+        //   그 시점에 치수가 틀어지는 경우가 많아, 값 변화와 원인을 같이 읽게 함.
+        pointBackgroundColor: data.map((v, i) =>
+          (v > ucl || v < lcl) ? '#dc2626'
+          : (metas && metas[i] && !isRoutineReason(metas[i].reason)) ? '#f59e0b' : '#1e3a5f'
         ),
-        pointBorderColor: data.map(v =>
-          (v > ucl || v < lcl) ? '#dc2626' : '#1e3a5f'
+        pointBorderColor: data.map((v, i) =>
+          (v > ucl || v < lcl) ? '#dc2626'
+          : (metas && metas[i] && !isRoutineReason(metas[i].reason)) ? '#b45309' : '#1e3a5f'
         ),
-        pointRadius: data.map(v =>
-          (v > ucl || v < lcl) ? 5 : 3
+        pointRadius: data.map((v, i) =>
+          (v > ucl || v < lcl) ? 5
+          : (metas && metas[i] && !isRoutineReason(metas[i].reason)) ? 5 : 3
+        ),
+        pointStyle: data.map((v, i) =>
+          (metas && metas[i] && !isRoutineReason(metas[i].reason)) ? 'rectRot' : 'circle'
         ),
         tension: 0
       }]
@@ -5571,6 +5711,21 @@ function renderSpcChart(type, labels, data, ucl, cl, lcl, prefix) {
       },
       plugins: {
         legend: { display: false },
+        tooltip: {
+          callbacks: {
+            // [v1.83] 툴팁에 시각·사유·금형을 함께 — 점 하나만 눌러도 맥락이 보이게
+            afterBody: (items) => {
+              if (!metas || !items.length) return '';
+              const m = metas[items[0].dataIndex];
+              if (!m) return '';
+              const out = [];
+              if (m.time)   out.push(`시각 ${m.time}`);
+              if (m.reason) out.push(`사유 ${m.reason}`);
+              if (m.mold != null) out.push(`금형 ${String(m.mold).replace(/호기$/, '')}호기`);
+              return out;
+            }
+          }
+        },
         annotation: {
           annotations: {
             uclLine: { type: 'line', yMin: ucl, yMax: ucl, borderColor: '#dc2626', borderWidth: 1.5, borderDash: [6,3],
