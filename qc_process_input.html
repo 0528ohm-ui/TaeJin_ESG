@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.89</title>
+<title>공정검사 입력 v1.90</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -542,7 +542,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.89</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.90</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1417,6 +1417,58 @@ function focusReason() {
 // ══════════════════════════════════
 // 부품 검색 / 선택
 // ══════════════════════════════════
+// ══════════════════════════════════
+// [v1.90] 한/영 키 안 바꾸고 검색
+//   'tl'을 치려다 한글 상태라 '시'가 입력돼도 찾아지게 한다.
+//   양방향 처리 방식:
+//     1) 검색어를 한글→영문 자판으로 바꿔서 비교  ('시' → 'tl')
+//     2) 부품명을 한글→영문으로 바꿔서 검색어와 비교 ('시일' → 'tldlf', 영문키로 한글 찾기)
+//   영문→한글 조합(오토마타)은 구현하지 않는다. 2)로 같은 효과가 나므로 불필요.
+// ══════════════════════════════════
+const _HAN_CHO = ['r','R','s','e','E','f','a','q','Q','t','T','d','w','W','c','z','x','v','g'];
+const _HAN_JUNG = ['k','o','i','O','j','p','u','P','h','hk','ho','hl','y','n','nj','np','nl','b','m','ml','l'];
+const _HAN_JONG = ['','r','R','rt','s','sw','sg','e','f','fr','fa','fq','ft','fx','fv','fg','a','q','qt','t','T','d','w','c','z','x','v','g'];
+// 자모 단독 입력(ㅅ, ㅏ 등)도 처리
+const _HAN_JAMO = {
+  'ㄱ':'r','ㄲ':'R','ㄴ':'s','ㄷ':'e','ㄸ':'E','ㄹ':'f','ㅁ':'a','ㅂ':'q','ㅃ':'Q','ㅅ':'t','ㅆ':'T',
+  'ㅇ':'d','ㅈ':'w','ㅉ':'W','ㅊ':'c','ㅋ':'z','ㅌ':'x','ㅍ':'v','ㅎ':'g',
+  'ㅏ':'k','ㅐ':'o','ㅑ':'i','ㅒ':'O','ㅓ':'j','ㅔ':'p','ㅕ':'u','ㅖ':'P','ㅗ':'h','ㅛ':'y',
+  'ㅜ':'n','ㅠ':'b','ㅡ':'m','ㅣ':'l'
+};
+
+// 한글 문자열 → 영문 자판 문자열
+function hanToEng(s) {
+  let out = '';
+  for (const ch of String(s || '')) {
+    const code = ch.charCodeAt(0);
+    if (code >= 0xAC00 && code <= 0xD7A3) {          // 완성형 음절 → 초·중·종 분해
+      const n = code - 0xAC00;
+      out += _HAN_CHO[Math.floor(n / 588)]
+           + _HAN_JUNG[Math.floor((n % 588) / 28)]
+           + _HAN_JONG[n % 28];
+    } else if (_HAN_JAMO[ch]) {                       // 자모 단독
+      out += _HAN_JAMO[ch];
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// 부품 하나가 검색어에 걸리는지 (품번·품명·그룹 + 한/영 오타 보정)
+function partMatches(p, kw) {
+  if (!kw) return true;
+  const fields = [p.part_number || '', p.part_name || '', p.part_group || ''];
+  const k = kw.toLowerCase();
+  if (fields.some(f => f.toLowerCase().includes(k))) return true;
+
+  const kEng = hanToEng(kw).toLowerCase();            // '시' → 'tl'
+  if (kEng !== k && fields.some(f => f.toLowerCase().includes(kEng))) return true;
+
+  // 영문 자판으로 친 한글 (품명을 영문으로 바꿔서 비교)
+  return fields.some(f => hanToEng(f).toLowerCase().includes(k));
+}
+
 function filterParts(q) {
   const dd = document.getElementById('part-dropdown');
   const customer = document.getElementById('customer-filter')?.value || '';
@@ -1427,9 +1479,7 @@ function filterParts(q) {
   const matched = allParts.filter(p => {
     if (customer && p.customer !== customer) return false;
     if (!kw) return true;
-    return p.part_number.toLowerCase().includes(kw)
-        || (p.part_name||'').toLowerCase().includes(kw)
-        || (p.part_group||'').toLowerCase().includes(kw);
+    return partMatches(p, kw);   // [v1.90] 한/영 오타 보정 포함
   });
 
   // 그룹 부품은 part_group 단위로 묶기, 일반 부품은 그대로
@@ -4480,9 +4530,7 @@ function filterPartsHist(q) {
   const dd = document.getElementById('hist-part-dropdown');
   if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
   const kw = q.toLowerCase();
-  const matched = allParts.filter(p =>
-    p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw)
-  ).slice(0, 20);
+  const matched = allParts.filter(p => partMatches(p, kw)).slice(0, 20);   // [v1.90] 한/영 오타 보정
   dd.innerHTML = matched.length
     ? matched.map(p => `<div class="part-opt" onmousedown="selectPartHist(${p.id})">
         <div>${p.part_name||'—'} ${p.customer ? '<span style="font-size:13px;color:#94a3b8">· '+p.customer+'</span>' : ''}</div>
@@ -6040,9 +6088,7 @@ function filterPartsCfg(q) {
   const dd = document.getElementById('cfg-part-dropdown');
   if (!q.trim()) { dd.innerHTML = ''; dd.classList.remove('open'); return; }
   const kw = q.toLowerCase();
-  const matched = allParts.filter(p =>
-    p.part_number.toLowerCase().includes(kw) || (p.part_name||'').toLowerCase().includes(kw)
-  ).slice(0, 20);
+  const matched = allParts.filter(p => partMatches(p, kw)).slice(0, 20);   // [v1.90] 한/영 오타 보정
   dd.innerHTML = matched.length
     ? matched.map(p => `<div class="part-opt" onmousedown="selectPartCfg(${p.id})">
         <div>${p.part_name||'—'}</div><div class="pno">${p.part_number}</div></div>`).join('')
