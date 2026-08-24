@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.88</title>
+<title>공정검사 입력 v1.89</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -194,6 +194,22 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .seg-btn{flex:1;padding:8px;border:1.5px solid #e2e8f0;background:#fff;border-radius:8px;font-size:17px;font-weight:700;color:#64748b;cursor:pointer}
 .seg-btn.on{border-color:#1e3a5f;background:#1e3a5f;color:#fff}
 .ord-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;background:#fff}
+/* [v1.89] 입력 순서 드래그 카드 */
+.dq-card{display:flex;align-items:center;gap:9px;padding:10px 10px;border:1px solid #e2e8f0;border-radius:9px;margin-bottom:6px;background:#fff;cursor:grab;user-select:none;transition:box-shadow .12s,border-color .12s}
+.dq-card:active{cursor:grabbing}
+.dq-card.dragging{opacity:.4;border-style:dashed}
+.dq-card.over{border-color:#3b82f6;box-shadow:0 -3px 0 -1px #3b82f6 inset}
+.dq-card.over-below{border-color:#3b82f6;box-shadow:0 3px 0 -1px #3b82f6 inset}
+.dq-handle{color:#cbd5e1;font-size:20px;line-height:1;flex:0 0 auto}
+.dq-num{flex:0 0 26px;height:26px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.dq-body{flex:1;min-width:0}
+.dq-label{font-size:17px;font-weight:700;color:#1e293b;line-height:1.25;word-break:break-all}
+.dq-sub{font-size:13px;color:#94a3b8;margin-top:2px}
+.dq-btns{display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.dq-btns button{border:1px solid #e2e8f0;background:#f8fafc;color:#475569;border-radius:5px;width:30px;height:21px;font-size:13px;cursor:pointer;line-height:1;padding:0}
+.dq-btns button:disabled{opacity:.3;cursor:default}
+.dq-new{display:inline-block;font-size:12px;font-weight:800;color:#92400e;background:#fef3c7;padding:1px 5px;border-radius:4px;margin-left:5px}
+.dq-grp{display:inline-block;font-size:12px;font-weight:800;color:#7c3aed;background:#f3e8ff;padding:1px 5px;border-radius:4px;margin-right:5px}
 .ord-item.grp{background:#faf5ff;border-color:#e9d5ff}
 .ord-seq{min-width:22px;height:22px;border-radius:50%;background:#1e3a5f;color:#fff;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .ord-name{flex:1;font-size:17px;font-weight:600;color:#1e293b;line-height:1.3}
@@ -526,7 +542,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.88</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.89</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1092,6 +1108,7 @@ let selectedPart = null;
 let specs = [];
 let specInputs = {};
 let activeRules = [];   // [v1.17] 현재 탭의 입력 흐름 삽입 규칙
+let activeOrderSeq = null;  // [v1.89] 현재 탭의 절대 입력 순서(unit key 배열). 있으면 activeRules보다 우선
 let activeGroupOrders = {};  // [v1.25] 연동 그룹 내 멤버 순서 { groupId: [specId, ...] }
 
 // ── PIN 입력 버퍼 ──
@@ -1623,16 +1640,18 @@ async function loadVariant(part) {
   }
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
+  let orderSeq = null;   // [v1.89] 드래그로 정한 절대 순서 (있으면 insert_rules보다 우선)
   try {
     // [v1.27] insert_rules + group_orders 함께 로드. group_orders는 activeGroupOrders에 머지
     //   (이게 없어서 껐다 켜면 측정 탭 연동 순서가 원본으로 원복되던 버그)
-    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules,group_orders`);
+    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules,group_orders,order_seq`);
     if (rr.length) {
       if (Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
+      if (Array.isArray(rr[0].order_seq) && rr[0].order_seq.length) orderSeq = rr[0].order_seq;
       if (rr[0].group_orders && typeof rr[0].group_orders === 'object') Object.assign(activeGroupOrders, rr[0].group_orders);
     }
   } catch(e){}
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules };
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules, orderSeq };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1956,6 +1975,7 @@ function applyVariant(t) {
   specs = v.specs;
   specInputs = v.inputs;
   activeRules = v.insertRules || [];   // [v1.17] 현재 입력 흐름 규칙
+  activeOrderSeq = Array.isArray(v.orderSeq) && v.orderSeq.length ? v.orderSeq : null;   // [v1.89]
 
   renderVariantToggle(t);
   renderSpecs();
@@ -2407,7 +2427,7 @@ function setVisual(id, val) {
   // [v1.24] 외관 OK/NG 선택 후 규칙 순서대로 다음 입력칸으로 자동 이동
   //   orderedInputs()는 vt-ok 마커를 anchor로 참조한 뒤 pt-inp만 반환하므로
   //   외관이 규칙의 anchor로 쓰인 항목이 첫 번째로 오게 됨.
-  if (activeRules && activeRules.length) {
+  if ((activeRules && activeRules.length) || (activeOrderSeq && activeOrderSeq.length)) {
     const seq = orderedInputs();  // 규칙 적용된 pt-inp 순서
     if (seq.length) {
       const first = seq[0];
@@ -2679,6 +2699,36 @@ function numBack() {
 //   vt-ok-{id} 버튼을 anchor 마커로 seq에 포함시키고, 최종 반환 시엔 제거.
 function orderedInputs() {
   const ptInps = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
+
+  // [v1.89] 절대 순서(order_seq)가 있으면 그걸로 정렬. 끼우기 규칙보다 우선.
+  //   unit key = 연동그룹이면 'g:link_group', 아니면 's:item_no'.
+  //   같은 unit 안의 칸 순서(연동그룹의 행 인터리브 포함)는 DOM 순서를 그대로 유지해야 하므로 안정 정렬.
+  if (activeOrderSeq && activeOrderSeq.length) {
+    const els = Array.from(document.querySelectorAll(
+      '#specs-list input.pt-inp, #specs-list button[id^="vt-ok-"]'));
+    const specById = {};
+    specs.forEach(s => { specById[s.id] = s; });
+    const idOf = el => {
+      const m = el.id.match(/^pt-(\d+)-/) || el.id.match(/^mm-(?:min|max)-(\d+)$/)
+             || el.id.match(/^vt-ok-(\d+)$/);
+      return m ? parseInt(m[1]) : null;
+    };
+    const keyOf = el => {
+      const s = specById[idOf(el)];
+      if (!s) return '';
+      return s.link_group ? 'g:' + s.link_group : 's:' + s.item_no;
+    };
+    const rank = {};
+    activeOrderSeq.forEach((k, i) => { rank[k] = i; });
+    const TAIL = activeOrderSeq.length + 1000;   // 순서에 없는 항목(나중에 추가된 것)은 맨 뒤
+    const pos = new Map(els.map((el, i) => [el, i]));
+    const sorted = els.slice().sort((a, b) => {
+      const ra = rank[keyOf(a)] ?? TAIL, rb = rank[keyOf(b)] ?? TAIL;
+      return ra !== rb ? ra - rb : pos.get(a) - pos.get(b);
+    });
+    return sorted.filter(el => el.classList && el.classList.contains('pt-inp'));
+  }
+
   if (!activeRules || !activeRules.length) return ptInps;
 
   // visual 항목의 anchor 마커(vt-ok 버튼)를 seq에 포함
@@ -6681,10 +6731,12 @@ async function renderInputOrder() {
   if (cfgRules.__partId !== cfgPart.id) {
     cfgRules = { __partId: cfgPart.id };
     cfgGroupOrders = {};  // [v1.29] 부품 바뀌면 연동순서 메모리도 초기화 (이전 부품 키 잔재 제거)
+    cfgOrderSeq = {};     // [v1.89] 절대 순서도 부품 단위 캐시
     try {
-      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules`);
+      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules,order_seq`);
       rows.forEach(r => {
         cfgRules[r.process_type] = Array.isArray(r.insert_rules) ? r.insert_rules : [];
+        if (Array.isArray(r.order_seq) && r.order_seq.length) cfgOrderSeq[r.process_type] = r.order_seq.slice();
       });
     } catch(e){}
   }
@@ -6702,51 +6754,208 @@ async function renderInputOrder() {
   const specs = specsForProc(cfgOrderProc);
   const units = buildUnits(specs);
 
-  // ── 미리보기(다음 흐름) ──
-  const flow = buildFlowPreview(units, rules);
-  const previewHtml = `<div style="font-size:14px;color:#64748b;margin:2px 0 8px;line-height:1.7">
-    ${flow.map(f => `<span style="display:inline-block;background:${f.inserted?'#fef3c7':'#f1f5f9'};border-radius:5px;padding:1px 7px;margin:1px 3px 1px 0;${f.inserted?'color:#92400e;font-weight:700':''}">${f.label}</span>`).join('→ ')}
+  // [v1.89] 카드 순서 확정
+  //   1) order_seq가 있으면 그 순서
+  //   2) 없으면 기존 insert_rules를 적용한 흐름에서 unit 등장 순서를 뽑아 계승
+  //      → 규칙으로 맞춰둔 부품도 드래그 화면을 열면 지금 흐름 그대로 보임
+  let seq = cfgOrderSeq[cfgOrderProc];
+  if (!Array.isArray(seq) || !seq.length) {
+    const flow = buildFlowPreview(units, rules);
+    const seen = new Set();
+    seq = [];
+    flow.forEach(f => { if (!seen.has(f.key)) { seen.add(f.key); seq.push(f.key); } });
+    cfgOrderSeq[cfgOrderProc] = seq;
+  }
+  // 순서 배열 정리 — 사라진 항목 제거, 새로 생긴 항목은 뒤에 추가(새 항목 표시용으로 기록)
+  const byKey = {}; units.forEach(u => { byKey[u.key] = u; });
+  const known = new Set(seq.filter(k => byKey[k]));
+  const added = units.filter(u => !known.has(u.key)).map(u => u.key);
+  seq = seq.filter(k => byKey[k]).concat(added);
+  cfgOrderSeq[cfgOrderProc] = seq;
+  cfgOrderNew = new Set(added);
+
+  const ordered = seq.map(k => byKey[k]);
+
+  // ── 미리보기(실제 칸 흐름) ──
+  const flowTokens = [];
+  ordered.forEach(u => {
+    for (let r = 0; r < u.rows; r++)
+      flowTokens.push(`${u.label}${u.rows > 1 ? ' ' + rowLabel(u, r) : ''}`);
+  });
+  const previewHtml = `<div style="font-size:14px;color:#64748b;margin:2px 0 10px;line-height:1.7">
+    ${flowTokens.map(t => `<span style="display:inline-block;background:#f1f5f9;border-radius:5px;padding:1px 7px;margin:1px 3px 1px 0">${t}</span>`).join('→ ')}
   </div>`;
 
-  // ── 규칙 목록 ──
-  let rulesHtml;
-  if (!rules.length) {
-    rulesHtml = `<div style="font-size:16px;color:#94a3b8;padding:6px 0">규칙 없음 (항목 번호 순서대로 입력)</div>`;
-  } else {
-    rulesHtml = rules.map((r, i) => {
-      const u = units.find(x => x.type==='single' && x.item_no===r.item_no);
-      const anchor = units.find(x => x.key === r.anchor);
-      const aName = anchor ? `${anchor.label} ${rowLabel(anchor, r.after_row)}` : r.anchor;
-      return `<div class="ord-item">
-        <div class="ord-name"><span class="ord-grp-tag" style="background:#fef3c7;color:#92400e">끼움</span>
-          <b>${u?u.label:('No.'+r.item_no)}</b> 를 <b>${aName}</b> 뒤에
-        </div>
-        <button class="ord-del" onclick="deleteRule(${i})">🗑</button>
-      </div>`;
-    }).join('');
-  }
-
-  // ── 규칙 추가 폼 ──
-  // 끼울 후보 = single unit 전체 / 기준 = group + single (자기 자신 제외)
-  const insertOpts = units.filter(u=>u.type==='single')
-    .map(u=>`<option value="${u.item_no}">${u.label} (No.${u.spec?dno(u.spec):u.item_no})</option>`).join('');
-  const formHtml = `
-    <div style="border-top:1px dashed #e2e8f0;margin-top:10px;padding-top:10px">
-      <div style="font-size:16px;font-weight:700;color:#3b82f6;margin-bottom:6px">＋ 끼우기 규칙 추가</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <div><label style="font-size:14px;color:#64748b">이 항목을</label>
-          <select class="inp" id="rule-item" onchange="renderAnchorOpts()">${insertOpts}</select></div>
-        <div><label style="font-size:14px;color:#64748b">이 위치 뒤에 끼움</label>
-          <select class="inp" id="rule-anchor"></select></div>
+  // ── 드래그 카드 목록 ──
+  const cardsHtml = ordered.map((u, i) => {
+    const rep = u.members ? u.members[0] : u.spec;
+    const cnt = u.type === 'single' && rep && rep.is_min_max ? '최소/최대 2칸'
+              : u.rows > 1 ? `${u.rows}칸` : '1칸';
+    return `<div class="dq-card" draggable="true" data-key="${u.key}" data-idx="${i}"
+        ondragstart="dqDragStart(event)" ondragover="dqDragOver(event)"
+        ondrop="dqDrop(event)" ondragend="dqDragEnd(event)" ondragleave="dqDragLeave(event)">
+      <span class="dq-handle">⠿</span>
+      <span class="dq-num">${i + 1}</span>
+      <div class="dq-body">
+        <div class="dq-label">${u.type === 'group' ? '<span class="dq-grp">연동</span>' : ''}${u.label}${cfgOrderNew.has(u.key) ? '<span class="dq-new">새 항목</span>' : ''}</div>
+        <div class="dq-sub">${u.nos} · ${cnt}</div>
       </div>
-      <button class="btn-primary" style="width:100%;margin-top:8px" onclick="addRule()">규칙 추가</button>
+      <div class="dq-btns">
+        <button onclick="dqMove(${i},-1)" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button onclick="dqMove(${i},1)" ${i === ordered.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
     </div>`;
+  }).join('');
+
+  const legacyWarn = rules.length ? `
+    <div style="font-size:13px;color:#92400e;background:#fef3c7;border-radius:7px;padding:8px 10px;margin-bottom:8px;line-height:1.5">
+      ⚠️ 이 부품엔 예전 끼우기 규칙 ${rules.length}개가 남아 있음.
+      아래에서 순서를 저장하면 규칙은 지워지고 지금 보이는 순서로 고정됨.
+    </div>` : '';
 
   document.getElementById('cfg-order-list').innerHTML =
     `<div style="font-size:14px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
-    + previewHtml + rulesHtml + formHtml;
+    + previewHtml
+    + legacyWarn
+    + `<div style="font-size:14px;color:#94a3b8;margin-bottom:6px">카드를 끌어서 순서를 바꾸세요 (▲▼ 버튼도 가능)</div>`
+    + cardsHtml
+    + `<div style="display:flex;gap:6px;margin-top:10px">
+         <button class="btn-primary" style="flex:1" onclick="saveOrderSeq()">순서 저장</button>
+         <button class="btn-primary" style="flex:0 0 auto;background:#e2e8f0;color:#475569" onclick="resetOrderSeq()">기본 순서로</button>
+       </div>`;
   document.getElementById('cfg-order-saved').textContent = '';
-  renderAnchorOpts();
+}
+
+// ══════════════════════════════════
+// [v1.89] 입력 순서 — 드래그 카드
+//   저장은 order_seq(unit key 절대 순서). 예전 insert_rules는 저장 시 비운다.
+//   드래그 단위를 '항목(unit)'으로 잡은 근거: 기존 규칙 37개 중 36개가
+//   '그 항목의 마지막 행 뒤'였음 — 사실상 전부 항목 단위 이동이었다.
+// ══════════════════════════════════
+let cfgOrderSeq = {};        // { press:[key...], machining:[key...] }
+let cfgOrderNew = new Set(); // 순서에 없던 새 항목 키(표시용)
+let dqDragKey = null;
+
+function dqSeq() { return cfgOrderSeq[cfgOrderProc] || []; }
+
+// ▲▼ 이동
+function dqMove(idx, dir) {
+  const seq = dqSeq();
+  const to = idx + dir;
+  if (to < 0 || to >= seq.length) return;
+  const [x] = seq.splice(idx, 1);
+  seq.splice(to, 0, x);
+  renderInputOrder();
+}
+
+function dqDragStart(e) {
+  const card = e.currentTarget;
+  dqDragKey = card.dataset.key;
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', dqDragKey); } catch (err) {}
+}
+
+function dqDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget;
+  if (card.dataset.key === dqDragKey) return;
+  // 카드 위쪽 절반이면 위에, 아래쪽 절반이면 아래에 꽂힘 — 선으로 표시
+  const r = card.getBoundingClientRect();
+  const below = (e.clientY - r.top) > r.height / 2;
+  card.classList.toggle('over', !below);
+  card.classList.toggle('over-below', below);
+}
+
+function dqDragLeave(e) {
+  e.currentTarget.classList.remove('over', 'over-below');
+}
+
+function dqDrop(e) {
+  e.preventDefault();
+  const card = e.currentTarget;
+  card.classList.remove('over', 'over-below');
+  const targetKey = card.dataset.key;
+  if (!dqDragKey || targetKey === dqDragKey) return;
+
+  const seq = dqSeq();
+  const from = seq.indexOf(dqDragKey);
+  if (from < 0) return;
+  const r = card.getBoundingClientRect();
+  const below = (e.clientY - r.top) > r.height / 2;
+
+  seq.splice(from, 1);                       // 먼저 빼고
+  let to = seq.indexOf(targetKey);           // 뺀 뒤 기준 위치를 다시 찾음
+  if (to < 0) to = seq.length - 1;
+  seq.splice(to + (below ? 1 : 0), 0, dqDragKey);
+  dqDragKey = null;
+  renderInputOrder();
+}
+
+function dqDragEnd(e) {
+  dqDragKey = null;
+  document.querySelectorAll('.dq-card').forEach(c =>
+    c.classList.remove('dragging', 'over', 'over-below'));
+}
+
+async function saveOrderSeq() {
+  if (!cfgPart) return;
+  const savedEl = document.getElementById('cfg-order-saved');
+  try {
+    const payload = {
+      part_id: cfgPart.id,
+      process_type: cfgOrderProc,
+      order_seq: dqSeq(),
+      insert_rules: [],            // 절대 순서로 전환 — 예전 규칙은 정리
+      updated_at: new Date().toISOString()
+    };
+    await upsertInputOrder(payload);
+    cfgRules[cfgOrderProc] = [];
+    cfgOrderNew = new Set();
+    renderInputOrder();
+    savedEl.style.color = '#16a34a';
+    savedEl.textContent = `✓ ${cfgOrderProc === 'machining' ? '가공' : '프레스'} 순서 저장됨`;
+  } catch(e) {
+    savedEl.style.color = '#dc2626';
+    savedEl.textContent = '저장 실패: ' + e.message;
+  }
+}
+
+// 기본 순서(항목 번호 순)로 되돌림 — order_seq·insert_rules 둘 다 비움
+async function resetOrderSeq() {
+  if (!cfgPart) return;
+  if (!confirm('입력 순서를 항목 번호 순서로 되돌릴까요?')) return;
+  const savedEl = document.getElementById('cfg-order-saved');
+  try {
+    await upsertInputOrder({
+      part_id: cfgPart.id,
+      process_type: cfgOrderProc,
+      order_seq: null,
+      insert_rules: [],
+      updated_at: new Date().toISOString()
+    });
+    cfgRules[cfgOrderProc] = [];
+    cfgOrderSeq[cfgOrderProc] = null;
+    renderInputOrder();
+    savedEl.style.color = '#16a34a';
+    savedEl.textContent = '✓ 기본 순서로 되돌림';
+  } catch(e) {
+    savedEl.style.color = '#dc2626';
+    savedEl.textContent = '실패: ' + e.message;
+  }
+}
+
+// 부품+공정 행이 있으면 PATCH, 없으면 POST
+async function upsertInputOrder(payload) {
+  const existing = await sbFetch(
+    `qc_input_order?part_id=eq.${payload.part_id}&process_type=eq.${payload.process_type}&select=id`);
+  if (existing && existing.length) {
+    await sbFetch(`qc_input_order?part_id=eq.${payload.part_id}&process_type=eq.${payload.process_type}`,
+      { method: 'PATCH', prefer: 'return=minimal', body: payload });
+  } else {
+    await sbFetch('qc_input_order', { method: 'POST', prefer: 'return=minimal', body: [payload] });
+  }
 }
 
 // 기준위치 드롭다운 채우기 (끼울 항목 자신은 제외, 각 unit의 행마다 옵션)
