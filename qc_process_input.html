@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.83</title>
+<title>공정검사 입력 v1.85</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -521,7 +521,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.83</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.85</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -4513,21 +4513,52 @@ const SLOT_KEYS   = ['setup', 'first', 'mid', 'last'];
 const SLOT_LABELS = { setup: '셋업', first: '초', mid: '중', last: '종' };
 
 // 검사 목록 → 날짜+부품 단위 그룹
+// [v1.84] 그룹 키에 설비호기(ho) + 금형호기(mold_no)를 추가.
+//   종전 키는 날짜+부품+공정뿐이라 같은 품번을 설비 2대에 올려 생산한 날이 한 카드로 합쳐졌음.
+//   표시가 지저분한 것보다 데이터가 뭉개지는 게 문제였음 —
+//   assignSlots()가 그룹 단위로 셋업/초/중/종 4칸에만 배정하므로
+//   2대분(최대 8건)이 들어오면 절반이 extras로 밀리고,
+//   calcSlotValues()에서 중=최솟값·종=최댓값으로 덮어써져 49호기 값과 48호기 값이 섞였음.
+//   금형까지 넣는 이유: 2호기 금형 이상으로 같은 설비에 3호기 금형을 올리는 날이 실제로 있음.
 function buildDayGroups(inspList) {
   const map = {};
   inspList.forEach(insp => {
-    const key = `${insp.inspection_date}::${insp.part_id}::${insp.process_type || 'press'}`;
+    const ho   = insp.ho      == null ? '' : String(insp.ho);
+    const mold = insp.mold_no == null ? '' : String(insp.mold_no);
+    const key = `${insp.inspection_date}::${insp.part_id}::${insp.process_type || 'press'}::${ho}::${mold}`;
     if (!map[key]) {
       map[key] = { key, date: insp.inspection_date, part_id: insp.part_id,
-                   part: insp.part, process_type: insp.process_type || 'press', insps: [] };
+                   part: insp.part, process_type: insp.process_type || 'press',
+                   ho: insp.ho, mold_no: insp.mold_no, insps: [] };
     }
     map[key].insps.push(insp);
   });
   const groups = Object.values(map);
-  // 그룹 안은 시간순(빈 시간은 뒤로), 그룹끼리는 날짜 내림차순
+  // 그룹 안은 시간순(빈 시간은 뒤로)
   groups.forEach(g => g.insps.sort((a, b) =>
     String(a.inspection_time || '99').localeCompare(String(b.inspection_time || '99'))));
-  groups.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // [v1.85] 같은 날 안에서는 부품그룹 → 설비호기 → 금형호기 → 내외철(IW→OW) 순.
+  //   SKF SBC의 IW/OW는 금형 한 벌에서 한 쌍으로 나오므로 품번 가나다순으로 정렬하면
+  //   IW-BDA-1179와 OW-BDA-1179가 목록 양 끝으로 떨어져 같이 못 봄.
+  //   part_group('BDA-1179')을 1차 키로 써서 짝을 붙이고,
+  //   설비·금형을 variant보다 앞에 둬서 "같은 금형에서 나온 IW/OW"가 나란히 오게 함.
+  const grpOf  = g => (g.part && (g.part.part_group || g.part.part_number || g.part.part_name)) || '';
+  const pnOf   = g => (g.part && (g.part.part_number || g.part.part_name)) || '';
+  //   IW(내철) 먼저, OW(외철) 다음. 그 외 값은 뒤로 보내되 자기들끼리는 이름순
+  const varRank = g => {
+    const v = String((g.part && g.part.part_variant) || '').toUpperCase();
+    if (v === 'IW' || v === '내철') return 0;
+    if (v === 'OW' || v === '외철') return 1;
+    return 2;
+  };
+  const numOr = v => (v == null || v === '' ? Infinity : (isNaN(parseFloat(v)) ? Infinity : parseFloat(v)));
+  groups.sort((a, b) =>
+    String(b.date).localeCompare(String(a.date))
+    || grpOf(a).localeCompare(grpOf(b))
+    || numOr(a.ho) - numOr(b.ho)
+    || numOr(a.mold_no) - numOr(b.mold_no)
+    || varRank(a) - varRank(b)
+    || pnOf(a).localeCompare(pnOf(b)));
   return groups;
 }
 
