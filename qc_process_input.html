@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.85</title>
+<title>공정검사 입력 v1.86</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -521,7 +521,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.85</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.86</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1316,6 +1316,72 @@ async function enterMain() {
 
   // [v0.47] 세동 9시간대 마감 체크 (백그라운드 — 실패해도 메인 진입 무해)
   checkSedongClose();
+
+  // [v1.86] QR 딥링크 처리 — allParts·reasons·restoreDraft가 모두 끝난 뒤에 소비
+  await applyQrParams();
+}
+
+// ══════════════════════════════════
+// [v1.86] QR 딥링크
+//   형식: qc_process_input.html?p=BDA-1179&ho=49&m=3
+//     p  : part_group 우선 매칭 → 없으면 part_number (그룹이면 IW/OW 한 탭에 같이 열림)
+//     ho : 설비호기 (프레스만)
+//     m  : 금형호기 숫자. '3' → '3호기'. 금형 1벌 부품이면 무시
+//     pt : 'machining'이면 가공 모드. 생략 시 프레스
+//   시각은 QR에 담지 않음 — confirmAddTab()이 탭 생성 시각(=스캔 시각)을 그대로 씀.
+//   측정사유만 사람이 고르면 되도록, 진입 후 사유 드롭다운으로 스크롤+포커스.
+// ══════════════════════════════════
+async function applyQrParams() {
+  const q = new URLSearchParams(location.search);
+  const p = (q.get('p') || '').trim();
+  if (!p) return;
+
+  const ho = (q.get('ho') || '').trim();
+  const mRaw = (q.get('m') || '').trim();
+  const pt = q.get('pt') === 'machining' ? 'machining' : 'press';
+
+  // 쿼리는 즉시 제거 — F5로 같은 탭이 또 만들어지는 걸 막음(중복 체크가 있긴 하나 사유 포커스가 매번 튐)
+  try { history.replaceState(null, '', location.pathname); } catch(e) {}
+
+  if (procMode !== pt) switchProcMode(pt);
+
+  // 그룹 우선 → 단품
+  const isGroup = allParts.some(x => x.part_group === p);
+  const part = isGroup ? null : allParts.find(x => x.part_number === p);
+  if (!isGroup && !part) { toast(`QR 부품을 찾을 수 없음: ${p}`); return; }
+
+  if (isGroup) selectGroup(p); else selectPart(part.id);
+  if (!pendingSel) return;
+
+  // 가공 모드는 selectPart/selectGroup이 이미 탭을 만들어버림 → 여기선 사유 포커스만
+  if (procMode === 'machining') { focusReason(); return; }
+
+  if (ho !== '') document.getElementById('pending-equip').value = ho;
+
+  // 금형호기 — 숫자만 오면 '호기'를 붙임. 금형 1벌 부품엔 태그 자체가 없으므로 무시
+  if (mRaw !== '' && pendingSel.moldCount >= 2) {
+    const moldNo = /호기$/.test(mRaw) ? mRaw : `${mRaw}호기`;
+    selectPendingMold(moldNo);
+  }
+
+  // 금형 2벌 이상인데 QR에 금형이 없으면 탭을 만들지 않고 사람이 고르도록 pending에서 멈춤
+  if (pendingSel.moldCount >= 2 && !pendingSel.moldNo) {
+    toast('금형호기를 선택하세요');
+    return;
+  }
+
+  await confirmAddTab();
+  focusReason();
+}
+
+// [v1.86] 측정사유 드롭다운으로 스크롤 + 포커스
+function focusReason() {
+  setTimeout(() => {
+    const r = document.getElementById('insp-reason');
+    if (!r) return;
+    r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    r.focus();
+  }, 300);
 }
 
 // ══════════════════════════════════
