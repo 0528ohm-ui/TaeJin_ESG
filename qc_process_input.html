@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.86</title>
+<title>공정검사 입력 v1.87</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -242,6 +242,11 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .hist-date-time{font-size:14px;color:#94a3b8;margin-top:1px}
 .hist-meta{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .hist-chip{font-size:14px;padding:2px 7px;border-radius:5px;font-weight:600;background:#f1f5f9;color:#64748b}
+/* [v1.87] 건별 보기 측정항목 비교 — 고른 항목의 측정값을 카드에 바로 표시 */
+.hist-specval{display:flex;flex-wrap:wrap;gap:4px;align-items:center;width:100%;margin-top:3px}
+.hsv-num{font-size:16px;font-weight:800;padding:1px 7px;border-radius:5px;background:#eff6ff;color:#1d4ed8;font-variant-numeric:tabular-nums}
+.hsv-num.out{background:#fee2e2;color:#b91c1c}
+.hsv-none{font-size:13px;color:#cbd5e1}
 .hist-result{font-size:16px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap}
 .hist-result.ok{background:#dcfce7;color:#16a34a}
 .hist-result.ng{background:#fee2e2;color:#dc2626}
@@ -521,7 +526,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.86</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.87</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -799,6 +804,14 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
               <option value="">전체</option>
             </select>
           </div>
+        </div>
+        <!-- [v1.87] 측정항목 비교 — 건별 보기에서만 노출. 고른 항목 값만 카드에 바로 표시 -->
+        <div id="hist-spec-row" style="margin-top:8px;display:none">
+          <label style="font-size:14px;font-weight:700;color:#64748b">측정항목 비교</label>
+          <select class="inp" id="hist-filter-spec" onchange="onHistSpecChange()" style="margin-top:3px;width:100%">
+            <option value="">선택 안 함</option>
+          </select>
+          <div id="hist-spec-summary" style="font-size:14px;color:#64748b;margin-top:6px"></div>
         </div>
         <div class="hist-count" id="hist-count"></div>
       </div>
@@ -4461,6 +4474,15 @@ async function selectPartHist(id) {
     const sel = document.getElementById('spc-spec-sel');
     sel.innerHTML = '<option value="">항목 선택…</option>'
       + histSpecs.map(s => `<option value="${s.id}">${dno(s)}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
+    // [v1.87] 건별 보기 측정항목 비교 드롭다운도 같은 목록으로
+    const fsel = document.getElementById('hist-filter-spec');
+    if (fsel) {
+      fsel.innerHTML = '<option value="">선택 안 함</option>'
+        + histSpecs.map(s => `<option value="${s.id}">${dno(s)}. ${s.item_name} — ${s.spec_text || ''}</option>`).join('');
+      fsel.value = '';
+    }
+    histSpecValCache = {};
+    syncHistSpecRow();
   } catch(e) {
     toast('항목 로드 실패: ' + e.message);
   }
@@ -4480,6 +4502,12 @@ function clearHistPart() {
   document.getElementById('spc-r-wrap').style.display = 'none';
   document.getElementById('spc-cpk-panel').style.display = 'none';
   document.getElementById('spc-spec-sel').innerHTML = '<option value="">항목 선택…</option>';
+  // [v1.87] 건별 측정항목 비교도 초기화 (부품이 없으면 spec 목록 자체가 성립 안 함)
+  const _fs = document.getElementById('hist-filter-spec');
+  if (_fs) { _fs.innerHTML = '<option value="">선택 안 함</option>'; _fs.value = ''; }
+  const _fsum = document.getElementById('hist-spec-summary'); if (_fsum) _fsum.textContent = '';
+  histSpecValCache = {};
+  syncHistSpecRow();
   // [v1.80] 부품이 바뀌면 금형 필터·최근값 스트립도 초기화
   const _ms = document.getElementById('spc-mold-sel');
   if (_ms) { _ms.innerHTML = '<option value="">전체 금형</option>'; _ms.value = ''; }
@@ -4740,6 +4768,7 @@ function renderHistList(inspList) {
           ${insp.reason ? `<span class="hist-chip" style="background:#fef3c7;color:#92400e">${insp.reason}</span>` : ''}
           ${insp.inspector ? `<span class="hist-chip">${insp.inspector}</span>` : ''}
           ${insp.remark ? `<span class="hist-chip" style="background:#f1f5f9;color:#475569">📝 ${insp.remark}</span>` : ''}
+          <span class="hist-specval" id="hsv-${idx}"></span>
         </div>
         <span class="hist-result ${resCls}">${resLabel}</span>
         <span class="hist-expand-icon">▾</span>
@@ -4749,6 +4778,99 @@ function renderHistList(inspList) {
       </div>
     </div>`;
   }).join('');
+
+  // [v1.87] 측정항목 비교가 켜져 있으면 카드마다 그 항목 값만 채워 넣음(비동기)
+  paintHistSpecValues(inspList);
+}
+
+// ══════════════════════════════════
+// [v1.87] 건별 보기 — 측정항목 하나 골라서 값만 나란히 비교
+//   카드를 하나씩 펼치지 않아도 그 항목 값이 바로 보이게 한다.
+//   건별 전용 — 일별은 이미 셋업/초/중/종 표로 보여주므로 중복.
+// ══════════════════════════════════
+let histSpecValCache = {};   // `${specId}` → { inspection_id: 측정행|null }
+
+function onHistSpecChange() {
+  applyHistFilter();
+}
+
+// 부품/모드에 따라 측정항목 줄을 켜고 끔
+function syncHistSpecRow() {
+  const row = document.getElementById('hist-spec-row');
+  if (!row) return;
+  const show = histMode === 'each' && !!histPart && histSpecs.length > 0;
+  row.style.display = show ? 'block' : 'none';
+}
+
+// 측정행에서 값 있는 점만 순서대로 뽑기 (x1~x12)
+function specPoints(row) {
+  if (!row) return [];
+  const out = [];
+  for (let i = 1; i <= 12; i++) {
+    const v = row[`x${i}`];
+    if (v != null && v !== '' && !isNaN(parseFloat(v))) out.push(parseFloat(v));
+  }
+  return out;
+}
+
+async function paintHistSpecValues(inspList) {
+  const sel = document.getElementById('hist-filter-spec');
+  const sumEl = document.getElementById('hist-spec-summary');
+  const specId = sel ? sel.value : '';
+  if (sumEl) sumEl.textContent = '';
+  if (!specId || !histPart) return;
+
+  const spec = histSpecs.find(s => s.id === Number(specId));
+  if (!spec) return;
+  const dp = methodDp(spec.inspection_method);
+
+  const cache = histSpecValCache[specId] || (histSpecValCache[specId] = {});
+  // 아직 안 받아온 검사건만 조회. in.() 길이 제한을 피해 200개씩 끊음
+  const need = inspList.map(i => i.id).filter(id => !(id in cache));
+  try {
+    for (let k = 0; k < need.length; k += 200) {
+      const chunk = need.slice(k, k + 200);
+      const rows = await sbAll('qc_shipping_measurement',
+        `spec_id=eq.${specId}&inspection_id=in.(${chunk.join(',')})`
+        + `&select=inspection_id,result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12`);
+      chunk.forEach(id => { cache[id] = null; });          // 측정행이 없는 건도 표시(재조회 방지)
+      (rows || []).forEach(r => { cache[r.inspection_id] = r; });
+    }
+  } catch (e) {
+    if (sumEl) sumEl.innerHTML = `<span style="color:#b91c1c">측정값 로드 실패: ${e.message}</span>`;
+    return;
+  }
+
+  // 선택이 그새 바뀌었으면 폐기 (조회 도중 사용자가 다른 항목을 고른 경우)
+  if (!sel || sel.value !== specId) return;
+
+  const lsl = spec.lsl == null ? null : parseFloat(spec.lsl);
+  const usl = spec.usl == null ? null : parseFloat(spec.usl);
+  const isOut = v => (lsl != null && v < lsl) || (usl != null && v > usl);
+
+  const all = [];
+  inspList.forEach(insp => {
+    const el = document.getElementById(`hsv-${histInspections.indexOf(insp)}`);
+    if (!el) return;
+    const pts = specPoints(cache[insp.id]);
+    if (!pts.length) { el.innerHTML = '<span class="hsv-none">— 측정값 없음</span>'; return; }
+    pts.forEach(v => all.push(v));
+    el.innerHTML = pts.map(v =>
+      `<span class="hsv-num${isOut(v) ? ' out' : ''}">${v.toFixed(dp)}</span>`).join('');
+  });
+
+  // 요약 — 몇 점을 봤는지, 어디까지 벌어졌는지
+  if (sumEl) {
+    if (!all.length) { sumEl.textContent = '이 기간에 해당 항목 측정값이 없음'; return; }
+    const mn = Math.min(...all), mx = Math.max(...all);
+    const avg = all.reduce((a, b) => a + b, 0) / all.length;
+    const outCnt = all.filter(isOut).length;
+    sumEl.innerHTML =
+      `규격 ${spec.spec_text || '—'} · ${all.length}점 · `
+      + `최소 <b>${mn.toFixed(dp)}</b> / 최대 <b>${mx.toFixed(dp)}</b> / 평균 <b>${avg.toFixed(dp)}</b> · `
+      + `산포 <b>${(mx - mn).toFixed(dp)}</b>`
+      + (outCnt ? ` · <span style="color:#b91c1c;font-weight:700">규격이탈 ${outCnt}점</span>` : '');
+  }
 }
 
 // [v1.57] 일별 카드 렌더 — 날짜+부품 단위로 1장
@@ -5034,6 +5156,7 @@ function switchHistMode(mode) {
   document.getElementById('hm-hint').textContent = mode === 'day'
     ? '하루 측정을 셋업·초·중·종으로 모아 봅니다'
     : '검사 건별로 봅니다 · 수정·삭제 가능';
+  syncHistSpecRow();   // [v1.87] 측정항목 비교는 건별에서만
   applyHistFilter();
 }
 
