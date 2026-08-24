@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.93</title>
+<title>공정검사 입력 v1.96</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -551,7 +551,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.93</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.96</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1057,6 +1057,28 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       </div>
     </div>
 
+    <!-- [v1.94] 트랜스퍼 2개 측정 (기본 꺼짐, 이 브라우저에만 적용) -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleTransferMgr()">
+        <span>⚙️ 트랜스퍼 2개 측정</span>
+        <span id="transfer-mgr-arrow" style="font-size:18px;color:#94a3b8;transition:transform .2s">▾</span>
+      </div>
+      <div id="transfer-mgr-body" style="display:none;margin-top:10px">
+        <div style="font-size:14px;color:#64748b;line-height:1.6;margin-bottom:10px">
+          BDA-1179 · 설비 49 · 금형 3호기에만 적용됩니다.<br>
+          지그재그 블랭킹으로 연속 2개를 뽑는 공정이라
+          <b>3차원 측정기 항목은 「1번 제품 / 2번 제품」 2칸</b>,
+          형상측정기·H/G 항목은 <b>1칸</b>으로 바뀝니다.<br>
+          <span style="color:#94a3b8">끄면 지금까지처럼 최소/최대 2칸으로 동작합니다. 이 브라우저에만 저장됩니다.</span>
+        </div>
+        <label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:16px;font-weight:700;color:#1e293b">
+          <input type="checkbox" id="transfer-toggle" onchange="onTransferToggle(this.checked)" style="width:19px;height:19px;cursor:pointer">
+          트랜스퍼 2개 측정 사용
+        </label>
+        <div id="transfer-saved" style="font-size:14px;margin-top:8px"></div>
+      </div>
+    </div>
+
   </div>
 
 </div><!-- /main-screen -->
@@ -1088,26 +1110,36 @@ let pendingSel = null;   // 추가 대기 중인 선택 { isGroup, ... }
 let procMode = 'press';  // 현재 공정 모드: 'press' | 'machining'
 
 // 부품별 직전 설비호기 저장/조회 (localStorage: 부품번호→설비호기 맵)
-function getLastHo(partNo) {
+//   [v1.96] 금형호기별로도 따로 기억한다. 키는 "부품번호::금형호기".
+//   금형 1벌 부품은 종전처럼 부품번호만 쓰므로 기존 저장값이 그대로 살아있다.
+function hoKey(partNo, moldNo) {
+  return moldNo ? `${partNo}::${moldNo}` : partNo;
+}
+function getLastHo(partNo, moldNo) {
   try {
     const map = JSON.parse(localStorage.getItem('QC_LAST_HO_MAP') || '{}');
-    return map[partNo] || '';
+    const k = hoKey(partNo, moldNo);
+    return map[k] || (moldNo ? '' : (map[partNo] || ''));   // 금형 지정 시 그 금형 값만
   } catch(e) { return ''; }
 }
-function setLastHo(partNo, ho) {
+function setLastHo(partNo, ho, moldNo) {
   if (!partNo) return;
   try {
     const map = JSON.parse(localStorage.getItem('QC_LAST_HO_MAP') || '{}');
-    map[partNo] = ho;
+    map[hoKey(partNo, moldNo)] = ho;
+    if (!moldNo) map[partNo] = ho;
     localStorage.setItem('QC_LAST_HO_MAP', JSON.stringify(map));
   } catch(e) {}
 }
 
 // [v0.54] 기기 무관 설비호기: 이 부품의 최근 inspection.ho를 Supabase에서 조회 (폰↔PC 공유)
-async function getLastHoFromDB(partId) {
+//   [v1.96] 금형호기를 주면 그 금형으로 돌린 마지막 검사의 호기를 찾는다.
+//   1179처럼 금형-설비가 1:1로 붙어 다니는 경우 금형만 누르면 설비가 따라온다.
+async function getLastHoFromDB(partId, moldNo) {
   try {
+    const moldQs = moldNo ? `&mold_no=eq.${encodeURIComponent(moldNo)}` : '';
     const rows = await sbAll('qc_shipping_inspection',
-      `part_id=eq.${partId}&ho=not.is.null&order=id.desc&limit=1&select=ho`);
+      `part_id=eq.${partId}&ho=not.is.null${moldQs}&order=id.desc&limit=1&select=ho`);
     return rows.length ? (rows[0].ho || '') : '';
   } catch (e) { return ''; }
 }
@@ -1118,6 +1150,7 @@ let specs = [];
 let specInputs = {};
 let activeRules = [];   // [v1.17] 현재 탭의 입력 흐름 삽입 규칙
 let activeOrderSeq = null;  // [v1.89] 현재 탭의 절대 입력 순서(unit key 배열). 있으면 activeRules보다 우선
+let activeTransfer = false; // [v1.95] 현재 탭이 트랜스퍼 2개 측정인지
 let activeGroupOrders = {};  // [v1.25] 연동 그룹 내 멤버 순서 { groupId: [specId, ...] }
 
 // ── PIN 입력 버퍼 ──
@@ -1395,13 +1428,15 @@ async function applyQrParams() {
   // 가공 모드는 selectPart/selectGroup이 이미 탭을 만들어버림 → 여기선 사유 포커스만
   if (procMode === 'machining') { focusReason(); return; }
 
-  if (ho !== '') document.getElementById('pending-equip').value = ho;
-
   // 금형호기 — 숫자만 오면 '호기'를 붙임. 금형 1벌 부품엔 태그 자체가 없으므로 무시
+  //   [v1.96] 금형을 먼저 고른다. selectPendingMold가 그 금형의 직전 호기를 채우므로,
+  //   QR에 ho가 있으면 그 뒤에 덮어써야 QR 값이 이긴다.
   if (mRaw !== '' && pendingSel.moldCount >= 2) {
     const moldNo = /호기$/.test(mRaw) ? mRaw : `${mRaw}호기`;
     selectPendingMold(moldNo);
   }
+
+  if (ho !== '') document.getElementById('pending-equip').value = ho;
 
   // 금형 2벌 이상인데 QR에 금형이 없으면 탭을 만들지 않고 사람이 고르도록 pending에서 멈춤
   if (pendingSel.moldCount >= 2 && !pendingSel.moldNo) {
@@ -1557,11 +1592,18 @@ function switchProcMode(mode) {
 }
 
 // spec 배열 → inputs 객체 빌드
-function buildInputs(loadedSpecs, sedong = false) {
+function buildInputs(loadedSpecs, sedong = false, transfer = false) {
   const inputs = {};
   loadedSpecs.forEach(s => {
     if (s.is_visual) {
       inputs[s.id] = { type: 'visual', val: 'OK', note: '', noteFixed: '', prefilledVal: false };
+    } else if (s.is_min_max && transfer) {
+      // [v1.94] 트랜스퍼: 3차원만 2칸(1번/2번 제품), 나머지는 1칸으로 축소
+      if (isPairSpec(s)) {
+        inputs[s.id] = { type: 'minmax', pairMode: true, min: '', max: '', note: '', noteFixed: '', prefilledMin: false, prefilledMax: false };
+      } else {
+        inputs[s.id] = { type: 'points', vals: [''], note: '', noteFixed: '', prefilled: [false] };
+      }
     } else if (s.is_min_max) {
       inputs[s.id] = { type: 'minmax', min: '', max: '', note: '', noteFixed: '', prefilledMin: false, prefilledMax: false };
     } else {
@@ -1700,7 +1742,8 @@ async function loadVariant(part, ctx = {}) {
   applyDispNo(loadedSpecs, await loadDispNoMap(part.id));
   // [v0.45] 세동이면 9시간대 모드 (포인트 기본 1칸)
   const sedong = isSedongPart(part);
-  const inputs = buildInputs(loadedSpecs, sedong);
+  const transfer = isTransferCtx(part, ctx);   // [v1.94] 트랜스퍼 2개 측정 (설정에서 켠 경우만)
+  const inputs = buildInputs(loadedSpecs, sedong, transfer);
   // [v1.26] 세동도 직전 검사일 값 prefill 적용 — 매일 첫 측정 시 기본값 참조.
   //   (이전: 세동만 건너뜀 → 매일 처음엔 모든 값 수동 입력 필요해서 복구)
   let lastRemark = '';
@@ -1723,7 +1766,7 @@ async function loadVariant(part, ctx = {}) {
       if (rr[0].group_orders && typeof rr[0].group_orders === 'object') Object.assign(activeGroupOrders, rr[0].group_orders);
     }
   } catch(e){}
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, insertRules, orderSeq };
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, insertRules, orderSeq };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1765,10 +1808,12 @@ function showPending(label, pno) {
   // 직전 설비호기 기본값 — 이 부품에서 마지막으로 쓴 호기
   const partNoForHo = pendingSel.isGroup ? pendingSel.label : pendingSel.part.part_number;
   const repId = pendingSel.isGroup ? (pendingSel.parts[0] && pendingSel.parts[0].id) : pendingSel.part.id;
-  const localHo = getLastHo(partNoForHo);
+  //   [v1.96] 금형 2벌 이상이면 여기서 채우지 않는다. 금형 태그를 누를 때 그 금형의 호기가 들어온다.
+  const multiMold = procMode !== 'machining' && pendingSel.moldCount >= 2;
+  const localHo = multiMold ? '' : getLastHo(partNoForHo);
   document.getElementById('pending-equip').value = localHo;   // localStorage 값 즉시 표시
   // [v0.54] 기기 무관: 이 부품 최근 inspection의 ho를 DB에서 조회해 자동입력 (폰↔PC 공유)
-  if (repId) {
+  if (repId && !multiMold) {
     getLastHoFromDB(repId).then(dbHo => {
       const inp = document.getElementById('pending-equip');
       if (dbHo && (inp.value === '' || inp.value === localHo)) {   // 사용자가 안 건드렸으면 채움
@@ -1810,7 +1855,36 @@ function selectPendingMold(moldNo) {
   document.querySelectorAll('#pending-mold-tags .mold-tag').forEach(btn => {
     btn.classList.toggle('sel', btn.dataset.mold === moldNo);
   });
+  applyMoldLastHo(moldNo);   // [v1.96] 그 금형으로 마지막에 돌린 설비호기를 자동 입력
 }
+
+// [v1.96] 금형호기에 대응하는 직전 설비호기를 pending 입력칸에 채운다.
+//   로컬 캐시를 먼저 넣어 즉시 반응하게 하고, DB 조회 결과가 오면 덮어쓴다.
+//   사용자가 직접 고쳐 넣은 값은 건드리지 않는다.
+function applyMoldLastHo(moldNo) {
+  const inp = document.getElementById('pending-equip');
+  if (!inp || !pendingSel) return;
+  const partNo = pendingSel.isGroup ? pendingSel.label : pendingSel.part.part_number;
+  const repId  = pendingSel.isGroup ? (pendingSel.parts[0] && pendingSel.parts[0].id) : pendingSel.part.id;
+
+  const before = inp.value;
+  const localHo = getLastHo(partNo, moldNo);
+  if (localHo) inp.value = localHo;
+
+  if (!repId) return;
+  const token = ++_moldHoToken;   // 태그를 빠르게 연달아 누르면 늦게 온 응답이 덮어쓰는 걸 막음
+  getLastHoFromDB(repId, moldNo).then(dbHo => {
+    if (token !== _moldHoToken) return;
+    if (pendingSel && pendingSel.moldNo !== moldNo) return;
+    // 사용자가 그새 손으로 고쳤으면 놔둔다
+    if (inp.value !== before && inp.value !== localHo) return;
+    if (dbHo) {
+      inp.value = dbHo;
+      setLastHo(partNo, dbHo, moldNo);
+    }
+  });
+}
+let _moldHoToken = 0;
 
 function cancelPending() {
   pendingSel = null;
@@ -1831,7 +1905,7 @@ async function confirmAddTab() {
   }
 
   // 설비호기 직전값을 부품별로 저장 (다음에 같은 부품 추가 시 기본값)
-  if (equip !== '') setLastHo(pendingSel.label, equip);
+  if (equip !== '') setLastHo(pendingSel.label, equip, moldNo);   // [v1.96] 금형별로 기억
 
   // 같은 부품+같은 금형호기+같은 설비호기+같은 공정모드 탭 중복 체크
   const dupIdx = tabs.findIndex(t =>
@@ -2048,6 +2122,7 @@ function applyVariant(t) {
   specInputs = v.inputs;
   activeRules = v.insertRules || [];   // [v1.17] 현재 입력 흐름 규칙
   activeOrderSeq = Array.isArray(v.orderSeq) && v.orderSeq.length ? v.orderSeq : null;   // [v1.89]
+  activeTransfer = !!v.transfer;   // [v1.95] 트랜스퍼 탭 여부 (모드 전환·spec 반영에 영향)
 
   renderVariantToggle(t);
   renderSpecs();
@@ -2254,7 +2329,41 @@ function renderLinkedCard(linkGroup) {
 
 // [v1.43] 연동 카드 하단 항목별 액션 행 (메모·관리도). toggleNote/setNote/openSpcFor 재사용.
 // ══════════════════════════════════
-// [v1.93] 메모 2단 구조
+// [v1.94] 트랜스퍼 2개 측정 모드 (기본 꺼짐)
+//   1179 / 설비49 / 금형3호기 — 넓은 소재를 지그재그로 블랭킹해 트랜스퍼로 옮기는 공정.
+//   소재 좌우 폭 차이 때문에 연속 2개를 뽑아 재는데, 3차원 항목만 2개 다 재고
+//   형상측정기·H/G는 1개만 잰다.
+//   대상 항목은 전부 is_min_max 구조라서:
+//     - 3차원  → 칸 수 그대로 2칸, 라벨만 '1번 제품'/'2번 제품' (input_count = -3)
+//     - 그 외  → 1칸 포인트 입력으로 축소
+//   켜기 전에는 이 함수들이 전부 false를 반환하므로 기존 동작과 100% 동일하다.
+// ══════════════════════════════════
+const TRANSFER_KEY = 'QC_TRANSFER_MODE';
+const TRANSFER_TARGET = { group: 'BDA-1179', equip: '49', moldNo: '3호기' };
+const TRANSFER_PAIR_METHODS = ['3차원 측정기'];   // 2개 다 재는 측정기
+
+function transferEnabled() {
+  try { return localStorage.getItem(TRANSFER_KEY) === '1'; } catch (e) { return false; }
+}
+function setTransferEnabled(on) {
+  try { localStorage.setItem(TRANSFER_KEY, on ? '1' : '0'); } catch (e) {}
+}
+
+// 이 부품+설비+금형 조합이 트랜스퍼 대상인가
+function isTransferCtx(part, ctx) {
+  if (!transferEnabled() || !part || !ctx) return false;
+  const grp = part.part_group || part.part_number || '';
+  return grp === TRANSFER_TARGET.group
+      && String(ctx.equip || '').trim() === TRANSFER_TARGET.equip
+      && String(ctx.moldNo || '').trim() === TRANSFER_TARGET.moldNo;
+}
+
+// 그 항목을 2개 다 재는가 (3차원만)
+function isPairSpec(s) {
+  return TRANSFER_PAIR_METHODS.includes(String(s.inspection_method || '').trim());
+}
+
+
 //   고정 메모 — 그 설비·금형 조합에서 계속 따라붙는 내용. [지우기]에 영향받지 않음
 //   메모      — 그날그날 쓰는 것. [지우기]로 이것만 비움
 //   둘 다 사내 기록용. 구글시트 37열·성적서 어느 쪽에도 나가지 않는다.
@@ -2447,7 +2556,7 @@ function renderSpecCard(s) {
       <div class="mode-bar">
         <div class="mode-toggle">
           <button class="mt-btn ${!isMM?'sel':''}" onclick="switchMode(${s.id},'points')">포인트</button>
-          <button class="mt-btn ${isMM?'sel':''}" onclick="switchMode(${s.id},'minmax')">최소/최대</button>
+          <button class="mt-btn ${isMM?'sel':''}" onclick="switchMode(${s.id},'minmax')">${inp.pairMode ? '1번/2번 제품' : '최소/최대'}</button>
         </div>
         ${!isMM ? `
         <div class="cnt-ctrl">
@@ -2462,13 +2571,13 @@ function renderSpecCard(s) {
       inputHtml = `
         <div class="minmax-grid">
           <div>
-            <label>최솟값</label>
+            <label>${inp.pairMode ? '1번 제품' : '최솟값'}</label>
             <input class="pt-inp" type="text" inputmode="decimal" data-mobile-none="1" id="mm-min-${s.id}"
               value="${inp.min}" placeholder="—"
               oninput="setMinMax(${s.id},'min',this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)">
           </div>
           <div>
-            <label>최댓값</label>
+            <label>${inp.pairMode ? '2번 제품' : '최댓값'}</label>
             <input class="pt-inp" type="text" inputmode="decimal" data-mobile-none="1" id="mm-max-${s.id}"
               value="${inp.max}" placeholder="—"
               oninput="setMinMax(${s.id},'max',this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)">
@@ -3229,14 +3338,23 @@ function switchMode(id, mode) {
     if ((mode === 'minmax') === (inp.type === 'minmax')) return; // 동일 모드면 무시
   }
   const s = specs.find(x => x.id === id);
+  // [v1.95] 메모는 모드와 무관하므로 넘겨받는다 (종전엔 모드 바꾸면 메모가 날아갔음)
+  const keep = { note: inp.note || '', noteFixed: inp.noteFixed || '' };
   if (mode === 'minmax') {
-    specInputs[id] = { type: 'minmax', min: '', max: '' };
+    // 트랜스퍼 탭에서 3차원 항목이면 1번/2번 제품 모드로 되돌린다.
+    //   실수로 포인트를 눌렀을 때 다시 못 돌아가던 문제.
+    const pair = activeTransfer && isPairSpec(s);
+    specInputs[id] = { type: 'minmax', pairMode: pair, min: '', max: '', ...keep,
+                       prefilledMin: false, prefilledMax: false };
   } else {
-    const n = s.measure_points || 5;
-    specInputs[id] = { type: 'points', vals: Array(n).fill('') };
+    const n = activeTransfer ? 1 : (s.measure_points || 5);   // 트랜스퍼는 1칸이 기본
+    specInputs[id] = { type: 'points', vals: Array(n).fill(''), ...keep,
+                       prefilled: Array(n).fill(false) };
   }
   refreshCard(id);
-  persistSpecCfg(id);   // [v0.37] 모드 변경 즉시 spec 반영 (저장 안 해도 유지)
+  // [v1.95] 트랜스퍼 탭은 spec을 건드리지 않는다.
+  //   화면에서만 칸을 바꾼 것인데 DB에 반영하면 같은 부품의 48호기까지 따라 바뀐다.
+  if (!activeTransfer) persistSpecCfg(id);   // [v0.37] 모드 변경 즉시 spec 반영
 }
 
 // 칸 수 조절 (1~10)
@@ -3248,7 +3366,7 @@ function changeCount(id, delta) {
   if (delta > 0) inp.vals.push('');
   else inp.vals.pop();
   refreshCard(id);
-  persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 (저장 안 해도 유지)
+  if (!activeTransfer) persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 ([v1.95] 트랜스퍼 제외)
   persistDraft();       // [v1.31] 칸수 변경 → 드래프트 갱신
 }
 
@@ -3429,7 +3547,7 @@ function sedongRepFromRow(r) {
   if (!r) return null;
   const ic = r.input_count;
   let vals = [];
-  if (ic === -2) {
+  if (ic === -2 || ic === -3) {   // [v1.94] -3 = 트랜스퍼 2개 제품 (양끝 두 값)
     // 최소/최대 입력 → 저장된 5칸 중 최소·최대 두 값의 평균
     const nums = [];
     for (let i = 1; i <= 5; i++) if (r[`x${i}`] != null) nums.push(Number(r[`x${i}`]));
@@ -3985,10 +4103,12 @@ async function saveSedong(t) {
         if (s.is_visual) {
           row.visual_result = inp.val || 'OK';
         } else if (inp.type === 'minmax') {
-          const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+          let mn = parseFloat(inp.min), mx = parseFloat(inp.max);
           if (!isNaN(mn) && !isNaN(mx)) {
+            // [v1.94] 트랜스퍼 2개 측정은 입력 순서가 곧 1번/2번 제품이라 대소가 뒤집힐 수 있음
+            if (inp.pairMode && mn > mx) { const t = mn; mn = mx; mx = t; }
             fillMinMax(mn, mx, 5).forEach((val, i) => { row[`x${i+1}`] = val; });
-            row.input_count = -2;             // 최소/최대 입력 표식
+            row.input_count = inp.pairMode ? -3 : -2;   // -2 최소/최대 · -3 트랜스퍼 2개 제품
           }
         } else {
           fillTo5(inp.vals, s.lsl, s.usl, 5).forEach((val, i) => { if (val != null) row[`x${i+1}`] = val; });
@@ -4199,12 +4319,14 @@ async function saveAll() {
         if (s.is_visual) {
           row.visual_result = inp.val || 'OK';
         } else if (inp.type === 'minmax') {
-          const mn = parseFloat(inp.min), mx = parseFloat(inp.max);
+          let mn = parseFloat(inp.min), mx = parseFloat(inp.max);
           if (!isNaN(mn) && !isNaN(mx)) {
+            // [v1.94] 트랜스퍼 2개 측정은 입력 순서가 1번/2번이라 대소가 뒤집힐 수 있음
+            if (inp.pairMode && mn > mx) { const t = mn; mn = mx; mx = t; }
             // [v0.44] 최소/최대 입력 → 항상 5개 (min/max 방식은 measure_points 무관 5개 고정)
             const pts = fillMinMax(mn, mx, 5);
             pts.forEach((val, i) => { row[`x${i+1}`] = val; });
-            row.input_count = -2;              // [v1.66] 최소/최대 입력 표식
+            row.input_count = inp.pairMode ? -3 : -2;   // -2 최소/최대 · -3 트랜스퍼 2개 제품
           }
         } else {
           // [v1.54] 저장은 항상 5개 고정. 입력 화면은 measure_points칸(1~12)이지만
@@ -4219,7 +4341,9 @@ async function saveAll() {
       await sbFetch('qc_shipping_measurement', { method: 'POST', body: mRows });
 
       // 3. 칸 수 / 모드 변경분을 spec 에 반영
-      for (const s of v.specs) {
+      //   [v1.94] 트랜스퍼 탭은 제외. 화면에서만 칸을 줄인 것이라 spec을 고치면
+      //   같은 부품의 다른 설비·금형(48호기 등)까지 min/max가 풀려버린다.
+      for (const s of (v.transfer ? [] : v.specs)) {
         const inp = v.inputs[s.id];
         if (s.is_visual) continue;
         let patch = null;
@@ -4977,6 +5101,7 @@ function syncHistSpecRow() {
 //   x2~x5는 fillTo5가 만들어 넣은 산포값이라 그대로 쓰면 1점 입력한 항목이 5개로 보였음.
 //     ic > 0  : 앞에서 ic개만이 실측
 //     ic = -2 : 최소/최대 입력 → 두 값만
+//     ic = -3 : [v1.94] 트랜스퍼 2개 제품 → 마찬가지로 양끝 두 값만
 //     ic null : 구 데이터라 실측 칸 수를 알 수 없음 → 종전대로 전부
 function specPoints(row) {
   if (!row) return [];
@@ -4986,7 +5111,7 @@ function specPoints(row) {
   };
   const ic = row.input_count;
 
-  if (ic === -2) {
+  if (ic === -2 || ic === -3) {
     const nums = [];
     for (let i = 1; i <= 12; i++) { const v = num(i); if (v != null) nums.push(v); }
     if (!nums.length) return [];
@@ -5455,7 +5580,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
     if (r.visual_result != null) return null;              // 외관은 colspan 처리
     const ic = r.input_count;
     const vals = [];
-    if (ic === -2) {
+    if (ic === -2 || ic === -3) {   // [v1.94] -3 = 트랜스퍼 2개 제품
       const nums = [];
       for (let i = 1; i <= maxX; i++) if (r[`x${i}`] != null) nums.push(parseFloat(r[`x${i}`]));
       if (!nums.length) return null;
@@ -5649,6 +5774,25 @@ async function deleteHistInsp(idx) {
 function toggleFold(id) {
   const card = document.getElementById(id);
   if (card) card.classList.toggle('collapsed');
+}
+
+// [v1.94] 트랜스퍼 2개 측정 설정
+function toggleTransferMgr() {
+  const body = document.getElementById('transfer-mgr-body');
+  const arrow = document.getElementById('transfer-mgr-arrow');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  arrow.style.transform = open ? 'rotate(180deg)' : '';
+  if (open) document.getElementById('transfer-toggle').checked = transferEnabled();
+}
+
+function onTransferToggle(on) {
+  setTransferEnabled(on);
+  const el = document.getElementById('transfer-saved');
+  el.style.color = on ? '#16a34a' : '#64748b';
+  el.textContent = on
+    ? '✓ 켜짐 — 새로 만드는 탭부터 적용됩니다 (이미 열린 탭은 그대로)'
+    : '꺼짐 — 최소/최대 2칸으로 동작합니다';
 }
 
 function toggleReasonMgr() {
