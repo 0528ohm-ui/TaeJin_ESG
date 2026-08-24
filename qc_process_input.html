@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.90</title>
+<title>공정검사 입력 v1.93</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -421,6 +421,15 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .linked-act-label{flex:1;font-size:15px;color:#475569;min-width:0}
 .linked-act-label b{color:#7c3aed;font-weight:700;margin-right:3px}
 .note-area{margin-top:6px;display:none}
+/* [v1.93] 메모 2단 (고정 / 일반) */
+.note-sub{margin-bottom:6px}
+.note-sub:last-child{margin-bottom:0}
+.note-sub-label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#64748b;margin-bottom:3px}
+.note-sub-label .pin{color:#6d28d9}
+.note-sub-hint{font-size:12px;font-weight:400;color:#c4b5fd}
+.note-clear{margin-left:auto;border:1px solid #e2e8f0;background:#f8fafc;color:#64748b;border-radius:5px;padding:2px 8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.note-clear:hover{border-color:#ef4444;color:#b91c1c;background:#fef2f2}
+.note-sub #note-fx,.note-area textarea[id^="note-fx-"]{background:#faf5ff;border-color:#ddd6fe}
 .note-area.open{display:block}
 .note-area textarea{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:16px;resize:none;outline:none;font-family:inherit;color:#1e293b;background:#fafafa}
 .note-area textarea:focus{border-color:#f59e0b;background:#fff}
@@ -542,7 +551,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.90</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.93</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1552,14 +1561,14 @@ function buildInputs(loadedSpecs, sedong = false) {
   const inputs = {};
   loadedSpecs.forEach(s => {
     if (s.is_visual) {
-      inputs[s.id] = { type: 'visual', val: 'OK', note: '', prefilledVal: false };
+      inputs[s.id] = { type: 'visual', val: 'OK', note: '', noteFixed: '', prefilledVal: false };
     } else if (s.is_min_max) {
-      inputs[s.id] = { type: 'minmax', min: '', max: '', note: '', prefilledMin: false, prefilledMax: false };
+      inputs[s.id] = { type: 'minmax', min: '', max: '', note: '', noteFixed: '', prefilledMin: false, prefilledMax: false };
     } else {
       // [v1.26] 세동도 measure_points 따라감 — 입력은 설정된 칸수대로, 저장 시 sedongRepVal()로 평균 1개만 DB에 기록.
       const n = s.measure_points || 5;
       // prefilled[i]: 직전값으로 채워졌고 사용자가 아직 안 건드린 칸 (true=기본값/미측정)
-      inputs[s.id] = { type: 'points', vals: Array(n).fill(''), note: '', prefilled: Array(n).fill(false) };
+      inputs[s.id] = { type: 'points', vals: Array(n).fill(''), note: '', noteFixed: '', prefilled: Array(n).fill(false) };
     }
   });
   return inputs;
@@ -1591,15 +1600,27 @@ function countUnmeasured(variant) {
 //   같은 부품의 최신 inspection 1건을 가져와 spec_id 기준으로 매칭, 칸별로 prefill.
 //   실패해도 입력 자체엔 영향 없도록 조용히 무시.
 //   [v0.42] 항목별 메모(note)와 전체 비고(remark)도 직전값으로 같이 채움 — remark는 반환해서 탭 생성 시 사용.
-async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false) {
+async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false, ctx = {}) {
   try {
-    const lastInsp = await sbAll('qc_shipping_inspection',
-      `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=id,remark,slot_no`);
+    // [v1.91] 같은 부품이라도 설비호기·금형호기가 다르면 다른 흐름이므로
+    //   직전 메모·측정값을 그 조합 안에서만 가져온다.
+    //   종전에는 part_id만 봐서 48호기 메모가 49호기 탭에 그대로 붙었음.
+    //   해당 조합의 이력이 아직 없으면(신규 금형 등) 부품 단위로 한 번 더 조회해 폴백.
+    const equip  = (ctx.equip  || '').trim();
+    const moldNo = (ctx.moldNo || '').trim();
+    const narrow = (equip !== '' ? `&ho=eq.${encodeURIComponent(equip)}` : '')
+                 + (moldNo !== '' ? `&mold_no=eq.${encodeURIComponent(moldNo)}` : '');
+    const baseQs = `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst`
+                 + `&limit=1&select=id,remark,slot_no`;
+
+    let lastInsp = [];
+    if (narrow) lastInsp = await sbAll('qc_shipping_inspection', baseQs + narrow);
+    if (!lastInsp.length) lastInsp = await sbAll('qc_shipping_inspection', baseQs);
     if (!lastInsp.length) return '';
     // [v1.67] 세동이라도 건별 저장(slot_no 있음)이면 x1~x5가 실측 원본 → 일반 제품과 동일 매핑
     if (sedong && lastInsp[0].slot_no != null) sedong = false;
     const lastRows = await sbAll('qc_shipping_measurement',
-      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note`);
+      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note,note_fixed`);
     const bySpec = {};
     lastRows.forEach(r => { bySpec[r.spec_id] = r; });
     loadedSpecs.forEach(s => {
@@ -1608,6 +1629,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
       const inp = inputs[s.id];
       if (!inp) return;
       if (r.note) inp.note = r.note;   // [v0.42] 외관/치수 항목 공통 — 직전 메모 기본 채움
+      if (r.note_fixed) inp.noteFixed = r.note_fixed;   // [v1.93] 고정 메모도 같은 조합에서 이어받음
       if (s.is_visual) {
         if (r.visual_result) { inp.val = r.visual_result; inp.prefilledVal = true; }
         return;
@@ -1665,7 +1687,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
 }
 
 // 한 부품의 spec 로드 → variant 객체 생성
-async function loadVariant(part) {
+async function loadVariant(part, ctx = {}) {
   // 프레스: press + both / 가공: machining + both
   const typeFilter = procMode === 'machining'
     ? `process_type=in.("machining","both")`
@@ -1682,7 +1704,7 @@ async function loadVariant(part) {
   // [v1.26] 세동도 직전 검사일 값 prefill 적용 — 매일 첫 측정 시 기본값 참조.
   //   (이전: 세동만 건너뜀 → 매일 처음엔 모든 값 수동 입력 필요해서 복구)
   let lastRemark = '';
-  lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong);
+  lastRemark = await fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong, ctx);
   // [v1.33] 세동: 같은 날 직전 슬롯의 칸별 원본이 기기 캐시에 있으면 DB 평균 1개 prefill을 덮어 칸별로 복원
   if (sedong) {
     // [v1.38] 날짜 무관 — 이 부품의 가장 최근 측정 슬롯 칸 원본을 prefill
@@ -1829,9 +1851,9 @@ async function confirmAddTab() {
     let variants;
     if (pendingSel.isGroup) {
       variants = [];
-      for (const part of pendingSel.parts) variants.push(await loadVariant(part));
+      for (const part of pendingSel.parts) variants.push(await loadVariant(part, { equip, moldNo }));
     } else {
-      variants = [await loadVariant(pendingSel.part)];
+      variants = [await loadVariant(pendingSel.part, { equip, moldNo })];
     }
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
@@ -2231,17 +2253,66 @@ function renderLinkedCard(linkGroup) {
 }
 
 // [v1.43] 연동 카드 하단 항목별 액션 행 (메모·관리도). toggleNote/setNote/openSpcFor 재사용.
+// ══════════════════════════════════
+// [v1.93] 메모 2단 구조
+//   고정 메모 — 그 설비·금형 조합에서 계속 따라붙는 내용. [지우기]에 영향받지 않음
+//   메모      — 그날그날 쓰는 것. [지우기]로 이것만 비움
+//   둘 다 사내 기록용. 구글시트 37열·성적서 어느 쪽에도 나가지 않는다.
+// ══════════════════════════════════
+function noteBoxHtml(specId, inp) {
+  const esc = v => String(v || '').replace(/</g, '&lt;');
+  return `
+    <div class="note-sub">
+      <span class="note-sub-label"><span class="pin">📌 고정 메모</span><span class="note-sub-hint">계속 유지됨</span></span>
+      <textarea id="note-fx-${specId}" rows="2" placeholder="이 설비·금형에서 계속 붙일 내용…"
+        oninput="setNoteFixed(${specId},this.value)">${esc(inp.noteFixed)}</textarea>
+    </div>
+    <div class="note-sub">
+      <span class="note-sub-label">메모
+        <button type="button" class="note-clear" onclick="clearNote(${specId})">지우기</button>
+      </span>
+      <textarea id="note-ta-${specId}" rows="2" placeholder="이번 검사 메모…"
+        oninput="setNote(${specId},this.value)">${esc(inp.note)}</textarea>
+    </div>`;
+}
+
+function setNoteFixed(id, val) {
+  if (specInputs[id]) specInputs[id].noteFixed = val;
+  syncNoteBtn(id);
+  persistDraft();
+}
+
+// 아래쪽 '메모'만 비운다 — 고정 메모는 그대로
+function clearNote(id) {
+  const ta = document.getElementById(`note-ta-${id}`);
+  if (ta) ta.value = '';
+  if (specInputs[id]) specInputs[id].note = '';
+  syncNoteBtn(id);
+  persistDraft();
+  if (ta) ta.focus();
+}
+
+// 📝 버튼 강조는 둘 중 하나라도 내용이 있으면 켠다
+function syncNoteBtn(id) {
+  const inp = specInputs[id] || {};
+  const has = (inp.note || '').trim() !== '' || (inp.noteFixed || '').trim() !== '';
+  const btn = document.getElementById(`note-btn-${id}`);
+  if (btn) btn.classList.toggle('has', has);
+}
+
+// [v1.43] 연동 카드 하단 항목별 액션 행 (메모·관리도). toggleNote/setNote/openSpcFor 재사용.
+
 function linkedActions(members) {
   return `<div class="linked-actions">${members.map(c => {
     const inp = specInputs[c.id] || {};
     return `
     <div class="linked-act-row">
       <span class="linked-act-label"><b>No.${dno(c)}</b> ${c.item_name}</span>
-      <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${c.id}" onclick="toggleNote(${c.id})" title="메모">📝</button>
+      <button class="note-btn ${(inp.note || inp.noteFixed) ? 'has' : ''}" id="note-btn-${c.id}" onclick="toggleNote(${c.id})" title="메모">📝</button>
       ${c.is_visual ? '' : `<button class="chart-btn" id="chart-btn-${c.id}" onclick="openSpcFor(${c.id})" title="관리도">📊</button>`}
     </div>
-    <div class="note-area ${inp.note ? 'open' : ''}" id="note-area-${c.id}">
-      <textarea rows="2" placeholder="특채 허용, 고객 요청 등 메모…" oninput="setNote(${c.id},this.value)">${inp.note || ''}</textarea>
+    <div class="note-area ${(inp.note || inp.noteFixed) ? 'open' : ''}" id="note-area-${c.id}">
+      ${noteBoxHtml(c.id, inp)}
     </div>`;
   }).join('')}</div>`;
 }
@@ -2430,13 +2501,12 @@ function renderSpecCard(s) {
           <div class="spec-method">${s.inspection_method || ''}</div>
         </div>
         <div class="spec-result ${resCls}" id="res-${s.id}">${resLabel}</div>
-        <button class="note-btn ${inp.note ? 'has' : ''}" id="note-btn-${s.id}"
+        <button class="note-btn ${(inp.note || inp.noteFixed) ? 'has' : ''}" id="note-btn-${s.id}"
           onclick="toggleNote(${s.id})" title="메모">📝</button>
         ${s.is_visual ? '' : `<button class="chart-btn" id="chart-btn-${s.id}" onclick="openSpcFor(${s.id})" title="관리도">📊</button>`}
       </div>
-      <div class="note-area ${inp.note ? 'open' : ''}" id="note-area-${s.id}">
-        <textarea rows="2" placeholder="특채 허용, 고객 요청 등 메모…"
-          oninput="setNote(${s.id},this.value)">${inp.note || ''}</textarea>
+      <div class="note-area ${(inp.note || inp.noteFixed) ? 'open' : ''}" id="note-area-${s.id}">
+        ${noteBoxHtml(s.id, inp)}
       </div>
       ${ctrlHtml}
       ${inputHtml}
@@ -3909,7 +3979,8 @@ async function saveSedong(t) {
           visual_result: null,
           x1:null, x2:null, x3:null, x4:null, x5:null,
           input_count: null,
-          note: inp.note && inp.note.trim() ? inp.note.trim() : null
+          note: inp.note && inp.note.trim() ? inp.note.trim() : null,
+          note_fixed: inp.noteFixed && inp.noteFixed.trim() ? inp.noteFixed.trim() : null   // [v1.93]
         };
         if (s.is_visual) {
           row.visual_result = inp.val || 'OK';
@@ -4122,7 +4193,8 @@ async function saveAll() {
           // [v1.66] 실제로 입력한 개수(산포 전). 건별 이력에서 실측만 구분해 보여주기 위한 표시용 메타.
           //   저장되는 x1~x5 값 자체는 종전과 동일 → 성적서·웹훅·트리거 무영향.
           input_count: null,
-          note: inp.note && inp.note.trim() ? inp.note.trim() : null
+          note: inp.note && inp.note.trim() ? inp.note.trim() : null,
+          note_fixed: inp.noteFixed && inp.noteFixed.trim() ? inp.noteFixed.trim() : null   // [v1.93]
         };
         if (s.is_visual) {
           row.visual_result = inp.val || 'OK';
@@ -5662,13 +5734,12 @@ function refreshReasonDropdown() {
 function toggleNote(id) {
   const area = document.getElementById(`note-area-${id}`);
   const isOpen = area.classList.toggle('open');
-  if (isOpen) area.querySelector('textarea').focus();
+  if (isOpen) (document.getElementById(`note-ta-${id}`) || area.querySelector('textarea')).focus();
 }
 
 function setNote(id, val) {
   if (specInputs[id]) specInputs[id].note = val;
-  const btn = document.getElementById(`note-btn-${id}`);
-  if (btn) btn.classList.toggle('has', val.trim() !== '');
+  syncNoteBtn(id);   // [v1.93] 고정 메모까지 함께 보고 강조 결정
   persistDraft();   // [v1.31] 노트 변경 → 드래프트 갱신
 }
 
