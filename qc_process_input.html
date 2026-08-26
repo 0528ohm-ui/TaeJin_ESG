@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.96</title>
+<title>공정검사 입력 v1.97</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -73,6 +73,14 @@ label{display:block;font-size:16px;font-weight:600;color:#64748b;margin-bottom:5
 .linked-grid td{padding:4px;border-bottom:1px solid #f1f5f9}
 .linked-grid tr:last-child td{border-bottom:none}
 .linked-grid .pt-inp{margin:0;text-align:center;padding:8px 4px}
+/* [v1.97] 좁은 화면: 값이 잘리지 않게 폰트·여백을 줄이고, 그래도 좁으면 가로 스크롤.
+   width:100%가 셀을 강제로 눌러 "6.5'"처럼 잘리던 문제. */
+@media (max-width:640px){
+  .linked-grid{font-size:15px;width:auto;min-width:100%}
+  .linked-grid th{font-size:12px;padding:5px 3px}
+  .linked-grid td{padding:3px 2px}
+  .linked-grid .pt-inp{font-size:15px;padding:7px 2px;min-width:62px}
+}
 .vrt-btn{padding:6px 16px;border:none;border-radius:5px;background:transparent;font-size:17px;font-weight:700;color:#64748b;cursor:pointer;transition:all .15s}
 .vrt-btn.sel{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .vrt-btn .vrt-badge{display:inline-block;min-width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
@@ -272,6 +280,20 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .hist-detail{display:none;border-top:1px solid #f1f5f9}
 .hist-card.expanded .hist-detail{display:block}
 .hist-meas-tbl{width:100%;font-size:16px;border-collapse:collapse}
+/* [v1.97] 좁은 화면에서 가로로 밀어도 어떤 항목인지 보이도록 No·항목 열을 왼쪽에 고정.
+   규격은 항목명 아래에 겹쳐 넣어 폭을 아낀다(별도 열이면 고정 폭이 너무 커짐). */
+.hist-meas-tbl th.sticky-item,.hist-meas-tbl td.sticky-item{
+  position:sticky;left:0;z-index:2;background:#fff;
+  box-shadow:1px 0 0 #e2e8f0;max-width:150px;white-space:normal}
+.hist-meas-tbl th.sticky-item{background:#f8fafc;z-index:3}
+.hist-meas-tbl td.sticky-item .it-name{font-weight:600;line-height:1.25}
+.hist-meas-tbl td.sticky-item .it-spec{font-size:13px;color:#3b82f6;line-height:1.3;margin-top:1px}
+@media (max-width:640px){
+  .hist-meas-tbl{font-size:15px}
+  .hist-meas-tbl th,.hist-meas-tbl td{padding:6px 7px}
+  .hist-meas-tbl th.sticky-item,.hist-meas-tbl td.sticky-item{max-width:118px}
+  .hist-meas-tbl td.sticky-item .it-spec{font-size:12px}
+}
 .hist-meas-tbl th{padding:8px 10px;text-align:left;font-weight:700;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;white-space:nowrap}
 .hist-meas-tbl td{padding:7px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
 .hist-meas-tbl tr:last-child td{border-bottom:none}
@@ -551,7 +573,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.96</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.97</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -5345,7 +5367,7 @@ function buildDaySedongTable(g, measBy) {
 
   let html = `<div class="day-wrap"><div class="hist-meas-scroll">
     <div style="padding:6px 2px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 순회검사 (8~17시)${setupInsp ? ` · 셋업 ${setupTime}` : ''}</div>
-    <table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>`;
+    <table class="hist-meas-tbl"><thead><tr><th>No</th><th class="sticky-item">항목</th>`;
   html += `<th style="background:#fef3c7;color:#92400e">셋업</th>`;
   for (let n = 0; n < 9; n++) html += `<th>${SEDONG_SLOTS[n]}시</th>`;
   html += `<th>판정</th></tr></thead><tbody>`;
@@ -5355,8 +5377,10 @@ function buildDaySedongTable(g, measBy) {
     const res = it.result || (isVisual ? it.visual_result : '') || '—';
     const resCls = res === 'OK' ? 'ok' : res === 'NG' ? 'ng' : '';
     html += `<tr><td>${dno(it)}</td>
-      <td style="text-align:left">${it.item_name || ''}</td>
-      <td style="text-align:left;color:#3b82f6">${it.spec_text || ''}</td>`;
+      <td class="sticky-item" style="text-align:left">
+        <div class="it-name">${it.item_name || ''}</div>
+        ${it.spec_text ? `<div class="it-spec">${it.spec_text}</div>` : ''}
+      </td>`;
     {
       // [v1.77] 셋업 칸 — 실측이 있을 때만 값
       // [v1.78] 외관도 그 슬롯에 실제 검사가 있어야 판정 표시
@@ -5411,7 +5435,7 @@ function buildDayTable(g, measBy) {
     </table>
 
   <table class="hist-meas-tbl day-meas"><thead><tr>
-    <th>No</th><th>항목</th><th>규격</th>
+    <th>No</th><th class="sticky-item">항목</th>
     ${SLOT_KEYS.map(k => `<th>${SLOT_LABELS[k]}</th>`).join('')}
     <th>판정</th></tr></thead><tbody>`;
 
@@ -5435,8 +5459,10 @@ function buildDayTable(g, measBy) {
 
     html += `<tr>
       <td>${dno(it)}</td>
-      <td>${it.item_name || ''}</td>
-      <td style="color:#3b82f6">${it.spec_text || ''}</td>`;
+      <td class="sticky-item">
+        <div class="it-name">${it.item_name || ''}</div>
+        ${it.spec_text ? `<div class="it-spec">${it.spec_text}</div>` : ''}
+      </td>`;
 
     SLOT_KEYS.forEach(k => {
       const cell = vals[k];
@@ -5598,7 +5624,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
   let html = '<div class="hist-meas-scroll">';
   if (sedongWide) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
   else if (sedongSlotMode) html += `<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 ${Number(insp.slot_no) === 0 ? '<b>셋업(초품)</b> 실측' : `순회검사 — ${sedongSlotLabel(insp.slot_no)} 타임 실측`}</div>`;
-  html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th>항목</th><th>규격</th>';
+  html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th class="sticky-item">항목</th>';
   for (let i = 1; i <= maxX; i++) {
     const label = sedongWide ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
     html += `<th>${label}</th>`;
@@ -5610,7 +5636,10 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
     const res = isVis ? r.visual_result : (r.result || '—');
     const resCls = res === 'OK' ? 'ok-val' : res === 'NG' ? 'ng-val' : '';
 
-    html += `<tr><td>${dno(r)}</td><td>${r.item_name || ''}</td><td style="font-size:14px;color:#3b82f6">${r.spec_text || ''}</td>`;
+    html += `<tr><td>${dno(r)}</td><td class="sticky-item">
+      <div class="it-name">${r.item_name || ''}</div>
+      ${r.spec_text ? `<div class="it-spec">${r.spec_text}</div>` : ''}
+    </td>`;
 
     if (isVis) {
       if (editMode) {
