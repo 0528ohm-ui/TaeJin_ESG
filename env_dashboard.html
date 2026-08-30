@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>환경 모니터링 v3.1</title>
+<title>환경 모니터링 v3.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -82,7 +82,7 @@
 <body>
 <header>
   <div class="bar">
-    <h1>환경 모니터링</h1><span class="ver" id="ver">v3.1</span>
+    <h1>환경 모니터링</h1><span class="ver" id="ver">v3.2</span>
     <span class="clock" id="clock">--:--:--</span>
   </div>
   <div class="tabs">
@@ -310,7 +310,7 @@ const uint16_t LBL_FEEL[] PROGMEM = { 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x
   </section>
 </main>
 
-<footer>태진다이텍 환경 모니터링 · <span>v3.1</span></footer>
+<footer>태진다이텍 환경 모니터링 · <span>v3.2</span></footer>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -423,6 +423,18 @@ function srcErrText(){
    (SHT41_3 은 회사로, SHT41_6 은 개인으로) */
 let DEV_SRC={};                    // device_id -> 소스 key
 function srcOf(id){return SRC[DEV_SRC[id]]||SRC[DEFAULT_SRC];}
+/* [v3.2] 기기가 어느 프로젝트에 사는지 판정.
+   이관 과도기라 같은 device_id 가 회사·개인 양쪽에 남아있을 수 있는데,
+   조회 순서에 따라 결로 미지원(회사) 쪽으로 잡히면
+   설정 화면에서 '결로 경고여유' 칸이 사라지고 저장 시 값이 날아간다.
+   이관 방향이 개인(결로 지원)이므로 양쪽에 있으면 결로 지원 소스를 정답으로 본다. */
+function noteDevSrc(rows){
+  for(const r of rows){
+    const cur=DEV_SRC[r.device_id];
+    if(!cur){DEV_SRC[r.device_id]=r._src;continue;}
+    if(!SRC[cur].dew && SRC[r._src] && SRC[r._src].dew) DEV_SRC[r.device_id]=r._src;
+  }
+}
 async function sbUpsert(row){
   const s=srcOf(row.device_id);
   const r=await fetch(s.url+'/rest/v1/env_device?on_conflict=device_id',{
@@ -568,8 +580,8 @@ async function loadStatus(){
 
     // 기기 출처 확정: 실제로 데이터가 올라오는 쪽 > 설정만 있는 쪽 > 기본값
     DEV_SRC={};
-    cfgRows.forEach(c=>{if(!DEV_SRC[c.device_id])DEV_SRC[c.device_id]=c._src;});
-    Object.keys(latest).forEach(id=>{DEV_SRC[id]=latest[id]._src;});
+    noteDevSrc(cfgRows);
+    noteDevSrc(Object.keys(latest).map(id=>latest[id]));
 
     Object.keys(latest).forEach(id=>{latest[id]=calibrate(id,latest[id]);});
     const ids=[...new Set([...Object.keys(DEVICES),...Object.keys(latest)])].sort();
@@ -766,8 +778,8 @@ async function loadConfig(){
       allGet(s=>'env_current?select=device_id,zone')]);
     // 출처 기록 (저장/삭제를 원래 프로젝트로 보내기 위함)
     DEV_SRC={};
-    cfgRows.forEach(c=>{if(!DEV_SRC[c.device_id])DEV_SRC[c.device_id]=c._src;});
-    seenRows.forEach(r=>{DEV_SRC[r.device_id]=r._src;});
+    noteDevSrc(cfgRows);
+    noteDevSrc(seenRows);
     const cfgMap=mergeByDevice(cfgRows);
     const cfg=Object.keys(cfgMap).sort().map(k=>cfgMap[k]);
     const seen=Object.values(mergeByDevice(seenRows));
@@ -783,7 +795,10 @@ async function loadConfig(){
   }catch(e){document.getElementById('cfgList').innerHTML='<div class="empty">불러오기 오류: '+e.message+'</div>';}
 }
 function rowHTML(c){const dis=READONLY?'disabled':'';
-  return `<div class="srow" data-id="${c.device_id||''}">
+  /* [v3.2] 화면에 안 그려지는 값도 원본을 들고 있다가 저장 때 되돌려 넣는다.
+     결로 칸이 숨겨진 채로 저장하면 dew_margin_warn 이 지워지던 문제 방지. */
+  const keepDew=(c.dew_margin_warn==null)?'':String(c.dew_margin_warn);
+  return `<div class="srow" data-id="${c.device_id||''}" data-keep-dew="${keepDew}">
     <div class="top"><span class="badge">${c.device_id||'신규'}</span>
       <input style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 8px;font-family:ui-monospace,monospace"
         placeholder="MAC (예: 5C:01:3B:07:B5:48)" value="${c.mac||''}" data-k="mac" ${dis}>
@@ -805,7 +820,7 @@ function rowHTML(c){const dis=READONLY?'disabled':'';
         <div style="display:flex;gap:4px">
           <input type="text" inputmode="decimal" data-k="humi_offset" value="${c.humi_offset??0}" style="flex:1;min-width:0" ${dis}>
           <button type="button" class="btn" style="padding:4px 10px" onclick="flipSign(this)" ${dis?'disabled':''}>±</button></div></div>
-      ${(SRC[DEV_SRC[c.device_id]]||SRC[DEFAULT_SRC]).dew
+      ${srcOf(c.device_id).dew
         ? `<div class="f"><label>결로 경고여유 °C</label><input type="number" step="0.5" data-k="dew_margin_warn" value="${c.dew_margin_warn??3}" ${dis}></div>`
         : ''}
       <div class="f"><label>사용</label><select data-k="enabled" ${dis}>
@@ -822,9 +837,17 @@ function collect(rowEl){const o={};
     if(k==='save_interval')v=parseInt(v||'0',10);
     else if(['temp_min','temp_max','humi_min','humi_max','feels_min','feels_max','temp_offset','humi_offset','dew_margin_warn'].includes(k))v=parseFloat(v||'0');
     else if(k==='enabled')v=(v==='true');o[k]=v;});
+  /* [v3.2] 결로 칸이 화면에 없는 경우(결로 미지원 소스로 잡혔을 때)에도
+     원래 값이 있었다면 그대로 다시 넣어 준다. 빈 값으로 덮어써 지우지 않기 위함. */
+  if(o.dew_margin_warn===undefined){
+    const keep=rowEl.dataset.keepDew;
+    if(keep!==undefined && keep!=='') o.dew_margin_warn=parseFloat(keep);
+  }
   if(!o.device_id)o.device_id=rowEl.dataset.id;o.updated_at=kstISO(new Date());return o;}
 async function saveRow(btn){const o=collect(btn.closest('.srow'));
   if(!o.device_id){toast('기기ID를 입력하세요');return;}
+  /* 회사 프로젝트에는 결로 컬럼이 없다. 그쪽으로 보내면 PostgREST 42703 이 나므로 제거. */
+  if(!srcOf(o.device_id).dew) delete o.dew_margin_warn;
   try{await sbUpsert(o);toast('저장됨: '+o.device_id);loadConfig();}catch(e){toast(e.message);}}
 async function delRow(btn){const row=btn.closest('.srow');
   const id=row.dataset.id||row.querySelector('[data-k="device_id"]')?.value;
