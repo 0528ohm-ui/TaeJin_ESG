@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>도면 → 3D 회전체 변환 v1.6</title>
+<title>도면 → 3D 회전체 변환 v1.7</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -132,6 +132,13 @@
     border-radius: 5px; padding: 5px 7px;
   }
 
+  /* ===== 사용 안내 탭 ===== */
+  #helpWrap {
+    display: none; height: calc(100vh - 44px); overflow: auto;
+    padding: 14px; background: #1b1e23;
+  }
+  #helpSvg { display: block; width: 100%; max-width: 1060px; margin: 0 auto; height: auto; }
+
   /* 좁은 화면 */
   @media (max-width: 700px) {
     header h1 { font-size: 13px; }
@@ -146,10 +153,11 @@
 
 <header>
   <h1>도면 &rarr; 3D 회전체 변환</h1>
-  <span class="badge">v1.6</span>
+  <span class="badge">v1.7</span>
   <div class="tabs">
     <button id="tabView" class="on">조회</button>
     <button id="tabEdit">작성</button>
+    <button id="tabHelp">사용 안내</button>
   </div>
   <span class="hint" id="headHint">저장된 형상을 한눈에 보기</span>
 </header>
@@ -179,6 +187,124 @@
       <label><input type="checkbox" id="vSpin" checked> 자동 회전</label>
     </div>
   </div>
+</div>
+
+
+<!-- ==================== 사용 안내 탭 ==================== -->
+<div id="helpWrap">
+  <svg id="helpSvg" viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#ffd24a"/>
+      </marker>
+    </defs>
+
+    <text x="20" y="30" fill="#e6e6e6" font-size="19" font-weight="600">작성 탭 사용 순서</text>
+    <text x="20" y="52" fill="#8d95a0" font-size="13">왼쪽 설정 패널을 위에서 아래로 순서대로 누르면 된다.</text>
+
+    <!-- 설정 패널 모형 -->
+    <rect x="20" y="72" width="300" height="500" rx="7" fill="#23272e" stroke="#3a3f47"/>
+    <rect x="20" y="72" width="300" height="26" rx="7" fill="#2b313a"/>
+    <text x="34" y="90" fill="#9aa3ae" font-size="12">설정</text>
+
+    <!-- 품번 그룹 -->
+    <rect x="32" y="110" width="276" height="104" rx="5" fill="#1e2228" stroke="#2d6cdf"/>
+    <text x="42" y="127" fill="#6f7883" font-size="11">품번</text>
+    <rect id="g1a" x="42" y="134" width="222" height="22" rx="3" fill="#14171b" stroke="#4a515c"/>
+    <text x="50" y="149" fill="#6f7883" font-size="11">품번 / 품명 검색</text>
+    <rect x="270" y="134" width="28" height="22" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="280" y="149" fill="#c8ced6" font-size="11">↻</text>
+    <rect id="g1b" x="42" y="162" width="256" height="22" rx="3" fill="#14171b" stroke="#4a515c"/>
+    <text x="50" y="177" fill="#c8ced6" font-size="11">1515-196-01 | SHAFT SEAL</text>
+    <rect id="g2" x="42" y="190" width="66" height="20" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="52" y="204" fill="#e6e6e6" font-size="11">도면 열기</text>
+    <rect x="114" y="190" width="86" height="20" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="122" y="204" fill="#8d95a0" font-size="11">형상 불러오기</text>
+    <rect id="g7" x="206" y="190" width="66" height="20" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="216" y="204" fill="#8d95a0" font-size="11">형상 저장</text>
+
+    <!-- 단계 1~4 -->
+    <circle cx="46" cy="252" r="10" fill="#3a414b"/>
+    <text x="43" y="256" fill="#aab3bd" font-size="11">1</text>
+    <rect id="g3" x="64" y="240" width="94" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="74" y="256" fill="#e6e6e6" font-size="12">기울기 보정</text>
+
+    <circle cx="46" cy="292" r="10" fill="#3a414b"/>
+    <text x="43" y="296" fill="#aab3bd" font-size="11">2</text>
+    <rect id="g4" x="64" y="280" width="94" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="80" y="296" fill="#e6e6e6" font-size="12">축 지정</text>
+
+    <circle cx="46" cy="332" r="10" fill="#3a414b"/>
+    <text x="43" y="336" fill="#aab3bd" font-size="11">3</text>
+    <rect id="g5" x="64" y="320" width="94" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="78" y="336" fill="#e6e6e6" font-size="12">윤곽 따기</text>
+    <rect x="166" y="322" width="70" height="20" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="174" y="336" fill="#8d95a0" font-size="11">점 편집 ▾</text>
+
+    <circle cx="46" cy="372" r="10" fill="#3a414b"/>
+    <text x="43" y="376" fill="#aab3bd" font-size="11">4</text>
+    <rect id="g6" x="64" y="360" width="94" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="72" y="376" fill="#e6e6e6" font-size="12">치수 기준점</text>
+    <rect id="g6b" x="166" y="362" width="70" height="20" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="176" y="376" fill="#e6e6e6" font-size="11">보정 실행</text>
+
+    <rect id="g8" x="42" y="410" width="70" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="52" y="426" fill="#e6e6e6" font-size="12">3D 생성</text>
+    <rect x="120" y="410" width="70" height="24" rx="3" fill="#2f3540" stroke="#4a515c"/>
+    <text x="130" y="426" fill="#8d95a0" font-size="12">STL 저장</text>
+
+    <!-- 화살표 + 설명 -->
+    <path d="M400,152 C360,152 350,148 268,145" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="152" r="11" fill="#2d6cdf"/><text x="408" y="157" fill="#fff" font-size="12">1</text>
+    <text x="432" y="148" fill="#e6e6e6" font-size="14" font-weight="600">품번 검색</text>
+    <text x="432" y="167" fill="#8d95a0" font-size="12">품번·품명으로 걸러서 아래 목록에서 고른다.</text>
+    <text x="432" y="184" fill="#8d95a0" font-size="12">● 표시는 이미 형상이 저장된 품번.</text>
+
+    <path d="M400,205 C330,205 240,222 112,203" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="205" r="11" fill="#2d6cdf"/><text x="408" y="210" fill="#fff" font-size="12">2</text>
+    <text x="432" y="201" fill="#e6e6e6" font-size="14" font-weight="600">도면 열기</text>
+    <text x="432" y="220" fill="#8d95a0" font-size="12">서버에 저장된 도면을 불러온다. 새로 작업할 때 사용.</text>
+    <text x="432" y="237" fill="#8d95a0" font-size="12">이미 만들어 둔 게 있으면 「형상 불러오기」.</text>
+
+    <path d="M400,258 C370,258 340,254 162,252" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="258" r="11" fill="#2d6cdf"/><text x="408" y="263" fill="#fff" font-size="12">3</text>
+    <text x="432" y="254" fill="#e6e6e6" font-size="14" font-weight="600">기울기 보정</text>
+    <text x="432" y="273" fill="#8d95a0" font-size="12">도면이 삐뚤게 스캔된 경우에만. 수평·수직이어야 할</text>
+    <text x="432" y="290" fill="#8d95a0" font-size="12">긴 직선 위 두 점을 찍으면 이미지가 똑바로 돌아간다.</text>
+
+    <path d="M400,311 C370,311 340,300 162,292" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="311" r="11" fill="#2d6cdf"/><text x="408" y="316" fill="#fff" font-size="12">4</text>
+    <text x="432" y="307" fill="#e6e6e6" font-size="14" font-weight="600">축 지정</text>
+    <text x="432" y="326" fill="#8d95a0" font-size="12">제품이 돌아가는 회전축(중심선) 위 두 점을 클릭.</text>
+    <text x="432" y="343" fill="#8d95a0" font-size="12">중심선이 없는 뷰면 대충 찍어도 6번에서 잡힌다.</text>
+
+    <path d="M400,364 C370,364 340,346 162,332" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="364" r="11" fill="#2d6cdf"/><text x="408" y="369" fill="#fff" font-size="12">5</text>
+    <text x="432" y="360" fill="#e6e6e6" font-size="14" font-weight="600">윤곽 따기</text>
+    <text x="432" y="379" fill="#8d95a0" font-size="12">제품 단면의 외곽선을 따라 코너마다 클릭. 축 한쪽 면만.</text>
+    <text x="432" y="396" fill="#8d95a0" font-size="12">클릭 사이는 선을 자동 추적한다. 멀리 찍지 말고 끊어서.</text>
+    <text x="432" y="413" fill="#8d95a0" font-size="12">잘못 찍힌 점은 「점 편집」에서 수정.</text>
+
+    <path d="M400,434 C370,434 340,392 162,372" stroke="#ffd24a" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+    <circle cx="412" cy="434" r="11" fill="#2d6cdf"/><text x="408" y="439" fill="#fff" font-size="12">6</text>
+    <text x="432" y="430" fill="#e6e6e6" font-size="14" font-weight="600">치수 기준점</text>
+    <text x="432" y="449" fill="#8d95a0" font-size="12">내경·외경처럼 치수를 아는 면을 클릭하고 도면값을 입력.</text>
+    <text x="432" y="466" fill="#8d95a0" font-size="12">서로 다른 지름 2곳을 찍고 「보정 실행」을 누르면</text>
+    <text x="432" y="483" fill="#8d95a0" font-size="12">실제 mm 크기와 축 위치 오차가 함께 계산된다.</text>
+
+    <path d="M400,510 C360,510 300,460 118,424" stroke="#8d95a0" stroke-width="1.4" fill="none" marker-end="url(#ah)" opacity="0.7"/>
+    <circle cx="412" cy="510" r="11" fill="#3a414b"/><text x="408" y="515" fill="#c8ced6" font-size="12">7</text>
+    <text x="432" y="506" fill="#c8ced6" font-size="14" font-weight="600">3D 생성 · 형상 저장</text>
+    <text x="432" y="525" fill="#8d95a0" font-size="12">오른쪽에 3D가 만들어진다. 확인 후 「형상 저장」을 누르면</text>
+    <text x="432" y="542" fill="#8d95a0" font-size="12">조회 탭에서 누구나 볼 수 있다. STL 저장도 가능.</text>
+
+    <!-- 하단 팁 -->
+    <rect x="20" y="588" width="960" height="58" rx="6" fill="#1e2228" stroke="#3a3f47"/>
+    <text x="34" y="608" fill="#7fb3ff" font-size="12" font-weight="600">조작</text>
+    <text x="34" y="626" fill="#8d95a0" font-size="12">확대·축소 = 마우스 휠　·　화면 이동 = 오른쪽 버튼 드래그 또는 방향키　·　화면 맞춤 = F</text>
+    <text x="34" y="641" fill="#8d95a0" font-size="12">점 옮기기 = 점을 잡고 드래그　·　점 지우기 = Shift + 클릭　·　보정 없이 그대로 찍기 = Alt + 클릭</text>
+  </svg>
 </div>
 
 <div id="wrap" style="display:none">
@@ -419,7 +545,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* =========================================================
-   도면 -> 3D 회전체 변환  v1.6
+   도면 -> 3D 회전체 변환  v1.7
    v0.1 -> v0.2 변경점
    - 기준선 2점으로 이미지 자체를 회전시켜 기울기 보정 (픽셀 베이크)
    - 직교 보정: 이전 점 대비 +-N도 이내면 완전 수평/수직으로 정렬
@@ -520,6 +646,10 @@
    - 윤곽 점 편집 그룹을 3단계(윤곽 따기) 바로 아래로 이동
    - "점 편집" 버튼으로 열고 닫는다. 기본은 닫힌 상태
    - 편집 도구를 쓰면 그룹이 자동으로 열리고, 닫으면 편집 모드에서 빠져나온다
+
+   v1.6 -> v1.7 변경점
+   - "사용 안내" 탭 추가. 설정 패널 모형에 화살표로 1~7 순서를 표시
+     (SVG 로 직접 그려서 캡쳐 이미지 없이도 유지보수 가능)
    ========================================================= */
 
 const S = {
@@ -2600,17 +2730,20 @@ $('vEdit').onclick = function () {
 
 /* ---------------- 탭 전환 ---------------- */
 function showTab(which) {
-  const view = which === 'view';
-  $('viewWrap').style.display = view ? 'flex' : 'none';
-  $('wrap').style.display = view ? 'none' : 'flex';
-  $('tabView').classList.toggle('on', view);
-  $('tabEdit').classList.toggle('on', !view);
-  $('headHint').textContent = view ? '저장된 형상을 한눈에 보기'
-                                   : '단면 도면을 축 기준 360° 회전시켜 형상만 생성';
-  if (view) {
+  $('viewWrap').style.display = which === 'view' ? 'flex' : 'none';
+  $('wrap').style.display     = which === 'edit' ? 'flex' : 'none';
+  $('helpWrap').style.display = which === 'help' ? 'block' : 'none';
+  $('tabView').classList.toggle('on', which === 'view');
+  $('tabEdit').classList.toggle('on', which === 'edit');
+  $('tabHelp').classList.toggle('on', which === 'help');
+  $('headHint').textContent =
+    which === 'view' ? '저장된 형상을 한눈에 보기' :
+    which === 'edit' ? '단면 도면을 축 기준 360° 회전시켜 형상만 생성' :
+                       '작성 탭 사용 순서';
+  if (which === 'view') {
     resizeViewGL();
     loadViewRows();
-  } else {
+  } else if (which === 'edit') {
     // 숨겨진 동안 크기가 0 이었으므로 다시 잡아준다
     resizeCanvas();
     resizeGL();
@@ -2619,6 +2752,7 @@ function showTab(which) {
 }
 $('tabView').onclick = function () { showTab('view'); };
 $('tabEdit').onclick = function () { showTab('edit'); };
+$('tabHelp').onclick = function () { showTab('help'); };
 window.addEventListener('resize', resizeViewGL);
 
 /* ---------------- 시작 ---------------- */
