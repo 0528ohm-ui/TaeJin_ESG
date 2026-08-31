@@ -1,0 +1,2633 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>도면 → 3D 회전체 변환 v1.6</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Malgun Gothic", sans-serif; font-size: 13px;
+    background: #1b1e23; color: #e6e6e6; overflow: hidden;
+  }
+  header {
+    height: 44px; display: flex; align-items: center; gap: 10px;
+    padding: 0 12px; background: #23272e; border-bottom: 1px solid #000;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  .badge { background: #2d6cdf; color: #fff; border-radius: 3px; padding: 2px 7px; font-size: 11px; }
+  #wrap { display: flex; height: calc(100vh - 44px); }
+  #left, #right { position: relative; height: 100%; }
+  #left { flex: 1 1 55%; border-right: 1px solid #000; }
+  #right { flex: 1 1 45%; background: #101215; }
+  canvas { display: block; }
+  #imgCanvas { cursor: crosshair; background: #2a2e35; }
+
+  .panel {
+    position: absolute; top: 8px; left: 8px; z-index: 5;
+    background: rgba(30,34,40,.95); border: 1px solid #3a3f47;
+    border-radius: 5px; padding: 8px; width: 292px;
+    transition: opacity .12s;
+  }
+  .panel.fade { opacity: .18; pointer-events: none; }   /* 화면 이동 중 투명화 */
+  .phead {
+    display: flex; align-items: center; gap: 6px;
+    margin: -8px -8px 8px -8px; padding: 5px 8px;
+    background: #2b313a; border-bottom: 1px solid #3a3f47;
+    border-radius: 4px 4px 0 0; cursor: move; user-select: none;
+  }
+  .phead .tt { font-size: 11px; color: #9aa3ae; flex: 1; }
+  .panel.min .phead { margin-bottom: -8px; border-bottom: none; border-radius: 4px; }
+  .panel.min #panelBody { display: none; }
+  .panel.min { width: 200px; }
+  .panel .row { display: flex; gap: 5px; margin-bottom: 6px; align-items: center; flex-wrap: wrap; }
+  .panel .row:last-child { margin-bottom: 0; }
+  button {
+    background: #2f3540; color: #e6e6e6; border: 1px solid #4a515c;
+    border-radius: 3px; padding: 5px 8px; cursor: pointer; font-size: 12px;
+  }
+  button:hover { background: #3b424e; }
+  button.on { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
+  button.warn { border-color: #a04040; }
+  button.sm { padding: 3px 6px; font-size: 11px; }
+  input[type=number], input[type=text] {
+    background: #14171b; color: #e6e6e6; border: 1px solid #4a515c;
+    border-radius: 3px; padding: 4px 5px; width: 66px; font-size: 12px;
+  }
+  label { font-size: 12px; color: #b6bcc4; }
+  .hint { font-size: 11px; color: #8d95a0; line-height: 1.5; }
+  .sep { height: 1px; background: #3a3f47; margin: 8px 0; }
+  #status {
+    position: absolute; bottom: 6px; left: 6px; right: 6px; z-index: 4;
+    background: rgba(30,34,40,.92); border: 1px solid #3a3f47;
+    border-radius: 4px; padding: 5px 8px; font-size: 11.5px;
+    pointer-events: none;
+  }
+  #rpanel {
+    position: absolute; top: 8px; right: 8px; z-index: 5;
+    background: rgba(30,34,40,.95); border: 1px solid #3a3f47;
+    border-radius: 5px; padding: 8px; width: 214px;
+  }
+  .k { color: #7fb3ff; }
+  .grp { border: 1px solid #333940; border-radius: 4px; padding: 6px; margin-bottom: 6px; }
+  .grp .t { font-size: 11px; color: #6f7883; margin-bottom: 5px; }
+
+  /* 4단계 흐름 */
+  .steps { margin: 8px 0; }
+  .step {
+    display: flex; align-items: center; gap: 7px;
+    padding: 4px 0; border-bottom: 1px solid #2a2f36;
+  }
+  .step:last-child { border-bottom: none; }
+  .step .n {
+    width: 19px; height: 19px; flex: 0 0 19px; border-radius: 50%;
+    background: #3a414b; color: #aab3bd; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step.done .n { background: #22c55e; color: #06210f; }
+  .step .d { font-size: 11px; color: #6f7883; }
+  .step button { min-width: 92px; }
+  #vList { margin: 4px 0 8px 0; }
+  #rpanel { width: 176px; }
+
+  /* ===== 탭 ===== */
+  .tabs { display: flex; gap: 3px; margin-left: 6px; }
+  .tabs button {
+    padding: 5px 16px; border-radius: 4px 4px 0 0; border-bottom: none;
+    background: #23272e; color: #8d95a0;
+  }
+  .tabs button.on { background: #2d6cdf; color: #fff; border-color: #2d6cdf; }
+
+  /* ===== 조회 탭 (단일 컬럼 · 모바일 대응) ===== */
+  #viewWrap { display: flex; flex-direction: column; height: calc(100vh - 44px); }
+  .vhead {
+    display: flex; gap: 6px; align-items: center; flex: 0 0 auto;
+    padding: 7px 8px; background: #23272e; border-bottom: 1px solid #000;
+  }
+  .vhead input { flex: 1 1 40%; width: auto; min-width: 90px; }
+  .vhead select {
+    flex: 2 1 55%; min-width: 110px; background: #14171b; color: #e6e6e6;
+    border: 1px solid #4a515c; border-radius: 3px; padding: 4px 5px; font-size: 12px;
+  }
+
+  /* 위: 도면 / 아래: 3D */
+  #vTop { flex: 1 1 50%; min-height: 0; background: #fff; position: relative; }
+  #vDrawWrap {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; padding: 6px;
+  }
+  #vDraw { max-width: 100%; max-height: 100%; object-fit: contain; }
+  #vDrawMsg { color: #7a8189; font-size: 13px; text-align: center; }
+  #vInfo {
+    flex: 0 0 auto; padding: 6px 10px; font-size: 12px; line-height: 1.65;
+    background: #1e2228; border-top: 1px solid #3a3f47;
+    border-bottom: 1px solid #3a3f47; color: #b6bcc4;
+  }
+  #vBot { flex: 1 1 50%; min-height: 0; position: relative; background: #101215; }
+  #viewCanvas { display: block; width: 100%; height: 100%; }
+  #vBtns {
+    position: absolute; left: 8px; bottom: 8px; z-index: 3;
+    display: flex; gap: 5px; align-items: center; flex-wrap: wrap;
+    background: rgba(30,34,40,.92); border: 1px solid #3a3f47;
+    border-radius: 5px; padding: 5px 7px;
+  }
+
+  /* 좁은 화면 */
+  @media (max-width: 700px) {
+    header h1 { font-size: 13px; }
+    #headHint { display: none; }
+    .vhead { flex-wrap: wrap; }
+    .vhead input, .vhead select { flex: 1 1 100%; }
+    #vBtns button, #vBtns label { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>도면 &rarr; 3D 회전체 변환</h1>
+  <span class="badge">v1.6</span>
+  <div class="tabs">
+    <button id="tabView" class="on">조회</button>
+    <button id="tabEdit">작성</button>
+  </div>
+  <span class="hint" id="headHint">저장된 형상을 한눈에 보기</span>
+</header>
+
+<!-- ==================== 조회 탭 ==================== -->
+<div id="viewWrap">
+  <div class="vhead">
+    <input type="text" id="vSearch" placeholder="품번 · 품명 · 고객사 검색">
+    <select id="vPick"></select>
+    <button class="sm" id="vReload">↻</button>
+  </div>
+
+  <div id="vTop">
+    <div id="vDrawWrap">
+      <img id="vDraw" alt="" style="display:none">
+      <div id="vDrawMsg">검색해서 품번을 선택해라.</div>
+    </div>
+  </div>
+
+  <div id="vInfo">—</div>
+
+  <div id="vBot">
+    <canvas id="viewCanvas"></canvas>
+    <div id="vBtns">
+      <button id="vEdit">작성 탭에서 열기</button>
+      <button id="vStl">STL 저장</button>
+      <label><input type="checkbox" id="vSpin" checked> 자동 회전</label>
+    </div>
+  </div>
+</div>
+
+<div id="wrap" style="display:none">
+  <div id="left">
+    <canvas id="imgCanvas"></canvas>
+
+    <div class="panel" id="panel">
+      <div class="phead" id="panelHead">
+        <span class="tt">설정 &nbsp;<span style="color:#6f7883">드래그로 이동</span></span>
+        <button class="sm" id="btnFit">맞춤(F)</button>
+        <button class="sm" id="btnMin">접기(H)</button>
+      </div>
+      <div id="panelBody">
+
+      <div class="grp" style="border-color:#2d6cdf">
+        <div class="t">품번</div>
+        <div class="row">
+          <input type="text" id="partSearch" placeholder="품번 / 품명 검색" style="flex:1;width:auto">
+          <button class="sm" id="btnPartReload">↻</button>
+        </div>
+        <div class="row">
+          <select id="partSel" style="flex:1;min-width:0;background:#14171b;color:#e6e6e6;
+                  border:1px solid #4a515c;border-radius:3px;font-size:12px;padding:4px"></select>
+        </div>
+        <div class="row">
+          <button id="btnPartOpen">도면 열기</button>
+          <button id="btnDbLoad">형상 불러오기</button>
+          <button id="btnDbSave">형상 저장</button>
+          <button class="sm warn" id="btnDbDel">삭제</button>
+        </div>
+        <div class="row" style="margin-top:2px">
+          <label><input type="checkbox" id="onlySaved"> 형상 저장된 품번만</label>
+        </div>
+        <div id="partInfo" class="hint">품번 목록 로딩 중…</div>
+      </div>
+
+      <div class="row">
+        <button id="btnLoad">이미지 직접 열기</button>
+        <span class="hint">Ctrl+V / 드래그&amp;드롭</span>
+      </div>
+      <div class="row hint" style="margin-top:-2px">Ctrl+V 붙여넣기 / 작업파일(.d3j) 드래그&amp;드롭</div>
+      <input type="file" id="fileIn" accept="image/*" style="display:none">
+      <input type="file" id="projIn" accept=".d3j,application/json" style="display:none">
+
+      <div class="steps">
+        <div class="step">
+          <span class="n">1</span>
+          <button id="mLevel">기울기 보정</button>
+          <span class="d">삐뚤어진 스캔 펴기</span>
+        </div>
+        <div class="step">
+          <span class="n">2</span>
+          <button id="mAxis">축 지정</button>
+          <span class="d">중심선 위 2점</span>
+        </div>
+        <div class="step">
+          <span class="n">3</span>
+          <button id="mMag">윤곽 따기</button>
+          <button class="sm" id="btnEdit">점 편집 &#9662;</button>
+        </div>
+        <div id="editGrp" style="display:none">
+        <div class="grp" style="margin:6px 0 2px 0">
+          <div class="t">윤곽 점 편집</div>
+          <div class="row">
+            <button id="eIns">점 추가</button>
+            <button id="eDel">점 삭제</button>
+          </div>
+          <div class="row">
+            <button id="eRng">구간 삭제</button>
+            <button id="eJoin">잇기</button>
+            <button class="sm" id="eCancel">선택 해제</button>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="closeLoop" checked> 윤곽 닫기(첫점↔끝점)</label>
+          </div>
+          <div id="eHint" class="hint">점 추가: 선 위 클릭 / 점 삭제: 점 클릭<br>
+            구간 삭제·잇기: 점 2개를 차례로 클릭</div>
+          </div>
+
+        </div>
+        <div class="step">
+          <span class="n">4</span>
+          <button id="mVerify">치수 기준점</button>
+          <button id="vFitAuto">보정 실행</button>
+        </div>
+      </div>
+
+      <div id="vList" class="hint">기준점 없음</div>
+
+      <div class="row">
+        <button id="build">3D 생성</button>
+        <button id="stl">STL 저장</button>
+      </div>
+
+      <div class="row">
+        <button id="undo">되돌리기</button>
+        <button id="clearPts" class="warn">윤곽 초기화</button>
+        <button class="sm" id="btnAdv" style="margin-left:auto">고급 &#9662;</button>
+      </div>
+
+      <!-- ================= 고급 설정 (기본 숨김) ================= -->
+      <div id="adv" style="display:none">
+        <div class="sep"></div>
+
+        <div class="grp">
+          <div class="t">기울기 미세조정</div>
+          <div class="row">
+            <label>각도</label>
+            <input type="number" id="rotDeg" value="0" step="0.1">
+            <label>&deg;</label>
+            <button class="sm" id="rotM1">&minus;0.1</button>
+            <button class="sm" id="rotP1">+0.1</button>
+            <button class="sm" id="rot90">+90</button>
+            <button class="sm" id="rotZero">0</button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="t">보조 모드</div>
+          <div class="row">
+            <button id="mScale">배율(2점 직접)</button>
+            <button id="mTrace">윤곽 수동</button>
+          </div>
+          <div class="row">
+            <label>1 px =</label>
+            <input type="number" id="mmPerPx" value="0" step="0.00001">
+            <label>mm</label>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="t">치수 보정 방식</div>
+          <div class="row">
+            <label><input type="checkbox" id="vIsRad"> 반지름으로 입력</label>
+          </div>
+          <div class="row">
+            <button class="sm" id="vFitScale">배율만</button>
+            <button class="sm" id="vFitBoth">축+배율 동시</button>
+            <button class="sm warn" id="vClear">기준점 비우기</button>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="t">저장 옵션</div>
+          <div class="row">
+            <label>형상 label</label>
+            <input type="text" id="profLabel" value="main" style="width:90px">
+          </div>
+          <div class="row hint" style="margin-top:-2px">
+            한 품번에 단면이 여러 개면 구분자로 사용 (예: IW / OW)
+          </div>
+          <div class="sep"></div>
+          <div class="row">
+            <button class="sm" id="btnSaveProj">파일로 저장(.d3j)</button>
+            <button class="sm" id="btnOpenProj">파일 열기</button>
+          </div>
+          <div class="row">
+            <label>이미지</label>
+            <select id="saveImgMode" style="background:#14171b;color:#e6e6e6;border:1px solid #4a515c;border-radius:3px;padding:4px;font-size:12px">
+              <option value="none">제외 (형상만)</option>
+              <option value="jpeg">압축 포함 (JPEG)</option>
+              <option value="png">원본 포함 (PNG)</option>
+            </select>
+          </div>
+          <div class="row hint">
+            DB 저장을 쓰면 이미지는 스토리지에 이미 있으므로 제외가 기본.
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="t">스냅 옵션</div>
+          <div class="row">
+            <label><input type="checkbox" id="snap" checked> 에지 스냅</label>
+            <label>반경 <input type="number" id="snapR" value="6" min="0" max="40" style="width:44px"></label>
+            <label>화면px</label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="ortho" checked> 직교 보정</label>
+            <label>허용 <input type="number" id="orthoTol" value="8" min="0" max="30" style="width:44px"></label>
+            <label>&deg;</label>
+          </div>
+          <div class="row">
+            <label>직교 최대 보정량</label>
+            <input type="number" id="orthoMax" value="25" min="0" max="300" style="width:52px">
+            <label>화면px</label>
+          </div>
+          <div class="row hint" style="margin-top:-2px">
+            Alt+클릭 = 스냅·직교 모두 무시하고 찍은 자리 그대로
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="axisLock" checked> 축 수직/수평 고정</label>
+          </div>
+          <div class="row">
+            <label>자석 단순화 <input type="number" id="dpEps" value="1.5" step="0.5" min="0.5" style="width:48px"></label>
+            <label>px</label>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="t">3D 표시</div>
+          <div class="row">
+            <label>회전각</label>
+            <input type="range" id="phi" min="30" max="360" value="360" step="10" style="flex:1">
+            <span id="phiV">360&deg;</span>
+          </div>
+          <div class="row">
+            <label>분할</label>
+            <input type="range" id="seg" min="12" max="180" value="96" step="4" style="flex:1">
+            <span id="segV">96</span>
+          </div>
+          <div class="row"><label><input type="checkbox" id="wire"> 와이어프레임</label></div>
+        </div>
+
+        <div class="row hint">
+          점 드래그=이동 / Shift+클릭=삭제<br>
+          화면 이동: 우드래그 &middot; 중드래그 &middot; Space+좌드래그 &middot; 방향키
+        </div>
+      </div>
+      <!-- ================= /고급 ================= -->
+
+      </div><!-- /panelBody -->
+    </div>
+
+    <div id="readout" style="position:absolute;bottom:30px;right:8px;z-index:4;
+         background:rgba(30,34,40,.92);border:1px solid #3a3f47;border-radius:4px;
+         padding:4px 8px;font-size:12px;pointer-events:none;color:#7fb3ff">—</div>
+    <div id="status">이미지를 열거나 Ctrl+V 로 붙여넣어라.</div>
+  </div>
+
+  <div id="right">
+    <canvas id="glCanvas"></canvas>
+    <div id="rpanel">
+      <div class="hint">좌드래그 회전 / 휠 줌 / 우드래그 이동</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =========================================================
+   도면 -> 3D 회전체 변환  v1.6
+   v0.1 -> v0.2 변경점
+   - 기준선 2점으로 이미지 자체를 회전시켜 기울기 보정 (픽셀 베이크)
+   - 직교 보정: 이전 점 대비 +-N도 이내면 완전 수평/수직으로 정렬
+   - 자석 트레이스: 두 점 사이 어두운 픽셀을 다익스트라로 자동 추적
+   - 점 드래그 이동 / Shift+클릭 삭제
+   - 축 수직/수평 자동 고정
+
+   v0.2 -> v0.3 변경점
+   - 화면 이동 버그 수정: 팬 이벤트를 cv 가 아닌 window 에 바인딩
+     (커서가 캔버스 밖으로 나가면 mousemove 가 끊겨 이동이 멈추던 문제)
+   - 이동 수단 추가: 중클릭 드래그, Space+좌드래그, 방향키
+   - 설정 패널 접기(H) / 제목줄 드래그로 위치 이동
+   - 화면 이동 중 패널 자동 투명화 → 가려진 도면 확인 가능
+   - 화면 맞춤 단축키 F
+
+   v0.3 -> v0.4 변경점
+   - 치수 검증 모드: 축~형상면 거리를 도면값과 대조 (오차 색상 표시)
+   - 축+배율 동시 역산: 지름이 다른 기준점 2개 이상으로 최소자승 피팅
+     r_mm = k * (d_px - c)  ->  k(배율)와 c(축 위치 오차)를 동시에 구함
+   - 커서 위치의 Ø/R 실시간 표시
+
+   v0.4 -> v0.5 변경점
+   - UI 단순화: 실제 사용하는 4단계만 노출, 나머지는 "고급"으로 숨김
+     1 기울기 보정 / 2 축 지정 / 3 윤곽 따기(자석) / 4 치수 기준점+보정
+   - "보정 실행" 통합 버튼: 기준점 2개 이상이면 축+배율 동시, 1개면 배율만
+   - 각 단계 완료 시 번호 원이 초록으로 바뀜
+
+   v0.5 -> v0.6 변경점
+   - 회전각 기본값 270도 -> 360도 (완전한 회전체로 바로 생성)
+
+   v0.6 -> v0.7 변경점
+   - 작업파일(.d3j) 저장/불러오기: 점 좌표 + 도면 이미지만 저장하고
+     3D 형상은 불러올 때 재생성. STL 대비 크게 작다.
+   - 좌표는 회전 보정 전 원본 이미지 기준으로 저장 -> 회전각 바꿔도 유지
+   - 이미지 저장 방식 선택 (JPEG 압축 / PNG 원본 / 제외)
+   - 같은 크기 이미지를 다시 넣으면 작업 내용 유지 (이미지 제외 저장분 복구)
+   - 드래그&드롭으로 이미지·작업파일 열기
+   - STL 을 ASCII -> 바이너리로 변경 (같은 형상이 약 1/5 크기)
+
+   v0.7 -> v0.8 변경점
+   - Supabase 연동: 품번 목록(qc_part) + 스토리지 도면(qc-drawings)
+   - 형상 데이터를 public.qc_part_3d 에 저장/불러오기 (part_id + label upsert)
+     이미지는 스토리지에 이미 있으므로 형상 저장 시 중복 보관하지 않는다.
+   - 도면 크기가 저장 당시와 다르면 경고 (ECO 등으로 도면 교체 감지)
+   - 파일(.d3j) 저장/열기는 고급으로 이동 (오프라인/임시 작업용)
+
+   v0.8 -> v0.9 변경점  (확대 상태에서 점이 엉뚱한 곳에 찍히던 문제)
+   - 에지 스냅 반경을 이미지px -> 화면px 기준으로 변경
+     기존에는 10배 확대 시 화면상 반경도 10배가 되어 먼 선으로 끌려갔다
+   - 직교 보정에 최대 이동량 제한 추가 (기본 화면 25px)
+     각도만 보면 긴 세그먼트일수록 밀리는 거리가 커지는 문제
+   - Alt+클릭: 스냅/직교 전부 무시. 자석 모드에서는 추적 없이 직선 1점 추가
+   - 커서에 스냅 반경 원 + 실제 착지 위치(십자) 미리보기 표시
+
+   v0.9 -> v1.0 변경점
+   - 품번 목록에 형상 저장 여부 표시 (초록 ● / 저장된 품번만 보기 필터)
+   - 품번 선택 시 저장 상태와 최종 수정일을 상태바에 안내
+   - 형상 삭제 버튼 (확인 후 DELETE)
+   - 저장/삭제 직후 목록 표시 자동 갱신
+
+   v1.0 -> v1.1 변경점
+   - 조회 / 작성 탭 분리. 페이지를 열면 조회 탭이 먼저 나온다.
+   - 조회 탭: 저장된 형상을 3D 썸네일 카드 그리드로 표시
+     (외경/내경/높이, 윤곽 점 수, 수정일 함께 노출)
+   - 카드 선택 시 큰 3D 뷰 + 자동 회전, STL 저장, 작성 탭으로 바로 편집
+   - 썸네일은 렌더러 1개를 재사용해 순차 렌더 후 2D 캔버스에 복사
+   - STL 내보내기를 공용 함수로 분리, 파일명에 품번 사용
+
+   v1.1 -> v1.2 변경점
+   - 조회 탭을 검색 중심으로 재구성. 썸네일 그리드 제거.
+     왼쪽 검색 목록(품번·품명·고객사·label) / 오른쪽 위 도면, 아래 3D
+   - 선택하면 스토리지 도면 이미지를 그대로 띄운다
+
+   v1.2 -> v1.3 변경점
+   - 도면이 안 보이던 버그 수정.
+     스타일시트에 #vDraw{display:none} 을 두고 로드 후 style.display=''
+     로 되돌렸는데, 인라인 값을 비우면 스타일시트 값(none)이 다시 적용된다.
+     초기 숨김을 인라인으로 옮기고 표시할 때 'block' 을 명시.
+
+   v1.3 -> v1.4 변경점  (모바일 대응)
+   - 조회 탭 좌측 목록 사이드바 제거. 맨 위 한 줄(검색 + 드롭다운)만 남김
+   - 화면 전체가 위 도면 / 아래 3D 세로 2단 구성
+   - 검색어를 치면 결과 첫 항목을 자동으로 띄운다
+   - 700px 이하에서 검색줄 2행 배치, 헤더 설명 숨김
+
+   v1.4 -> v1.5 변경점  (작성 탭 정리)
+   - 품번 목록(5줄 리스트) -> 한 줄 드롭다운
+   - 3D 생성 / STL 저장 버튼을 오른쪽 위에서 왼쪽 패널로 이동
+   - 윤곽 점 편집 도구 추가
+       점 추가  : 클릭한 선분 사이에 점 삽입
+       점 삭제  : 클릭한 점 제거
+       구간 삭제: 두 점을 찍어 사이 구간 일괄 삭제
+       잇기     : 두 점 사이를 자석 추적으로 다시 그림
+     각 모드는 커서 위치에 미리보기(삽입 위치·삭제 대상·삭제 범위)를 표시
+   - 윤곽 닫기 체크박스를 고급에서 편집 그룹으로 이동
+
+   v1.5 -> v1.6 변경점
+   - 윤곽 점 편집 그룹을 3단계(윤곽 따기) 바로 아래로 이동
+   - "점 편집" 버튼으로 열고 닫는다. 기본은 닫힌 상태
+   - 편집 도구를 쓰면 그룹이 자동으로 열리고, 닫으면 편집 모드에서 빠져나온다
+   ========================================================= */
+
+const S = {
+  src: null,            // 원본 Image
+  work: null,           // 회전 반영된 작업 캔버스
+  wctx: null,
+  gray: null,           // 작업 캔버스 흑백 배열
+  gw: 0, gh: 0,
+  rot: 0,               // 누적 회전각 (deg)
+  view: { s: 1, x: 0, y: 0 },
+  mode: 'axis',         // level | axis | scale | trace | magnet
+  level: [],
+  axis: [],
+  scalePts: [],
+  pts: [],              // 윤곽 점 (작업 캔버스 좌표)
+  vpts: [],             // 치수 검증 기준점 [{p, mm, isRad}]
+  mmPerPx: 0,
+  panning: false,
+  dragIdx: -1,
+  cursor: null,         // 스냅 미리보기용 커서 위치
+  cursorAlt: false,
+  last: { x: 0, y: 0 }
+};
+
+const cv = document.getElementById('imgCanvas');
+const ctx = cv.getContext('2d');
+const statusEl = document.getElementById('status');
+const $ = function (id) { return document.getElementById(id); };
+function setStatus(t) { statusEl.innerHTML = t; }
+
+function resizeCanvas() {
+  const box = $('left').getBoundingClientRect();
+  cv.width = box.width; cv.height = box.height;
+  draw();
+}
+window.addEventListener('resize', function () { resizeCanvas(); resizeGL(); });
+
+/* ---------------- 이미지 로드 ---------------- */
+$('btnLoad').onclick = function () { $('fileIn').click(); };
+$('fileIn').onchange = function (e) { if (e.target.files[0]) loadFile(e.target.files[0]); };
+
+window.addEventListener('paste', function (e) {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') === 0) {
+      loadFile(items[i].getAsFile()); e.preventDefault(); break;
+    }
+  }
+});
+
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = function () {
+    // 이미 작업 중이고 새 이미지 크기가 같으면 = 배경만 갈아끼우는 것으로 보고
+    // 축·윤곽·기준점을 그대로 유지한다. (이미지 제외로 저장한 파일 복구 경로)
+    const sameSize = S.src && S.src.width === im.width && S.src.height === im.height;
+    const keepDeg = S.rot;
+    const keep = sameSize ? {
+      axis: S.axis.map(function (p) { return workToOrig(p, keepDeg); }),
+      pts: S.pts.map(function (p) { return workToOrig(p, keepDeg); }),
+      vpts: S.vpts.map(function (v) { return { p: workToOrig(v.p, keepDeg), mm: v.mm, isRad: v.isRad }; })
+    } : null;
+
+    S.src = im;
+    if (!sameSize) {
+      S.rot = 0; $('rotDeg').value = 0;
+      S.level = []; S.axis = []; S.scalePts = []; S.pts = []; S.vpts = [];
+      vRender();
+      bakeRotation(0, false);
+    } else {
+      bakeRotation(keepDeg, false);
+      S.axis = keep.axis.map(function (p) { return origToWork(p, keepDeg); });
+      S.pts = keep.pts.map(function (p) { return origToWork(p, keepDeg); });
+      S.vpts = keep.vpts.map(function (v) { return { p: origToWork(v.p, keepDeg), mm: v.mm, isRad: v.isRad }; });
+      vRender();
+    }
+    fitView();
+    URL.revokeObjectURL(url);
+    if (sameSize) {
+      setStatus('배경 이미지 교체 (' + im.width + '×' + im.height + 'px). 작업 내용 유지됨.');
+    } else {
+      setStatus('로드 완료 (' + im.width + '×' + im.height + 'px). 도면이 삐뚤면 <span class="k">1. 기울기 보정</span> 먼저, 아니면 <span class="k">2. 축 지정</span> 으로.');
+      setMode('axis');
+    }
+  };
+  im.src = url;
+}
+
+function fitView() {
+  if (!S.work) return;
+  const fs = Math.min(cv.width / S.work.width, cv.height / S.work.height) * 0.95;
+  S.view.s = fs;
+  S.view.x = (cv.width - S.work.width * fs) / 2;
+  S.view.y = (cv.height - S.work.height * fs) / 2;
+  draw();
+}
+
+/* ---------------- 회전 베이크 ----------------
+   회전을 픽셀에 실제로 구워버림.
+   이후 모든 스냅/자석/좌표가 정렬된 이미지 기준으로 동작한다.
+------------------------------------------------ */
+function rotSize(w, h, rad) {
+  const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
+  return { W: Math.round(w * c + h * s), H: Math.round(w * s + h * c) };
+}
+function origToWork(p, deg) {
+  const rad = deg * Math.PI / 180;
+  const w = S.src.width, h = S.src.height;
+  const sz = rotSize(w, h, rad);
+  const dx = p.x - w / 2, dy = p.y - h / 2;
+  const c = Math.cos(rad), s = Math.sin(rad);
+  return { x: sz.W / 2 + dx * c - dy * s, y: sz.H / 2 + dx * s + dy * c };
+}
+function workToOrig(p, deg) {
+  const rad = deg * Math.PI / 180;
+  const w = S.src.width, h = S.src.height;
+  const sz = rotSize(w, h, rad);
+  const dx = p.x - sz.W / 2, dy = p.y - sz.H / 2;
+  const c = Math.cos(-rad), s = Math.sin(-rad);
+  return { x: w / 2 + dx * c - dy * s, y: h / 2 + dx * s + dy * c };
+}
+
+function bakeRotation(newDeg, remap) {
+  if (!S.src) return;
+  const oldDeg = S.rot;
+  let keep = null;
+  if (remap) {
+    keep = {
+      axis: S.axis.map(function (p) { return workToOrig(p, oldDeg); }),
+      scalePts: S.scalePts.map(function (p) { return workToOrig(p, oldDeg); }),
+      pts: S.pts.map(function (p) { return workToOrig(p, oldDeg); }),
+      vpts: S.vpts.map(function (v) {
+        return { p: workToOrig(v.p, oldDeg), mm: v.mm, isRad: v.isRad };
+      })
+    };
+  }
+
+  const rad = newDeg * Math.PI / 180;
+  const w = S.src.width, h = S.src.height;
+  const sz = rotSize(w, h, rad);
+
+  const c2 = document.createElement('canvas');
+  c2.width = sz.W; c2.height = sz.H;
+  const cx = c2.getContext('2d', { willReadFrequently: true });
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, sz.W, sz.H);
+  cx.translate(sz.W / 2, sz.H / 2);
+  cx.rotate(rad);
+  cx.drawImage(S.src, -w / 2, -h / 2);
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+
+  S.work = c2; S.wctx = cx; S.rot = newDeg;
+
+  // 흑백 캐시 (에지 스냅 / 자석 트레이스에서 사용)
+  const d = cx.getImageData(0, 0, sz.W, sz.H).data;
+  const g = new Uint8Array(sz.W * sz.H);
+  for (let i = 0, j = 0; j < g.length; i += 4, j++) {
+    g[j] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0;
+  }
+  S.gray = g; S.gw = sz.W; S.gh = sz.H;
+
+  if (remap && keep) {
+    S.axis = keep.axis.map(function (p) { return origToWork(p, newDeg); });
+    S.scalePts = keep.scalePts.map(function (p) { return origToWork(p, newDeg); });
+    S.pts = keep.pts.map(function (p) { return origToWork(p, newDeg); });
+    S.vpts = keep.vpts.map(function (v) {
+      return { p: origToWork(v.p, newDeg), mm: v.mm, isRad: v.isRad };
+    });
+    vRender();
+  }
+  draw();
+}
+
+/* ---------------- 회전 UI ---------------- */
+$('mLevel').onclick = function () {
+  if (!S.src) return;
+  S.level = [];
+  setMode('level');
+  setStatus('수평 또는 수직이어야 할 <span class="k">직선 위 두 점</span>을 클릭. 길수록 정확. 가까운 축으로 자동 정렬된다.');
+};
+function applyRot(deg) {
+  deg = ((deg % 360) + 360) % 360;
+  $('rotDeg').value = deg.toFixed(2);
+  bakeRotation(deg, true);
+  fitView();
+}
+$('rotDeg').onchange = function (e) { applyRot(parseFloat(e.target.value) || 0); };
+$('rotM1').onclick = function () { applyRot(S.rot - 0.1); };
+$('rotP1').onclick = function () { applyRot(S.rot + 0.1); };
+$('rot90').onclick = function () { applyRot(S.rot + 90); };
+$('rotZero').onclick = function () { applyRot(0); };
+
+/* ---------------- 좌표 변환 ---------------- */
+function toImg(sx, sy) { return { x: (sx - S.view.x) / S.view.s, y: (sy - S.view.y) / S.view.s }; }
+function toScr(ix, iy) { return { x: ix * S.view.s + S.view.x, y: iy * S.view.s + S.view.y }; }
+
+/* ---------------- 에지 스냅 ----------------
+   v0.9: 반경을 "화면 px" 기준으로 해석한다.
+   이미지 px 기준이면 10배 확대 시 화면상 반경도 10배가 되어
+   클릭한 곳에서 한참 떨어진 선으로 끌려갔다.
+------------------------------------------------ */
+function snapRadiusImg() {
+  const R = parseInt($('snapR').value) || 0;
+  if (R <= 0) return 0;
+  // 화면 R px 에 해당하는 이미지 px (너무 커지지 않게 상한)
+  return Math.max(1, Math.min(30, R / S.view.s));
+}
+function snapToEdge(p, force) {
+  if (force || !$('snap').checked || !S.gray) return p;
+  const R = snapRadiusImg();
+  if (R <= 0) return p;
+  const cxp = Math.round(p.x), cyp = Math.round(p.y);
+  const Ri = Math.ceil(R);
+  let best = p, bestScore = Infinity;
+  for (let y = cyp - Ri; y <= cyp + Ri; y++) {
+    if (y < 0 || y >= S.gh) continue;
+    for (let x = cxp - Ri; x <= cxp + Ri; x++) {
+      if (x < 0 || x >= S.gw) continue;
+      const dist = Math.hypot(x - p.x, y - p.y);
+      if (dist > R) continue;
+      // 어둡고 가까운 픽셀 우선. 거리 가중치는 화면 기준으로 정규화
+      const score = S.gray[y * S.gw + x] + (dist / R) * 90;
+      if (score < bestScore) { bestScore = score; best = { x: x, y: y }; }
+    }
+  }
+  return best;
+}
+
+/* ---------------- 직교 보정 ----------------
+   이전 점 대비 각도가 수평/수직에서 tol 이내면 완전히 맞춘다.
+   v0.9: 이동량 상한 추가. 각도만 보면 세그먼트가 길수록 밀리는 거리가
+   커져서(300px 구간 * tan8도 = 42px) 클릭한 곳과 크게 어긋났다.
+------------------------------------------------ */
+function orthoFix(prev, p, force) {
+  if (force || !$('ortho').checked || !prev) return p;
+  const tol = parseFloat($('orthoTol').value) || 0;
+  if (tol <= 0) return p;
+  const dx = p.x - prev.x, dy = p.y - prev.y;
+  if (Math.hypot(dx, dy) < 1) return p;
+  const ang = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+  let q = null;
+  if (ang <= tol || ang >= 180 - tol) q = { x: p.x, y: prev.y };        // 수평
+  else if (Math.abs(ang - 90) <= tol) q = { x: prev.x, y: p.y };        // 수직
+  if (!q) return p;
+  // 보정 때문에 화면상 몇 px 이나 움직이는지 확인
+  const maxPx = parseFloat($('orthoMax').value);
+  const movedScr = Math.hypot(q.x - p.x, q.y - p.y) * S.view.s;
+  if (maxPx > 0 && movedScr > maxPx) return p;   // 너무 멀면 보정 포기
+  return q;
+}
+function orthoFixPath(path, startPrev) {
+  const out = [];
+  let prev = startPrev || null;
+  for (let i = 0; i < path.length; i++) {
+    const q = orthoFix(prev, path[i]);
+    out.push(q);
+    prev = q;
+  }
+  return out;
+}
+
+/* ---------------- 자석 트레이스 (다익스트라) ----------------
+   두 점 사이를 어두운 픽셀 위주로 최소비용 경로 탐색.
+   비용 = 1 + (밝기/255)^3 * 60  -> 검은 선 위 1, 흰 배경 61
+------------------------------------------------------------- */
+function magnetPath(a, b) {
+  const PAD = 45;
+  const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x)) - PAD);
+  const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y)) - PAD);
+  const x1 = Math.min(S.gw - 1, Math.ceil(Math.max(a.x, b.x)) + PAD);
+  const y1 = Math.min(S.gh - 1, Math.ceil(Math.max(a.y, b.y)) + PAD);
+  const W = x1 - x0 + 1, H = y1 - y0 + 1;
+  if (W * H > 900000) throw new Error('구간이 너무 넓다. 중간을 한 번 더 끊어서 클릭해라.');
+
+  const N = W * H;
+  const cost = new Float32Array(N);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const lum = S.gray[(y + y0) * S.gw + (x + x0)] / 255;
+      cost[y * W + x] = 1 + lum * lum * lum * 60;
+    }
+  }
+
+  const si = (Math.round(a.y) - y0) * W + (Math.round(a.x) - x0);
+  const ti = (Math.round(b.y) - y0) * W + (Math.round(b.x) - x0);
+  if (si < 0 || si >= N || ti < 0 || ti >= N) throw new Error('점이 이미지 범위 밖이다.');
+
+  const dist = new Float32Array(N);
+  for (let i = 0; i < N; i++) dist[i] = Infinity;
+  const prev = new Int32Array(N);
+  for (let i = 0; i < N; i++) prev[i] = -1;
+  const done = new Uint8Array(N);
+  dist[si] = 0;
+
+  // 이진 최소힙
+  const hK = new Float32Array(N + 2), hV = new Int32Array(N + 2);
+  let hn = 0;
+  function push(k, v) {
+    let i = ++hn; hK[i] = k; hV[i] = v;
+    while (i > 1) {
+      const p = i >> 1;
+      if (hK[p] <= hK[i]) break;
+      const tk = hK[p]; hK[p] = hK[i]; hK[i] = tk;
+      const tv = hV[p]; hV[p] = hV[i]; hV[i] = tv;
+      i = p;
+    }
+  }
+  function pop() {
+    const v = hV[1];
+    hK[1] = hK[hn]; hV[1] = hV[hn]; hn--;
+    let i = 1;
+    for (;;) {
+      const l = i << 1, r = l + 1;
+      let m = i;
+      if (l <= hn && hK[l] < hK[m]) m = l;
+      if (r <= hn && hK[r] < hK[m]) m = r;
+      if (m === i) break;
+      const tk = hK[m]; hK[m] = hK[i]; hK[i] = tk;
+      const tv = hV[m]; hV[m] = hV[i]; hV[i] = tv;
+      i = m;
+    }
+    return v;
+  }
+
+  const dxs = [1, -1, 0, 0, 1, 1, -1, -1];
+  const dys = [0, 0, 1, -1, 1, -1, 1, -1];
+  const dws = [1, 1, 1, 1, 1.4142, 1.4142, 1.4142, 1.4142];
+
+  push(0, si);
+  while (hn > 0) {
+    const u = pop();
+    if (done[u]) continue;
+    done[u] = 1;
+    if (u === ti) break;
+    const ux = u % W, uy = (u / W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = ux + dxs[d], ny = uy + dys[d];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      const v = ny * W + nx;
+      if (done[v]) continue;
+      const nd = dist[u] + cost[v] * dws[d];
+      if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd, v); }
+    }
+  }
+  if (ti !== si && prev[ti] < 0) throw new Error('경로를 못 찾았다.');
+
+  const path = [];
+  let c = ti;
+  while (c !== -1) {
+    path.push({ x: (c % W) + x0, y: ((c / W) | 0) + y0 });
+    if (c === si) break;
+    c = prev[c];
+  }
+  path.reverse();
+  return path;
+}
+
+// Douglas-Peucker 단순화
+function simplify(pts, eps) {
+  if (pts.length < 3) return pts.slice();
+  const keep = new Uint8Array(pts.length);
+  keep[0] = 1; keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const seg = stack.pop();
+    const s = seg[0], e = seg[1];
+    const ax = pts[s].x, ay = pts[s].y, bx = pts[e].x, by = pts[e].y;
+    const ddx = bx - ax, ddy = by - ay;
+    const L = Math.hypot(ddx, ddy) || 1;
+    let maxD = -1, idx = -1;
+    for (let i = s + 1; i < e; i++) {
+      const d = Math.abs(ddy * pts[i].x - ddx * pts[i].y + bx * ay - by * ax) / L;
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > eps && idx > 0) {
+      keep[idx] = 1;
+      stack.push([s, idx]); stack.push([idx, e]);
+    }
+  }
+  const out = [];
+  for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
+  return out;
+}
+
+/* ---------------- 모드 ---------------- */
+function setMode(m) {
+  S.mode = m;
+  $('mLevel').classList.toggle('on', m === 'level');
+  $('mAxis').classList.toggle('on', m === 'axis');
+  $('mScale').classList.toggle('on', m === 'scale');
+  $('mTrace').classList.toggle('on', m === 'trace');
+  $('mMag').classList.toggle('on', m === 'magnet');
+  $('mVerify').classList.toggle('on', m === 'verify');
+  $('eIns').classList.toggle('on', m === 'ins');
+  $('eDel').classList.toggle('on', m === 'del');
+  $('eRng').classList.toggle('on', m === 'rng');
+  $('eJoin').classList.toggle('on', m === 'join');
+  draw();
+}
+$('mAxis').onclick = function () {
+  S.axis = []; setMode('axis');
+  setStatus('축(중심선) 위 두 점 클릭. <span class="k">축 고정</span>이 켜져 있으면 자동으로 완전 수직/수평이 된다.');
+};
+$('mScale').onclick = function () {
+  if (S.axis.length < 2) { setStatus('축부터 지정해라.'); return; }
+  S.scalePts = []; setMode('scale');
+  setStatus('실제 치수를 아는 두 점 클릭. <span class="k">축~외경면</span>을 찍었으면 반지름값(Ø의 절반)을 입력.');
+};
+$('mTrace').onclick = function () {
+  if (S.axis.length < 2) { setStatus('축부터 지정해라.'); return; }
+  setMode('trace');
+  setStatus('윤곽 코너를 순서대로 클릭. 축 한쪽 면만. 직교 보정이 켜져 있으면 수평/수직으로 자동 정렬된다.');
+};
+$('mMag').onclick = function () {
+  if (S.axis.length < 2) { setStatus('축부터 지정해라.'); return; }
+  setMode('magnet');
+  setStatus('자석 모드: 첫 클릭=시작점, 이후 클릭마다 <span class="k">직전 점 → 클릭점 사이를 자동 추적</span>. 코너 단위로 끊어서 찍어라. 수정은 <span class="k">점 편집</span>.');
+};
+
+$('undo').onclick = function () {
+  if (S.mode === 'axis') S.axis.pop();
+  else if (S.mode === 'scale') S.scalePts.pop();
+  else if (S.mode === 'level') S.level.pop();
+  else if (S.mode === 'verify') { S.vpts.pop(); vRender(); }
+  else S.pts.pop();
+  draw();
+};
+$('clearPts').onclick = function () { S.pts = []; draw(); };
+$('mmPerPx').onchange = function (e) {
+  S.mmPerPx = parseFloat(e.target.value) || 0;
+  vRender();
+  if (mesh) build3D();
+};
+
+/* ---------------- 마우스 ---------------- */
+cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+function hitPoint(p) {
+  const r = 7 / S.view.s;
+  for (let i = S.pts.length - 1; i >= 0; i--) {
+    if (Math.hypot(S.pts[i].x - p.x, S.pts[i].y - p.y) < r) return i;
+  }
+  return -1;
+}
+
+cv.addEventListener('mousedown', function (e) {
+  const rc = cv.getBoundingClientRect();
+  const sx = e.clientX - rc.left, sy = e.clientY - rc.top;
+  // 화면 이동: 우클릭 / 중클릭 / Space+좌클릭
+  if (e.button === 2 || e.button === 1 || (e.button === 0 && S.space)) {
+    startPan(e); return;
+  }
+  if (!S.work) return;
+
+  const rawP = toImg(sx, sy);
+
+  const EDIT_MODES = ['trace','magnet','ins','del','rng','join'];
+  if (EDIT_MODES.indexOf(S.mode) >= 0) {
+    const hi = hitPoint(rawP);
+    if (hi >= 0) {
+      if (e.shiftKey) {
+        S.pts.splice(hi, 1); draw();
+        if (mesh) build3D();
+        setStatus('점 삭제. 남은 ' + S.pts.length + '개'); return;
+      }
+      // 점 위에서 시작한 드래그는 이동. 단 점 선택이 목적인 모드는 제외
+      if (S.mode !== 'del' && S.mode !== 'rng' && S.mode !== 'join') {
+        S.dragIdx = hi; return;
+      }
+    }
+  }
+
+  const raw2 = e.altKey;                 // Alt = 스냅/직교 무시
+  const p = snapToEdge(rawP, raw2);
+
+  // 윤곽 점 편집 모드가 먼저 처리한다
+  if (handleEditClick(p)) return;
+
+  if (S.mode === 'level') {
+    if (S.level.length >= 2) S.level = [];
+    S.level.push(p);
+    if (S.level.length === 2) {
+      const dx = S.level[1].x - S.level[0].x, dy = S.level[1].y - S.level[0].y;
+      const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      const corr = -(ang - Math.round(ang / 90) * 90);   // 가까운 축으로
+      S.level = [];
+      applyRot(S.rot + corr);
+      setStatus('기울기 보정 ' + corr.toFixed(2) + '° 적용 (누적 ' + S.rot.toFixed(2) + '°). 미세조정은 ±0.1 버튼.');
+      setMode('axis');
+      return;
+    }
+  } else if (S.mode === 'axis') {
+    if (S.axis.length >= 2) S.axis = [];
+    S.axis.push(p);
+    if (S.axis.length === 2 && $('axisLock').checked) {
+      const a = S.axis[0], b = S.axis[1];
+      if (Math.abs(b.x - a.x) < Math.abs(b.y - a.y)) b.x = a.x;  // 수직
+      else b.y = a.y;                                            // 수평
+    }
+    if (S.axis.length === 2) {
+      setStatus('축 완료. 다음 <span class="k">2. 배율</span>(권장) → <span class="k">3\'. 자석</span>');
+    }
+  } else if (S.mode === 'scale') {
+    if (S.scalePts.length >= 2) S.scalePts = [];
+    S.scalePts.push(p);
+    if (S.scalePts.length === 2) {
+      const px = Math.hypot(S.scalePts[0].x - S.scalePts[1].x, S.scalePts[0].y - S.scalePts[1].y);
+      const mm = parseFloat(prompt('두 점 사이 실제 거리(mm):', ''));
+      if (mm > 0) {
+        S.mmPerPx = mm / px;
+        $('mmPerPx').value = S.mmPerPx.toFixed(6);
+        setStatus('배율: 1px = ' + S.mmPerPx.toFixed(6) + 'mm (' + px.toFixed(1) + 'px = ' + mm + 'mm)');
+      } else S.scalePts = [];
+    }
+  } else if (S.mode === 'verify') {
+    const d = Math.abs(signedDist(p));
+    if (d < 1) { setStatus('축 위를 찍었다. 형상면을 찍어라.'); draw(); return; }
+    const isRad = $('vIsRad').checked;
+    const cur = S.mmPerPx > 0
+      ? ((isRad ? d * S.mmPerPx : d * S.mmPerPx * 2).toFixed(3))
+      : (isRad ? d.toFixed(1) + 'px' : (d * 2).toFixed(1) + 'px');
+    const ans = prompt(
+      '축까지 ' + d.toFixed(1) + 'px (현재 환산 ' + (isRad ? 'R' : 'Ø') + cur + ')\n' +
+      '도면상 실제 ' + (isRad ? '반지름' : '지름') + '(mm):', '');
+    const mm = parseFloat(ans);
+    if (mm > 0) {
+      S.vpts.push({ p: p, mm: mm, isRad: isRad });
+      vRender();
+      setStatus('기준점 ' + S.vpts.length + '개 등록. 2개 이상이면 축 위치까지 역산 가능.');
+    }
+  } else if (S.mode === 'trace') {
+    const prev = S.pts.length ? S.pts[S.pts.length - 1] : null;
+    S.pts.push(orthoFix(prev, p, raw2));
+    setStatus('윤곽 점 ' + S.pts.length + '개' + (raw2 ? ' <span class="k">(Alt: 보정 없음)</span>' : ''));
+  } else if (S.mode === 'magnet') {
+    if (!S.pts.length) {
+      S.pts.push(p);
+      setStatus('시작점 지정 완료. 다음 코너를 클릭하면 사이를 자동 추적한다.');
+    } else if (raw2) {
+      // Alt: 추적 없이 직선으로 한 점만 추가
+      S.pts.push(p);
+      setStatus('<span class="k">Alt: 직선 1점 추가</span> (총 ' + S.pts.length + ')');
+    } else {
+      const a = S.pts[S.pts.length - 1];
+      try {
+        const raw = magnetPath(a, p);
+        const eps = parseFloat($('dpEps').value) || 1.5;
+        let simp = simplify(raw, eps);
+        simp = simp.slice(1);                    // 시작점 중복 제거
+        simp = orthoFixPath(simp, a);
+        S.pts = S.pts.concat(simp);
+        setStatus('자석 추적: 원시 ' + raw.length + 'px → ' + simp.length + '점 추가 (총 ' + S.pts.length + ')');
+      } catch (err) {
+        setStatus('<span style="color:#ff8080">' + err.message + '</span>');
+      }
+    }
+  }
+  draw();
+});
+
+/* 팬/점드래그는 window 에 붙인다.
+   cv 에만 붙이면 커서가 캔버스 밖(패널 위·창 밖)으로 나가는 순간
+   mousemove 가 끊겨서 화면 이동이 안 먹는 문제가 있었다. (v0.3 수정) */
+function startPan(e) {
+  S.panning = true;
+  S.last = { x: e.clientX, y: e.clientY };
+  $('panel').classList.add('fade');   // 가려진 부분 확인용 투명화
+}
+function endPan() {
+  if (!S.panning) return;
+  S.panning = false;
+  $('panel').classList.remove('fade');
+}
+
+window.addEventListener('mousemove', function (e) {
+  if (S.panning) {
+    S.view.x += e.clientX - S.last.x;
+    S.view.y += e.clientY - S.last.y;
+    S.last = { x: e.clientX, y: e.clientY };
+    draw();
+    return;
+  }
+  if (S.dragIdx >= 0) {
+    const rc = cv.getBoundingClientRect();
+    let p = toImg(e.clientX - rc.left, e.clientY - rc.top);
+    p = snapToEdge(p, e.altKey);
+    S.pts[S.dragIdx] = p;
+    draw();
+    return;
+  }
+  updateReadout(e);
+  // 스냅 미리보기: 실제로 어디에 찍힐지 커서에 표시
+  const rc2 = cv.getBoundingClientRect();
+  if (S.work && e.clientX >= rc2.left && e.clientX <= rc2.right &&
+      e.clientY >= rc2.top && e.clientY <= rc2.bottom &&
+      ['trace','magnet','verify','axis','level','scale',
+       'ins','del','rng','join'].indexOf(S.mode) >= 0) {
+    S.cursor = toImg(e.clientX - rc2.left, e.clientY - rc2.top);
+    S.cursorAlt = e.altKey;
+    draw();
+  } else if (S.cursor) {
+    S.cursor = null; draw();
+  }
+});
+
+// 커서 위치의 축까지 거리를 Ø / R 로 실시간 표시
+function updateReadout(e) {
+  const el = $('readout');
+  if (!S.work || S.axis.length < 2) { el.textContent = '—'; return; }
+  const rc = cv.getBoundingClientRect();
+  if (e.clientX < rc.left || e.clientX > rc.right || e.clientY < rc.top || e.clientY > rc.bottom) return;
+  const p = toImg(e.clientX - rc.left, e.clientY - rc.top);
+  const d = Math.abs(signedDist(p));
+  if (S.mmPerPx > 0) {
+    el.textContent = 'Ø' + (d * 2 * S.mmPerPx).toFixed(3) + ' / R' + (d * S.mmPerPx).toFixed(3);
+  } else {
+    el.textContent = 'Ø' + (d * 2).toFixed(1) + 'px / R' + d.toFixed(1) + 'px';
+  }
+}
+window.addEventListener('mouseup', function () {
+  if (S.dragIdx >= 0) { S.dragIdx = -1; if (mesh) build3D(); }
+  endPan();
+});
+window.addEventListener('blur', endPan);
+
+cv.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  const rc = cv.getBoundingClientRect();
+  const sx = e.clientX - rc.left, sy = e.clientY - rc.top;
+  const before = toImg(sx, sy);
+  S.view.s *= e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const after = toImg(sx, sy);
+  S.view.x += (after.x - before.x) * S.view.s;
+  S.view.y += (after.y - before.y) * S.view.s;
+  draw();
+}, { passive: false });
+
+/* ---------------- 치수 검증 / 축·배율 역산 ----------------
+   모델:  r_mm = k * (d_px - c)
+     d_px : 점에서 축까지의 부호있는 수직거리(px)
+     k    : mm/px 배율
+     c    : 축 위치 오차(px). 축을 눈대중으로 찍었을 때 생기는 평행이동 오차
+
+   기준점 1개  -> c=0 가정, 배율 k 만 계산
+   기준점 2개+ -> 최소자승으로 k, c 동시 계산 후 축을 n방향으로 평행이동
+   중심선이 안 그려진 DETAIL 뷰에서 특히 유용하다.
+------------------------------------------------------------- */
+function axisFrame() {
+  if (S.axis.length < 2) return null;
+  const A = S.axis[0], B = S.axis[1];
+  let ux = B.x - A.x, uy = B.y - A.y;
+  const L = Math.hypot(ux, uy);
+  if (L < 1) return null;
+  ux /= L; uy /= L;
+  return { A: A, ux: ux, uy: uy, nx: -uy, ny: ux };
+}
+// 축까지의 부호있는 수직거리 (px)
+function signedDist(p) {
+  const f = axisFrame();
+  if (!f) return 0;
+  return (p.x - f.A.x) * f.nx + (p.y - f.A.y) * f.ny;
+}
+
+function vRender() {
+  const el = $('vList');
+  if (!S.vpts.length) { el.innerHTML = '기준점 없음'; return; }
+  const k = S.mmPerPx;
+  let h = '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  h += '<tr style="color:#6f7883"><td>#</td><td>입력</td><td>현재</td><td>오차</td></tr>';
+  S.vpts.forEach(function (v, i) {
+    const d = Math.abs(signedDist(v.p));
+    const curR = k > 0 ? d * k : null;                 // 현재 배율로 환산한 반지름
+    const tgtR = v.isRad ? v.mm : v.mm / 2;
+    const lbl = v.isRad ? ('R' + v.mm) : ('Ø' + v.mm);
+    let cur = '—', err = '—', col = '#8d95a0';
+    if (curR !== null) {
+      cur = (v.isRad ? '' : 'Ø') + (v.isRad ? curR : curR * 2).toFixed(3);
+      const e = curR - tgtR;
+      err = (e >= 0 ? '+' : '') + e.toFixed(3);
+      col = Math.abs(e) < 0.05 ? '#4ade80' : (Math.abs(e) < 0.2 ? '#ffd24a' : '#ff8080');
+    }
+    h += '<tr><td>' + (i + 1) + '</td><td>' + lbl + '</td><td>' + cur +
+         '</td><td style="color:' + col + '">' + err + '</td></tr>';
+  });
+  h += '</table>';
+  el.innerHTML = h;
+}
+
+// 배율만 보정 (축 위치는 맞다고 가정)
+$('vFitScale').onclick = function () {
+  if (!S.vpts.length) { setStatus('기준점을 먼저 찍어라.'); return; }
+  let sd = 0, sr = 0;
+  for (let i = 0; i < S.vpts.length; i++) {
+    const v = S.vpts[i];
+    sd += Math.abs(signedDist(v.p));
+    sr += v.isRad ? v.mm : v.mm / 2;
+  }
+  if (sd < 1) { setStatus('기준점이 축에 너무 붙어 있다.'); return; }
+  S.mmPerPx = sr / sd;
+  $('mmPerPx').value = S.mmPerPx.toFixed(6);
+  vRender(); draw();
+  if (mesh) build3D();
+  setStatus('배율 보정: 1px = ' + S.mmPerPx.toFixed(6) + 'mm (기준점 ' + S.vpts.length + '개 평균)');
+};
+
+// 축 위치 + 배율 동시 역산 (기준점 2개 이상)
+$('vFitBoth').onclick = function () {
+  if (S.vpts.length < 2) { setStatus('축까지 역산하려면 <span class="k">지름이 다른 기준점 2개 이상</span>이 필요하다.'); return; }
+  const f = axisFrame();
+  if (!f) { setStatus('축부터 지정해라.'); return; }
+
+  // 부호 정규화: 형상이 축의 어느 쪽에 있는지
+  let mean = 0;
+  const ds = S.vpts.map(function (v) { const d = signedDist(v.p); mean += d; return d; });
+  const s = mean >= 0 ? 1 : -1;
+
+  // 최소자승 r = k*dd + b   (dd = d*s)
+  let n = S.vpts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) {
+    const dd = ds[i] * s;
+    const r = S.vpts[i].isRad ? S.vpts[i].mm : S.vpts[i].mm / 2;
+    sx += dd; sy += r; sxx += dd * dd; sxy += dd * r;
+  }
+  const den = n * sxx - sx * sx;
+  if (Math.abs(den) < 1e-9) {
+    setStatus('기준점들의 축거리가 서로 같다. <span class="k">지름이 다른</span> 위치를 찍어라.');
+    return;
+  }
+  const k = (n * sxy - sx * sy) / den;
+  const b = (sy - k * sx) / n;
+  if (k <= 0) { setStatus('역산 실패: 기준점 값이 형상과 반대로 증가한다. 입력값을 확인해라.'); return; }
+  const c = -b / k;              // dd 공간에서의 축 오프셋
+  const t = c * s;               // 실제 이동량 (n 방향)
+
+  // 축 평행이동
+  S.axis[0] = { x: S.axis[0].x + f.nx * t, y: S.axis[0].y + f.ny * t };
+  S.axis[1] = { x: S.axis[1].x + f.nx * t, y: S.axis[1].y + f.ny * t };
+  S.mmPerPx = k;
+  $('mmPerPx').value = k.toFixed(6);
+
+  // 잔차 확인
+  let maxE = 0;
+  for (let i = 0; i < S.vpts.length; i++) {
+    const v = S.vpts[i];
+    const cur = Math.abs(signedDist(v.p)) * k;
+    const tgt = v.isRad ? v.mm : v.mm / 2;
+    maxE = Math.max(maxE, Math.abs(cur - tgt));
+  }
+  vRender(); draw();
+  if (mesh) build3D();
+  setStatus('축·배율 동시 역산 완료 — 축 ' + t.toFixed(2) + 'px 이동, 1px = ' +
+            k.toFixed(6) + 'mm, 최대 잔차 ' + maxE.toFixed(3) + 'mm');
+};
+
+$('vClear').onclick = function () { S.vpts = []; vRender(); draw(); setStatus('기준점 비움.'); };
+
+$('mVerify').onclick = function () {
+  if (S.axis.length < 2) { setStatus('축부터 지정해라.'); return; }
+  setMode('verify');
+  setStatus('지름을 아는 형상면을 클릭 → 도면값 입력. <span class="k">서로 다른 지름 2곳</span>을 찍고 "축+배율 동시"를 누르면 축 위치 오차까지 잡힌다.');
+};
+
+/* =========================================================
+   Supabase 연동
+   - 도면 이미지: 스토리지 public 버킷 qc-drawings
+   - 형상 데이터: public.qc_part_3d (part_id + label 로 upsert)
+   이미지는 이미 서버에 있으므로 형상 저장 시 이미지를 중복 보관하지 않는다.
+   ========================================================= */
+const SB = {
+  url: 'https://trhjeongphtendkounig.supabase.co',
+  key: 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk',
+  bucket: 'qc-drawings'
+};
+function sbHeaders(extra) {
+  const h = {
+    apikey: SB.key,
+    Authorization: 'Bearer ' + SB.key,
+    'Content-Type': 'application/json'
+  };
+  if (extra) for (const k in extra) h[k] = extra[k];
+  return h;
+}
+function drawingUrl(path) {
+  return SB.url + '/storage/v1/object/public/' + SB.bucket + '/' + path;
+}
+
+let PARTS = [];        // 전체 품번 목록
+let CUR_PART = null;   // 현재 선택된 품번
+let SAVED = {};        // { part_id: {labels:[...], updated_at} } 형상 저장 현황
+
+function loadParts() {
+  $('partInfo').textContent = '품번 목록 로딩 중…';
+  const qParts = SB.url + '/rest/v1/qc_part' +
+    '?select=id,part_number,part_name,customer,drawing_path' +
+    '&drawing_path=not.is.null&is_active=eq.true&order=part_number.asc';
+  const qSaved = SB.url + '/rest/v1/qc_part_3d?select=part_id,label,updated_at';
+
+  Promise.all([
+    fetch(qParts, { headers: sbHeaders() }).then(function (r) {
+      if (!r.ok) throw new Error('품번 HTTP ' + r.status);
+      return r.json();
+    }),
+    fetch(qSaved, { headers: sbHeaders() }).then(function (r) {
+      if (!r.ok) throw new Error('형상 HTTP ' + r.status);
+      return r.json();
+    })
+  ]).then(function (res) {
+    PARTS = res[0];
+    SAVED = {};
+    res[1].forEach(function (row) {
+      if (!SAVED[row.part_id]) SAVED[row.part_id] = { labels: [], updated_at: row.updated_at };
+      SAVED[row.part_id].labels.push(row.label);
+      if (row.updated_at > SAVED[row.part_id].updated_at) SAVED[row.part_id].updated_at = row.updated_at;
+    });
+    renderParts();
+  }).catch(function (e) {
+    $('partInfo').innerHTML = '<span style="color:#ff8080">목록 실패: ' + e.message + '</span>';
+  });
+}
+
+// 저장 현황만 다시 읽기 (저장/삭제 직후)
+function refreshSaved() {
+  return fetch(SB.url + '/rest/v1/qc_part_3d?select=part_id,label,updated_at', { headers: sbHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      SAVED = {};
+      rows.forEach(function (row) {
+        if (!SAVED[row.part_id]) SAVED[row.part_id] = { labels: [], updated_at: row.updated_at };
+        SAVED[row.part_id].labels.push(row.label);
+        if (row.updated_at > SAVED[row.part_id].updated_at) SAVED[row.part_id].updated_at = row.updated_at;
+      });
+      renderParts();
+    })
+    .catch(function () { /* 표시용이므로 실패해도 무시 */ });
+}
+
+function renderParts() {
+  const kw = $('partSearch').value.trim().toLowerCase();
+  const onlySaved = $('onlySaved').checked;
+  const sel = $('partSel');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  let n = 0;
+  PARTS.forEach(function (p) {
+    const sv = SAVED[p.id];
+    if (onlySaved && !sv) return;
+    const hay = (p.part_number + ' ' + (p.part_name || '') + ' ' + (p.customer || '')).toLowerCase();
+    if (kw && hay.indexOf(kw) < 0) return;
+    const o = document.createElement('option');
+    o.value = p.id;
+    // 저장된 형상이 있으면 앞에 표시, label 이 main 이 아니면 함께 노출
+    let mark = '   ';
+    if (sv) {
+      const nonMain = sv.labels.filter(function (l) { return l !== 'main'; });
+      mark = nonMain.length ? '● ' : '● ';
+      o.style.color = '#4ade80';
+      if (nonMain.length) o.title = 'label: ' + sv.labels.join(', ');
+    }
+    o.textContent = mark + p.part_number + (p.part_name ? '  |  ' + p.part_name : '');
+    sel.appendChild(o);
+    n++;
+  });
+  if (prev) sel.value = prev;
+
+  const savedCount = Object.keys(SAVED).length;
+  let info = '도면 <span class="k">' + PARTS.length + '개</span> / 형상 저장 <span style="color:#4ade80">' +
+             savedCount + '개</span>';
+  if (kw || onlySaved) info += ' / 표시 ' + n + '개';
+  $('partInfo').innerHTML = info;
+}
+$('partSearch').oninput = renderParts;
+$('onlySaved').onchange = renderParts;
+$('btnPartReload').onclick = loadParts;
+
+// 목록에서 선택이 바뀌면 저장 상태를 알려준다
+$('partSel').onchange = function () {
+  const p = selectedPart();
+  if (!p) return;
+  const sv = SAVED[p.id];
+  if (sv) {
+    setStatus(p.part_number + ' — 저장된 형상 있음 (label: ' + sv.labels.join(', ') +
+              ', ' + sv.updated_at.slice(0, 10) + '). <span class="k">형상 불러오기</span>');
+  } else {
+    setStatus(p.part_number + ' — 저장된 형상 없음. <span class="k">도면 열기</span>로 새로 작업.');
+  }
+};
+
+function selectedPart() {
+  const id = parseInt($('partSel').value);
+  if (!id) return null;
+  for (let i = 0; i < PARTS.length; i++) if (PARTS[i].id === id) return PARTS[i];
+  return null;
+}
+
+/* 스토리지에서 도면 이미지 열기 */
+$('btnPartOpen').onclick = function () {
+  const p = selectedPart();
+  if (!p) { setStatus('품번을 먼저 골라라.'); return; }
+  openDrawing(p, null);
+};
+
+function openDrawing(p, thenApply) {
+  CUR_PART = p;
+  setStatus('도면 불러오는 중… ' + p.part_number);
+  const im = new Image();
+  im.crossOrigin = 'anonymous';   // 캔버스 오염 방지 (getImageData 필요)
+  im.onload = function () {
+    S.src = im;
+    S.rot = 0; $('rotDeg').value = 0;
+    S.level = []; S.axis = []; S.scalePts = []; S.pts = []; S.vpts = [];
+    S.mmPerPx = 0; $('mmPerPx').value = 0;
+    vRender();
+    bakeRotation(0, false);
+    fitView();
+    if (thenApply) {
+      applyDbRow(thenApply, im);
+    } else {
+      setMode('axis');
+      setStatus('도면 열림 — ' + p.part_number + ' (' + im.width + '×' + im.height + 'px). ' +
+                '<span class="k">2. 축 지정</span> 부터.');
+    }
+  };
+  im.onerror = function () {
+    setStatus('<span style="color:#ff8080">도면 로드 실패: ' + p.drawing_path + '</span>');
+  };
+  im.src = drawingUrl(p.drawing_path);
+}
+
+/* 형상 DB 저장 (upsert) */
+$('btnDbSave').onclick = function () {
+  const p = CUR_PART || selectedPart();
+  if (!p) { setStatus('품번을 먼저 골라라.'); return; }
+  if (S.axis.length < 2 || S.pts.length < 2) { setStatus('축과 윤곽을 먼저 잡아라.'); return; }
+  const d = S.rot;
+  const body = [{
+    part_id: p.id,
+    label: ($('profLabel').value || 'main').trim(),
+    rot: d,
+    mm_per_px: S.mmPerPx || null,
+    img_w: S.src.width,
+    img_h: S.src.height,
+    axis: S.axis.map(function (q) { return workToOrig(q, d); }),
+    pts: S.pts.map(function (q) { return workToOrig(q, d); }),
+    vpts: S.vpts.map(function (v) {
+      return { p: workToOrig(v.p, d), mm: v.mm, isRad: v.isRad };
+    }),
+    opts: {
+      closeLoop: $('closeLoop').checked,
+      phi: $('phi').value, seg: $('seg').value,
+      snap: $('snap').checked, snapR: $('snapR').value,
+      ortho: $('ortho').checked, orthoTol: $('orthoTol').value,
+      axisLock: $('axisLock').checked, dpEps: $('dpEps').value,
+      vIsRad: $('vIsRad').checked
+    },
+    updated_at: new Date().toISOString()
+  }];
+
+  fetch(SB.url + '/rest/v1/qc_part_3d?on_conflict=part_id,label', {
+    method: 'POST',
+    headers: sbHeaders({ Prefer: 'resolution=merge-duplicates,return=representation' }),
+    body: JSON.stringify(body)
+  })
+    .then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + t.slice(0, 160));
+        return t;
+      });
+    })
+    .then(function () {
+      const kb = JSON.stringify(body).length / 1024;
+      setStatus('DB 저장 완료 — ' + p.part_number + ' / label=' + body[0].label +
+                ' / 윤곽 ' + body[0].pts.length + '점 / ' + kb.toFixed(2) + ' KB');
+      refreshSaved();
+    })
+    .catch(function (e) {
+      setStatus('<span style="color:#ff8080">저장 실패: ' + e.message + '</span>');
+    });
+};
+
+/* 형상 DB 삭제 */
+$('btnDbDel').onclick = function () {
+  const p = selectedPart();
+  if (!p) { setStatus('품번을 먼저 골라라.'); return; }
+  const label = ($('profLabel').value || 'main').trim();
+  const sv = SAVED[p.id];
+  if (!sv || sv.labels.indexOf(label) < 0) {
+    setStatus('삭제할 형상이 없다 — ' + p.part_number + ' (label=' + label + ')');
+    return;
+  }
+  if (!confirm('형상을 삭제한다.\n\n' + p.part_number + '  (label=' + label + ')\n\n되돌릴 수 없다. 진행할까?')) return;
+
+  fetch(SB.url + '/rest/v1/qc_part_3d?part_id=eq.' + p.id +
+        '&label=eq.' + encodeURIComponent(label), {
+    method: 'DELETE',
+    headers: sbHeaders({ Prefer: 'return=representation' })
+  })
+    .then(function (r) {
+      return r.text().then(function (t) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + t.slice(0, 160));
+        return t;
+      });
+    })
+    .then(function () {
+      setStatus('삭제 완료 — ' + p.part_number + ' (label=' + label + ')');
+      refreshSaved();
+    })
+    .catch(function (e) {
+      setStatus('<span style="color:#ff8080">삭제 실패: ' + e.message + '</span>');
+    });
+};
+
+/* 형상 DB 불러오기 (도면 이미지도 같이 로드) */
+$('btnDbLoad').onclick = function () {
+  const p = selectedPart();
+  if (!p) { setStatus('품번을 먼저 골라라.'); return; }
+  const label = ($('profLabel').value || 'main').trim();
+  const q = SB.url + '/rest/v1/qc_part_3d?part_id=eq.' + p.id +
+            '&label=eq.' + encodeURIComponent(label) + '&select=*';
+  setStatus('형상 조회 중…');
+  fetch(q, { headers: sbHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      if (!rows || !rows.length) {
+        setStatus('저장된 형상이 없다 — ' + p.part_number + ' (label=' + label +
+                  '). <span class="k">도면 열기</span>로 새로 작업해라.');
+        return;
+      }
+      openDrawing(p, rows[0]);
+    })
+    .catch(function (e) {
+      setStatus('<span style="color:#ff8080">조회 실패: ' + e.message + '</span>');
+    });
+};
+
+/* DB 행을 화면에 적용 */
+function applyDbRow(row, im) {
+  const o = row.opts || {};
+  if (o.closeLoop !== undefined) $('closeLoop').checked = o.closeLoop;
+  if (o.phi) { $('phi').value = o.phi; $('phiV').textContent = o.phi + '°'; }
+  if (o.seg) { $('seg').value = o.seg; $('segV').textContent = o.seg; }
+  if (o.snap !== undefined) $('snap').checked = o.snap;
+  if (o.snapR) $('snapR').value = o.snapR;
+  if (o.ortho !== undefined) $('ortho').checked = o.ortho;
+  if (o.orthoTol) $('orthoTol').value = o.orthoTol;
+  if (o.axisLock !== undefined) $('axisLock').checked = o.axisLock;
+  if (o.dpEps) $('dpEps').value = o.dpEps;
+  if (o.vIsRad !== undefined) $('vIsRad').checked = o.vIsRad;
+
+  S.mmPerPx = row.mm_per_px || 0;
+  $('mmPerPx').value = S.mmPerPx ? S.mmPerPx.toFixed(6) : 0;
+
+  const deg = row.rot || 0;
+  S.rot = 0;
+  bakeRotation(deg, false);
+  $('rotDeg').value = deg.toFixed(2);
+
+  S.axis = (row.axis || []).map(function (q) { return origToWork(q, deg); });
+  S.pts = (row.pts || []).map(function (q) { return origToWork(q, deg); });
+  S.vpts = (row.vpts || []).map(function (v) {
+    return { p: origToWork(v.p, deg), mm: v.mm, isRad: v.isRad };
+  });
+  vRender();
+  fitView();
+  setMode('magnet');
+  if (S.pts.length >= 2 && S.axis.length === 2) build3D();
+
+  // 도면이 교체됐는지 확인 (ECO 등으로 이미지가 바뀌면 좌표가 안 맞는다)
+  let warn = '';
+  if (row.img_w && (row.img_w !== im.width || row.img_h !== im.height)) {
+    warn = '<br><span style="color:#ffb347">경고: 저장 당시 도면 크기(' +
+           row.img_w + '×' + row.img_h + ')와 현재(' + im.width + '×' + im.height +
+           ')가 다르다. 도면이 교체됐을 수 있으니 치수 검증을 다시 해라.</span>';
+  }
+  setStatus('형상 불러옴 — ' + (CUR_PART ? CUR_PART.part_number : '') +
+            ' / 윤곽 ' + S.pts.length + '점 / 기준점 ' + S.vpts.length +
+            '개 / 1px = ' + (S.mmPerPx ? S.mmPerPx.toFixed(6) + 'mm' : '미설정') + warn);
+}
+
+/* ---------------- 작업파일 저장 / 불러오기 (.d3j) ----------------
+   STL 대신 "점 좌표 + 도면 이미지"만 저장한다.
+   3D 형상은 불러온 뒤 회전으로 즉시 재생성되므로 저장할 이유가 없다.
+   좌표는 회전 보정 전인 원본 이미지 기준으로 저장 -> 회전각만 바꿔도 안 깨진다.
+------------------------------------------------------------------ */
+const PROJ_VER = 1;
+
+function encodeImage(mode) {
+  if (mode === 'none' || !S.src) return null;
+  const c = document.createElement('canvas');
+  c.width = S.src.width; c.height = S.src.height;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+  cx.drawImage(S.src, 0, 0);
+  const url = mode === 'png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85);
+  return { type: mode, w: c.width, h: c.height, data: url };
+}
+
+function collectProject() {
+  const d = S.rot;
+  return {
+    format: 'drawing_to_3d',
+    version: PROJ_VER,
+    saved: new Date().toISOString(),
+    imgW: S.src ? S.src.width : 0,
+    imgH: S.src ? S.src.height : 0,
+    rot: S.rot,
+    mmPerPx: S.mmPerPx,
+    // 좌표는 전부 원본 이미지 기준으로 환산해서 저장
+    axis: S.axis.map(function (p) { return workToOrig(p, d); }),
+    pts: S.pts.map(function (p) { return workToOrig(p, d); }),
+    vpts: S.vpts.map(function (v) {
+      return { p: workToOrig(v.p, d), mm: v.mm, isRad: v.isRad };
+    }),
+    opts: {
+      closeLoop: $('closeLoop').checked,
+      phi: $('phi').value,
+      seg: $('seg').value,
+      snap: $('snap').checked,
+      snapR: $('snapR').value,
+      ortho: $('ortho').checked,
+      orthoTol: $('orthoTol').value,
+      axisLock: $('axisLock').checked,
+      dpEps: $('dpEps').value,
+      vIsRad: $('vIsRad').checked
+    },
+    image: encodeImage($('saveImgMode').value)
+  };
+}
+
+$('btnSaveProj').onclick = function () {
+  if (!S.src) { setStatus('저장할 작업이 없다.'); return; }
+  const name = prompt('파일 이름 (품번 등):', 'part');
+  if (!name) return;
+  const obj = collectProject();
+  const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.d3j';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const kb = blob.size / 1024;
+  setStatus('저장 완료 — ' + name + '.d3j / ' +
+            (kb > 1024 ? (kb / 1024).toFixed(2) + ' MB' : kb.toFixed(1) + ' KB') +
+            ' / 윤곽 ' + obj.pts.length + '점' +
+            (obj.image ? ' / 이미지 포함(' + obj.image.type + ')' : ' <span class="k">/ 이미지 제외</span>'));
+};
+
+$('btnOpenProj').onclick = function () { $('projIn').click(); };
+$('projIn').onchange = function (e) { if (e.target.files[0]) loadProject(e.target.files[0]); };
+
+function loadProject(file) {
+  const fr = new FileReader();
+  fr.onload = function () {
+    let o;
+    try { o = JSON.parse(fr.result); }
+    catch (err) { setStatus('<span style="color:#ff8080">파일을 읽을 수 없다.</span>'); return; }
+    if (!o || o.format !== 'drawing_to_3d') {
+      setStatus('<span style="color:#ff8080">이 도구의 작업파일이 아니다.</span>'); return;
+    }
+    if (o.image && o.image.data) {
+      const im = new Image();
+      im.onload = function () { applyProject(o, im); };
+      im.src = o.image.data;
+    } else {
+      // 이미지 없이 저장된 파일: 같은 크기의 흰 캔버스로 대체
+      const c = document.createElement('canvas');
+      c.width = o.imgW || 1000; c.height = o.imgH || 1000;
+      const cx = c.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+      const im = new Image();
+      im.onload = function () {
+        applyProject(o, im);
+        setStatus('이미지 없이 불러옴. 같은 도면을 <span class="k">Ctrl+V</span> 하면 배경이 복구된다.');
+      };
+      im.src = c.toDataURL();
+    }
+  };
+  fr.readAsText(file);
+}
+
+function applyProject(o, im) {
+  S.src = im;
+  S.mmPerPx = o.mmPerPx || 0;
+  $('mmPerPx').value = S.mmPerPx ? S.mmPerPx.toFixed(6) : 0;
+
+  const p = o.opts || {};
+  if (p.closeLoop !== undefined) $('closeLoop').checked = p.closeLoop;
+  if (p.phi) { $('phi').value = p.phi; $('phiV').textContent = p.phi + '°'; }
+  if (p.seg) { $('seg').value = p.seg; $('segV').textContent = p.seg; }
+  if (p.snap !== undefined) $('snap').checked = p.snap;
+  if (p.snapR) $('snapR').value = p.snapR;
+  if (p.ortho !== undefined) $('ortho').checked = p.ortho;
+  if (p.orthoTol) $('orthoTol').value = p.orthoTol;
+  if (p.axisLock !== undefined) $('axisLock').checked = p.axisLock;
+  if (p.dpEps) $('dpEps').value = p.dpEps;
+  if (p.vIsRad !== undefined) $('vIsRad').checked = p.vIsRad;
+
+  // 회전 먼저 굽고, 저장된 원본좌표를 작업좌표로 환산
+  const deg = o.rot || 0;
+  S.rot = 0;
+  bakeRotation(deg, false);
+  $('rotDeg').value = deg.toFixed(2);
+
+  S.level = [];
+  S.axis = (o.axis || []).map(function (q) { return origToWork(q, deg); });
+  S.scalePts = [];
+  S.pts = (o.pts || []).map(function (q) { return origToWork(q, deg); });
+  S.vpts = (o.vpts || []).map(function (v) {
+    return { p: origToWork(v.p, deg), mm: v.mm, isRad: v.isRad };
+  });
+
+  vRender();
+  fitView();
+  setMode('magnet');
+  if (S.pts.length >= 2 && S.axis.length === 2) build3D();
+  setStatus('불러오기 완료 — 윤곽 ' + S.pts.length + '점 / 기준점 ' + S.vpts.length +
+            '개 / 회전 ' + deg.toFixed(2) + '° / 1px = ' +
+            (S.mmPerPx ? S.mmPerPx.toFixed(6) + 'mm' : '미설정'));
+}
+
+// 이미지·작업파일 드래그&드롭
+cv.addEventListener('dragover', function (e) { e.preventDefault(); });
+cv.addEventListener('drop', function (e) {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  if (/\.d3j$|\.json$/i.test(f.name)) loadProject(f);
+  else if (f.type.indexOf('image') === 0) loadFile(f);
+});
+
+/* ---------------- 윤곽 점 편집 ----------------
+   ins  : 클릭 위치에서 가장 가까운 선분 사이에 점을 끼워 넣는다
+   del  : 클릭한 점을 지운다
+   rng  : 점 2개를 찍어 그 사이 구간의 점들을 지운다
+   join : 점 2개를 찍어 그 사이를 자석 추적으로 다시 그린다
+------------------------------------------------ */
+S.pend = -1;   // rng/join 에서 먼저 찍은 점 index
+
+// 점 p 와 선분 ab 사이 거리
+function distToSeg(p, a, b) {
+  const vx = b.x - a.x, vy = b.y - a.y;
+  const L2 = vx * vx + vy * vy;
+  if (L2 < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
+  let t = ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t));
+}
+// 가장 가까운 점 index (화면 maxPx 이내)
+function nearestPt(p, maxPx) {
+  const lim = (maxPx || 14) / S.view.s;
+  let bi = -1, bd = Infinity;
+  for (let i = 0; i < S.pts.length; i++) {
+    const d = Math.hypot(S.pts[i].x - p.x, S.pts[i].y - p.y);
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return bd <= lim ? bi : -1;
+}
+// 가장 가까운 선분의 삽입 위치
+function nearestSegIns(p) {
+  const n = S.pts.length;
+  if (n < 2) return -1;
+  let bi = -1, bd = Infinity;
+  const last = $('closeLoop').checked ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const a = S.pts[i], b = S.pts[(i + 1) % n];
+    const d = distToSeg(p, a, b);
+    if (d < bd) { bd = d; bi = i + 1; }
+  }
+  return bi;
+}
+function eHint(msg) { $('eHint').innerHTML = msg; }
+function afterEdit(msg) {
+  draw();
+  if (mesh) build3D();
+  setStatus(msg + ' — 윤곽 ' + S.pts.length + '점');
+}
+
+function setEditMode(m, hint) {
+  S.pend = -1;
+  if ($('editGrp').style.display === 'none') $('btnEdit').onclick();
+  setMode(m);
+  eHint(hint);
+}
+$('eIns').onclick = function () {
+  if (S.pts.length < 2) { setStatus('윤곽을 먼저 잡아라.'); return; }
+  setEditMode('ins', '<b>점 추가</b> — 점을 넣고 싶은 <span class="k">선 위</span>를 클릭하면 그 선분 사이에 삽입된다.');
+};
+$('eDel').onclick = function () {
+  if (!S.pts.length) { setStatus('윤곽을 먼저 잡아라.'); return; }
+  setEditMode('del', '<b>점 삭제</b> — 지울 <span class="k">점</span>을 클릭. 연속으로 계속 지울 수 있다.');
+};
+$('eRng').onclick = function () {
+  if (S.pts.length < 3) { setStatus('점이 3개 이상이어야 한다.'); return; }
+  setEditMode('rng', '<b>구간 삭제</b> — 시작 점을 클릭하고, 끝 점을 클릭하면 <span class="k">사이의 점들</span>이 지워진다.');
+};
+$('eJoin').onclick = function () {
+  if (S.pts.length < 2) { setStatus('점이 2개 이상이어야 한다.'); return; }
+  setEditMode('join', '<b>잇기</b> — 두 점을 차례로 클릭하면 그 사이를 <span class="k">자석 추적</span>으로 다시 그린다.');
+};
+$('eCancel').onclick = function () {
+  S.pend = -1;
+  eHint('점 추가: 선 위 클릭 / 점 삭제: 점 클릭<br>구간 삭제·잇기: 점 2개를 차례로 클릭');
+  setMode('magnet');
+  draw();
+};
+
+// 편집 모드 클릭 처리. 처리했으면 true 반환
+function handleEditClick(p) {
+  const m = S.mode;
+  if (m === 'ins') {
+    const at = nearestSegIns(p);
+    if (at < 0) { setStatus('삽입할 선분을 못 찾았다.'); return true; }
+    S.pts.splice(at % (S.pts.length + 1), 0, p);
+    afterEdit('점 삽입 (' + at + '번 자리)');
+    return true;
+  }
+  if (m === 'del') {
+    const i = nearestPt(p, 16);
+    if (i < 0) { setStatus('점을 못 찾았다. 좀 더 가까이 클릭해라.'); return true; }
+    S.pts.splice(i, 1);
+    afterEdit('점 삭제');
+    return true;
+  }
+  if (m === 'rng' || m === 'join') {
+    const i = nearestPt(p, 16);
+    if (i < 0) { setStatus('점을 못 찾았다. 좀 더 가까이 클릭해라.'); return true; }
+    if (S.pend < 0) {
+      S.pend = i;
+      setStatus((m === 'rng' ? '구간 삭제' : '잇기') + ': 시작 ' + (i + 1) + '번. 끝 점을 클릭해라.');
+      draw();
+      return true;
+    }
+    let a = Math.min(S.pend, i), b = Math.max(S.pend, i);
+    if (a === b) { S.pend = -1; setStatus('같은 점이다. 다시 선택해라.'); draw(); return true; }
+
+    if (m === 'rng') {
+      const removed = b - a - 1;
+      if (removed <= 0) { S.pend = -1; setStatus('두 점이 붙어 있어 지울 게 없다.'); draw(); return true; }
+      S.pts.splice(a + 1, removed);
+      S.pend = -1;
+      afterEdit('구간 삭제 (' + removed + '점 제거)');
+    } else {
+      try {
+        const raw = magnetPath(S.pts[a], S.pts[b]);
+        const eps = parseFloat($('dpEps').value) || 1.5;
+        let simp = simplify(raw, eps);
+        simp = simp.slice(1, simp.length - 1);        // 양 끝은 기존 점 유지
+        simp = orthoFixPath(simp, S.pts[a]);
+        S.pts.splice(a + 1, b - a - 1);               // 기존 사이 구간 제거
+        for (let k = 0; k < simp.length; k++) S.pts.splice(a + 1 + k, 0, simp[k]);
+        S.pend = -1;
+        afterEdit('잇기 완료 (' + simp.length + '점 삽입)');
+      } catch (err) {
+        S.pend = -1;
+        setStatus('<span style="color:#ff8080">' + err.message + '</span>');
+        draw();
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+/* 점 편집 도구 접기/펴기 (기본 닫힘) */
+$('btnEdit').onclick = function () {
+  const g = $('editGrp');
+  const open = g.style.display === 'none';
+  g.style.display = open ? 'block' : 'none';
+  $('btnEdit').innerHTML = open ? '점 편집 &#9652;' : '점 편집 &#9662;';
+  $('btnEdit').classList.toggle('on', open);
+  if (!open) {
+    // 닫을 때는 편집 모드에서 빠져나온다
+    if (['ins', 'del', 'rng', 'join'].indexOf(S.mode) >= 0) { S.pend = -1; setMode('magnet'); }
+  }
+};
+
+/* ---------------- 고급 설정 토글 ---------------- */
+$('btnAdv').onclick = function () {
+  const a = $('adv');
+  const open = a.style.display === 'none';
+  a.style.display = open ? 'block' : 'none';
+  $('btnAdv').innerHTML = open ? '고급 &#9652;' : '고급 &#9662;';
+};
+
+/* 보정 실행: 기준점이 2개 이상이면 축까지 역산, 1개면 배율만.
+   평소엔 이 버튼 하나만 쓰면 된다. */
+$('vFitAuto').onclick = function () {
+  if (!S.vpts.length) { setStatus('먼저 <span class="k">치수 기준점</span>을 찍어라.'); return; }
+  if (S.vpts.length >= 2) $('vFitBoth').onclick();
+  else $('vFitScale').onclick();
+};
+
+/* 단계 완료 표시 */
+function markSteps() {
+  const st = document.querySelectorAll('.step');
+  if (st.length < 4) return;
+  st[0].classList.toggle('done', Math.abs(S.rot) > 0.001);
+  st[1].classList.toggle('done', S.axis.length === 2);
+  st[2].classList.toggle('done', S.pts.length >= 2);
+  st[3].classList.toggle('done', S.mmPerPx > 0);
+}
+
+/* ---------------- 키보드 ---------------- */
+S.space = false;
+function inField(t) {
+  return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+}
+window.addEventListener('keydown', function (e) {
+  if (inField(e.target)) return;
+  if (e.code === 'Space') { S.space = true; cv.style.cursor = 'grab'; e.preventDefault(); return; }
+  const k = e.key.toLowerCase();
+  if (k === 'h') { toggleMin(); return; }
+  if (k === 'f') { fitView(); return; }
+  // 방향키 화면 이동 (Shift 누르면 크게)
+  const step = e.shiftKey ? 120 : 30;
+  if (e.key === 'ArrowLeft') { S.view.x += step; draw(); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { S.view.x -= step; draw(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { S.view.y += step; draw(); e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { S.view.y -= step; draw(); e.preventDefault(); }
+});
+window.addEventListener('keyup', function (e) {
+  if (e.code === 'Space') { S.space = false; cv.style.cursor = 'crosshair'; }
+});
+
+/* ---------------- 패널 접기 / 이동 ---------------- */
+function toggleMin() {
+  const p = $('panel');
+  p.classList.toggle('min');
+  $('btnMin').textContent = p.classList.contains('min') ? '펼치기(H)' : '접기(H)';
+}
+$('btnMin').onclick = toggleMin;
+$('btnFit').onclick = fitView;
+
+(function () {
+  const head = $('panelHead'), pnl = $('panel');
+  let dr = null;
+  head.addEventListener('mousedown', function (e) {
+    if (e.target.tagName === 'BUTTON') return;
+    const r = pnl.getBoundingClientRect();
+    const lb = $('left').getBoundingClientRect();
+    dr = { dx: e.clientX - r.left, dy: e.clientY - r.top, lb: lb };
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!dr) return;
+    let x = e.clientX - dr.dx - dr.lb.left;
+    let y = e.clientY - dr.dy - dr.lb.top;
+    x = Math.max(0, Math.min(dr.lb.width - 60, x));
+    y = Math.max(0, Math.min(dr.lb.height - 30, y));
+    pnl.style.left = x + 'px';
+    pnl.style.top = y + 'px';
+  });
+  window.addEventListener('mouseup', function () { dr = null; });
+})();
+
+/* ---------------- 그리기 ---------------- */
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = '#2a2e35';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!S.work) return;
+
+  ctx.imageSmoothingEnabled = S.view.s < 2;
+  ctx.drawImage(S.work, S.view.x, S.view.y, S.work.width * S.view.s, S.work.height * S.view.s);
+
+  if (S.level.length) {
+    ctx.strokeStyle = '#c08cff'; ctx.lineWidth = 2;
+    if (S.level.length === 2) {
+      const a = toScr(S.level[0].x, S.level[0].y), b = toScr(S.level[1].x, S.level[1].y);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    S.level.forEach(function (p) { dot(p, '#c08cff', 4); });
+  }
+
+  if (S.axis.length) {
+    ctx.strokeStyle = '#ff5a5a'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([10, 4, 2, 4]);
+    if (S.axis.length === 2) {
+      const a = toScr(S.axis[0].x, S.axis[0].y), b = toScr(S.axis[1].x, S.axis[1].y);
+      const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+      const ex = dx / L * 6000, ey = dy / L * 6000;
+      ctx.beginPath(); ctx.moveTo(a.x - ex, a.y - ey); ctx.lineTo(a.x + ex, a.y + ey); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    S.axis.forEach(function (p) { dot(p, '#ff5a5a', 4); });
+  }
+
+  if (S.scalePts.length) {
+    ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.5;
+    if (S.scalePts.length === 2) {
+      const a = toScr(S.scalePts[0].x, S.scalePts[0].y), b = toScr(S.scalePts[1].x, S.scalePts[1].y);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    S.scalePts.forEach(function (p) { dot(p, '#ffd24a', 4); });
+  }
+
+  // 치수 검증 기준점: 축까지 수직 보조선 + 라벨
+  if (S.vpts.length && S.axis.length === 2) {
+    const f = axisFrame();
+    ctx.font = '11px Malgun Gothic';
+    S.vpts.forEach(function (v, i) {
+      const d = signedDist(v.p);
+      // 축 위의 대응점 (수직 발)
+      const foot = { x: v.p.x - f.nx * d, y: v.p.y - f.ny * d };
+      const a = toScr(v.p.x, v.p.y), b = toScr(foot.x, foot.y);
+      ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      dot(v.p, '#00d4ff', 4);
+      const lbl = (i + 1) + '. ' + (v.isRad ? 'R' : 'Ø') + v.mm;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const w = ctx.measureText(lbl).width + 8;
+      ctx.fillStyle = 'rgba(0,0,0,.65)';
+      ctx.fillRect(mx - w / 2, my - 16, w, 14);
+      ctx.fillStyle = '#00d4ff';
+      ctx.textAlign = 'center';
+      ctx.fillText(lbl, mx, my - 5);
+      ctx.textAlign = 'left';
+    });
+  }
+
+  if (S.pts.length) {
+    ctx.strokeStyle = '#4ade80'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    S.pts.forEach(function (p, i) {
+      const q = toScr(p.x, p.y);
+      if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y);
+    });
+    if ($('closeLoop').checked && S.pts.length > 2) ctx.closePath();
+    ctx.stroke();
+    if (S.pts.length <= 400) {
+      S.pts.forEach(function (p, i) { dot(p, i === 0 ? '#22c55e' : '#4ade80', i === 0 ? 4.5 : 3); });
+    }
+  }
+  // 구간 삭제 / 잇기 에서 먼저 찍은 점 강조
+  if (S.pend >= 0 && S.pend < S.pts.length) {
+    const q = toScr(S.pts[S.pend].x, S.pts[S.pend].y);
+    ctx.strokeStyle = '#ff8bd0'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // 편집 모드 미리보기
+  if (S.cursor && S.work && S.pts.length) {
+    if (S.mode === 'ins') {
+      // 삽입될 자리를 양쪽 점과 이어서 표시
+      const at = nearestSegIns(S.cursor);
+      if (at > 0) {
+        const n = S.pts.length;
+        const a = S.pts[at - 1], b = S.pts[at % n];
+        const qa = toScr(a.x, a.y), qb = toScr(b.x, b.y);
+        const qc2 = toScr(S.cursor.x, S.cursor.y);
+        ctx.strokeStyle = '#ff8bd0'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(qa.x, qa.y); ctx.lineTo(qc2.x, qc2.y); ctx.lineTo(qb.x, qb.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    } else if (S.mode === 'del' || S.mode === 'rng' || S.mode === 'join') {
+      const i = nearestPt(S.cursor, 16);
+      if (i >= 0) {
+        const q = toScr(S.pts[i].x, S.pts[i].y);
+        ctx.strokeStyle = S.mode === 'del' ? '#ff6b6b' : '#ffd24a';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(q.x, q.y, 8, 0, Math.PI * 2); ctx.stroke();
+        // 구간 삭제는 지워질 범위를 미리 붉게 표시
+        if (S.mode === 'rng' && S.pend >= 0) {
+          const a = Math.min(S.pend, i), b = Math.max(S.pend, i);
+          ctx.strokeStyle = 'rgba(255,107,107,.9)'; ctx.lineWidth = 4;
+          ctx.beginPath();
+          for (let k = a; k <= b; k++) {
+            const qq = toScr(S.pts[k].x, S.pts[k].y);
+            if (k === a) ctx.moveTo(qq.x, qq.y); else ctx.lineTo(qq.x, qq.y);
+          }
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  // 스냅 미리보기: 반경 원 + 실제로 찍힐 위치 + 직교 보정 결과
+  if (S.cursor && S.work) {
+    const R = snapRadiusImg();
+    const cq = toScr(S.cursor.x, S.cursor.y);
+    if (!S.cursorAlt && $('snap').checked && R > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cq.x, cq.y, R * S.view.s, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (['ins','del','rng','join'].indexOf(S.mode) >= 0) { markSteps(); return; }
+    let land = snapToEdge(S.cursor, S.cursorAlt);
+    if ((S.mode === 'trace' || S.mode === 'magnet') && S.pts.length) {
+      land = orthoFix(S.pts[S.pts.length - 1], land, S.cursorAlt);
+    }
+    const lq = toScr(land.x, land.y);
+    // 커서 -> 실제 착지점 연결선
+    if (Math.hypot(lq.x - cq.x, lq.y - cq.y) > 2) {
+      ctx.strokeStyle = 'rgba(255,210,74,.8)'; ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(cq.x, cq.y); ctx.lineTo(lq.x, lq.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = S.cursorAlt ? '#ff9a3c' : '#ffd24a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(lq.x - 7, lq.y); ctx.lineTo(lq.x + 7, lq.y);
+    ctx.moveTo(lq.x, lq.y - 7); ctx.lineTo(lq.x, lq.y + 7); ctx.stroke();
+  }
+
+  markSteps();
+}
+function dot(p, color, r) {
+  const q = toScr(p.x, p.y);
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+}
+/* =========================================================
+   3D
+   ========================================================= */
+const glCv = $('glCanvas');
+let renderer, scene, camera, mesh, axisHelper;
+const cam = { theta: 0.9, phi: 1.15, dist: 100, tx: 0, ty: 0, tz: 0 };
+
+function initGL() {
+  renderer = new THREE.WebGLRenderer({ canvas: glCv, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x101215);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200000);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x202430, 0.9));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(1, 2, 1.5); scene.add(dl);
+  const dl2 = new THREE.DirectionalLight(0xffffff, 0.35); dl2.position.set(-1.5, -1, -1); scene.add(dl2);
+  resizeGL(); animate();
+}
+function resizeGL() {
+  if (!renderer) return;
+  const box = $('right').getBoundingClientRect();
+  renderer.setSize(box.width, box.height, false);
+  camera.aspect = box.width / box.height;
+  camera.updateProjectionMatrix();
+}
+function animate() {
+  requestAnimationFrame(animate);
+  const sp = Math.max(0.05, Math.min(Math.PI - 0.05, cam.phi));
+  camera.position.set(
+    cam.tx + cam.dist * Math.sin(sp) * Math.sin(cam.theta),
+    cam.ty + cam.dist * Math.cos(sp),
+    cam.tz + cam.dist * Math.sin(sp) * Math.cos(cam.theta)
+  );
+  camera.lookAt(cam.tx, cam.ty, cam.tz);
+  renderer.render(scene, camera);
+}
+let gDrag = null;
+glCv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+glCv.addEventListener('mousedown', function (e) { gDrag = { b: e.button, x: e.clientX, y: e.clientY }; });
+window.addEventListener('mousemove', function (e) {
+  if (!gDrag) return;
+  const dx = e.clientX - gDrag.x, dy = e.clientY - gDrag.y;
+  gDrag.x = e.clientX; gDrag.y = e.clientY;
+  if (gDrag.b === 0) { cam.theta -= dx * 0.008; cam.phi -= dy * 0.008; }
+  else {
+    const k = cam.dist * 0.0016;
+    cam.tx += -dx * k * Math.cos(cam.theta);
+    cam.tz += dx * k * Math.sin(cam.theta);
+    cam.ty += dy * k;
+  }
+});
+window.addEventListener('mouseup', function () { gDrag = null; });
+glCv.addEventListener('wheel', function (e) {
+  e.preventDefault(); cam.dist *= e.deltaY < 0 ? 0.9 : 1.1;
+}, { passive: false });
+
+function buildProfile() {
+  if (S.axis.length < 2) throw new Error('축이 지정되지 않았다.');
+  if (S.pts.length < 2) throw new Error('윤곽 점이 2개 이상 필요하다.');
+  const A = S.axis[0], B = S.axis[1];
+  let ux = B.x - A.x, uy = B.y - A.y;
+  const L = Math.hypot(ux, uy);
+  if (L < 1) throw new Error('축 두 점이 너무 가깝다.');
+  ux /= L; uy /= L;
+  const nx = -uy, ny = ux;
+  const k = S.mmPerPx > 0 ? S.mmPerPx : 1;
+
+  const raw = S.pts.map(function (p) {
+    const vx = p.x - A.x, vy = p.y - A.y;
+    return { h: (vx * ux + vy * uy) * k, r: (vx * nx + vy * ny) * k };
+  });
+  const pos = raw.filter(function (p) { return p.r > 0; }).length;
+  const sign = pos >= raw.length - pos ? 1 : -1;
+  const mixed = pos > 0 && pos < raw.length;
+  const pts2 = raw.map(function (p) { return new THREE.Vector2(Math.abs(p.r), p.h * sign); });
+  return { pts2: pts2, mixed: mixed, unit: S.mmPerPx > 0 ? 'mm' : 'px' };
+}
+
+$('build').onclick = build3D;
+function build3D() {
+  let prof;
+  try { prof = buildProfile(); }
+  catch (err) { setStatus('<span style="color:#ff8080">' + err.message + '</span>'); return; }
+
+  const pts2 = prof.pts2.slice();
+  if ($('closeLoop').checked && pts2.length > 2) pts2.push(pts2[0].clone());
+
+  const seg = parseInt($('seg').value);
+  const phi = parseFloat($('phi').value) * Math.PI / 180;
+
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const geo = new THREE.LatheGeometry(pts2, seg, 0, phi);
+  geo.computeVertexNormals();
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0xb9c4d0, metalness: 0.55, roughness: 0.42,
+    side: THREE.DoubleSide, wireframe: $('wire').checked
+  }));
+  scene.add(mesh);
+
+  if (axisHelper) scene.remove(axisHelper);
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  const g2 = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, bb.min.y - (bb.max.y - bb.min.y) * 0.3, 0),
+    new THREE.Vector3(0, bb.max.y + (bb.max.y - bb.min.y) * 0.3, 0)
+  ]);
+  axisHelper = new THREE.Line(g2, new THREE.LineBasicMaterial({ color: 0xff5a5a }));
+  scene.add(axisHelper);
+
+  const c = new THREE.Vector3(); bb.getCenter(c);
+  const sz = new THREE.Vector3(); bb.getSize(sz);
+  cam.tx = c.x; cam.ty = c.y; cam.tz = c.z;
+  cam.dist = Math.max(sz.x, sz.y, sz.z) * 2.6 + 1;
+
+  let maxR = -Infinity, minR = Infinity;
+  for (let i = 0; i < prof.pts2.length; i++) {
+    if (prof.pts2[i].x > maxR) maxR = prof.pts2[i].x;
+    if (prof.pts2[i].x < minR) minR = prof.pts2[i].x;
+  }
+  let msg = '생성 완료 — 최대 Ø' + (maxR * 2).toFixed(2) +
+            ' / 최소 Ø' + (minR * 2).toFixed(2) +
+            ' / 높이 ' + (bb.max.y - bb.min.y).toFixed(2) + ' ' + prof.unit +
+            ' / 점 ' + prof.pts2.length + '개';
+  if (prof.unit === 'px') msg += ' <span class="k">(배율 미설정)</span>';
+  if (prof.mixed) msg += '<br><span style="color:#ffb347">경고: 윤곽이 축 양쪽에 걸쳐 있다.</span>';
+  setStatus(msg);
+}
+
+$('phi').oninput = function (e) { $('phiV').textContent = e.target.value + '°'; if (mesh) build3D(); };
+$('seg').oninput = function (e) { $('segV').textContent = e.target.value; };
+$('seg').onchange = function () { if (mesh) build3D(); };
+$('wire').onchange = function (e) { if (mesh) mesh.material.wireframe = e.target.checked; };
+$('closeLoop').onchange = function () { draw(); if (mesh) build3D(); };
+
+/* ---------------- STL (바이너리) ----------------
+   ASCII 는 좌표를 전부 문자로 쓰기 때문에 삼각형 1개당 250바이트쯤 든다.
+   바이너리는 50바이트 고정이라 같은 형상이 1/5 크기가 된다.
+   조회 탭과 작성 탭에서 공용으로 쓴다.
+------------------------------------------------- */
+function exportStl(targetMesh, baseName) {
+  const g = targetMesh.geometry.index ? targetMesh.geometry.toNonIndexed() : targetMesh.geometry;
+  const pos = g.attributes.position;
+  const tris = Math.floor(pos.count / 3);
+  const buf = new ArrayBuffer(84 + tris * 50);
+  const dv = new DataView(buf);
+  dv.setUint32(80, tris, true);          // 헤더 80바이트는 0으로 둠
+
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+  let off = 84;
+  for (let i = 0; i < tris; i++) {
+    const k = i * 3;
+    a.fromBufferAttribute(pos, k); b.fromBufferAttribute(pos, k + 1); c.fromBufferAttribute(pos, k + 2);
+    ab.subVectors(b, a); ac.subVectors(c, a); n.crossVectors(ab, ac).normalize();
+    dv.setFloat32(off, n.x, true); dv.setFloat32(off + 4, n.y, true); dv.setFloat32(off + 8, n.z, true);
+    dv.setFloat32(off + 12, a.x, true); dv.setFloat32(off + 16, a.y, true); dv.setFloat32(off + 20, a.z, true);
+    dv.setFloat32(off + 24, b.x, true); dv.setFloat32(off + 28, b.y, true); dv.setFloat32(off + 32, b.z, true);
+    dv.setFloat32(off + 36, c.x, true); dv.setFloat32(off + 40, c.y, true); dv.setFloat32(off + 44, c.z, true);
+    dv.setUint16(off + 48, 0, true);
+    off += 50;
+  }
+  const blob = new Blob([buf], { type: 'model/stl' });
+  const a2 = document.createElement('a');
+  a2.href = URL.createObjectURL(blob);
+  a2.download = (baseName || 'lathe') + '.stl';
+  a2.click();
+  URL.revokeObjectURL(a2.href);
+  return { tris: tris, kb: blob.size / 1024 };
+}
+
+$('stl').onclick = function () {
+  if (!mesh) { setStatus('먼저 3D 생성부터.'); return; }
+  const nm = CUR_PART ? CUR_PART.part_number.replace(/[\\/:*?"<>|]/g, '_') : 'lathe';
+  const r = exportStl(mesh, nm);
+  setStatus('STL 저장 — ' + nm + '.stl / 삼각형 ' + r.tris + '개 / ' + r.kb.toFixed(0) + ' KB');
+};
+
+/* =========================================================
+   조회 탭
+   검색해서 고르면 위에 도면, 아래에 3D 형상을 보여준다.
+   STL 저장 / 작성 탭으로 편집 이동 가능.
+   ========================================================= */
+let VROWS = [];        // qc_part_3d + qc_part 조인 결과
+let VSEL = null;       // 선택된 행
+
+/* 저장된 좌표에서 회전 프로파일과 치수 통계를 계산.
+   축과 윤곽이 같은 좌표계라 기울기 보정(rot)은 적용할 필요가 없다.
+   축까지의 거리는 회전에 대해 불변이기 때문. */
+function profileFromRow(row) {
+  const ax = row.axis, pts = row.pts;
+  if (!ax || ax.length < 2 || !pts || pts.length < 2) return null;
+  let ux = ax[1].x - ax[0].x, uy = ax[1].y - ax[0].y;
+  const L = Math.hypot(ux, uy);
+  if (L < 1) return null;
+  ux /= L; uy /= L;
+  const nx = -uy, ny = ux;
+  const k = row.mm_per_px > 0 ? row.mm_per_px : 1;
+
+  const raw = pts.map(function (p) {
+    const vx = p.x - ax[0].x, vy = p.y - ax[0].y;
+    return { h: (vx * ux + vy * uy) * k, r: (vx * nx + vy * ny) * k };
+  });
+  const pos = raw.filter(function (p) { return p.r > 0; }).length;
+  const sign = pos >= raw.length - pos ? 1 : -1;
+  const v2 = raw.map(function (p) { return new THREE.Vector2(Math.abs(p.r), p.h * sign); });
+
+  let maxR = -Infinity, minR = Infinity, maxH = -Infinity, minH = Infinity;
+  v2.forEach(function (p) {
+    if (p.x > maxR) maxR = p.x;
+    if (p.x < minR) minR = p.x;
+    if (p.y > maxH) maxH = p.y;
+    if (p.y < minH) minH = p.y;
+  });
+  return {
+    v2: v2,
+    maxD: maxR * 2, minD: minR * 2, height: maxH - minH,
+    unit: row.mm_per_px > 0 ? 'mm' : 'px'
+  };
+}
+
+function latheFromProfile(prof, row) {
+  const p = prof.v2.slice();
+  const closeIt = !row.opts || row.opts.closeLoop !== false;
+  if (closeIt && p.length > 2) p.push(p[0].clone());
+  const seg = (row.opts && parseInt(row.opts.seg)) || 96;
+  return new THREE.LatheGeometry(p, seg, 0, Math.PI * 2);
+}
+
+function loadViewRows() {
+  $('vDrawMsg').textContent = '목록 불러오는 중…';
+  const q = SB.url + '/rest/v1/qc_part_3d' +
+    '?select=*,qc_part(id,part_number,part_name,customer,drawing_path)' +
+    '&order=updated_at.desc';
+  fetch(q, { headers: sbHeaders() })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function (rows) {
+      VROWS = rows;
+      renderPick();
+    })
+    .catch(function (e) {
+      $('vDrawMsg').textContent = '목록 실패: ' + e.message;
+    });
+}
+
+/* 검색어로 걸러서 드롭다운을 채운다.
+   목록 사이드바 없이 한 줄로 끝내기 위한 구조 (모바일 대응) */
+function renderPick() {
+  const kw = $('vSearch').value.trim().toLowerCase();
+  const sel = $('vPick');
+  const prev = VSEL ? String(VSEL.id) : '';
+  sel.innerHTML = '';
+  let n = 0, first = null, keepPrev = false;
+
+  VROWS.forEach(function (row) {
+    const p = row.qc_part || {};
+    // 품번 · 품명 · 고객사 · label 전부 검색 대상
+    const hay = ((p.part_number || '') + ' ' + (p.part_name || '') + ' ' +
+                 (p.customer || '') + ' ' + row.label).toLowerCase();
+    if (kw && hay.indexOf(kw) < 0) return;
+
+    const o = document.createElement('option');
+    o.value = row.id;
+    o.textContent = (p.part_number || 'part#' + row.part_id) +
+      (row.label && row.label !== 'main' ? ' [' + row.label + ']' : '') +
+      (p.part_name ? '  |  ' + p.part_name : '') +
+      (p.customer ? '  |  ' + p.customer : '');
+    sel.appendChild(o);
+    if (!first) first = row;
+    if (String(row.id) === prev) keepPrev = true;
+    n++;
+  });
+
+  if (!n) {
+    const o = document.createElement('option');
+    o.textContent = VROWS.length ? '검색 결과 없음' : '저장된 형상 없음';
+    o.disabled = true;
+    sel.appendChild(o);
+    return;
+  }
+
+  if (keepPrev) {
+    sel.value = prev;                    // 기존 선택 유지
+  } else if (first) {
+    sel.value = first.id;                // 검색으로 바뀌면 첫 결과 자동 표시
+    selectRow(first);
+  }
+}
+
+$('vPick').onchange = function () {
+  const id = parseInt($('vPick').value);
+  for (let i = 0; i < VROWS.length; i++) {
+    if (VROWS[i].id === id) { selectRow(VROWS[i]); return; }
+  }
+};
+$('vSearch').oninput = renderPick;
+$('vReload').onclick = loadViewRows;
+
+/* ---- 조회 탭 큰 3D 뷰어 ---- */
+let vRend, vScene, vCam, vMesh, vAxis;
+const vcam = { theta: 0.9, phi: 1.15, dist: 100, tx: 0, ty: 0, tz: 0 };
+
+function initViewGL() {
+  if (vRend) return;
+  vRend = new THREE.WebGLRenderer({ canvas: $('viewCanvas'), antialias: true });
+  vRend.setPixelRatio(Math.min(devicePixelRatio, 2));
+  vScene = new THREE.Scene();
+  vScene.background = new THREE.Color(0x101215);
+  vCam = new THREE.PerspectiveCamera(45, 1, 0.01, 200000);
+  vScene.add(new THREE.HemisphereLight(0xdfe8ff, 0x202430, 0.95));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 2, 1.5);
+  const d2 = new THREE.DirectionalLight(0xffffff, 0.35); d2.position.set(-1.5, -1, -1);
+  vScene.add(d1); vScene.add(d2);
+  resizeViewGL();
+  vAnimate();
+
+  const c = $('viewCanvas');
+  let dg = null;
+  c.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  c.addEventListener('mousedown', function (e) { dg = { b: e.button, x: e.clientX, y: e.clientY }; });
+  window.addEventListener('mousemove', function (e) {
+    if (!dg) return;
+    const dx = e.clientX - dg.x, dy = e.clientY - dg.y;
+    dg.x = e.clientX; dg.y = e.clientY;
+    if (dg.b === 0) { vcam.theta -= dx * 0.008; vcam.phi -= dy * 0.008; $('vSpin').checked = false; }
+    else {
+      const k = vcam.dist * 0.0016;
+      vcam.tx += -dx * k * Math.cos(vcam.theta);
+      vcam.tz += dx * k * Math.sin(vcam.theta);
+      vcam.ty += dy * k;
+    }
+  });
+  window.addEventListener('mouseup', function () { dg = null; });
+  c.addEventListener('wheel', function (e) {
+    e.preventDefault(); vcam.dist *= e.deltaY < 0 ? 0.9 : 1.1;
+  }, { passive: false });
+}
+function resizeViewGL() {
+  if (!vRend) return;
+  const b = $('viewCanvas').getBoundingClientRect();
+  if (b.width < 5 || b.height < 5) return;
+  vRend.setSize(b.width, b.height, false);
+  vCam.aspect = b.width / b.height;
+  vCam.updateProjectionMatrix();
+}
+function vAnimate() {
+  requestAnimationFrame(vAnimate);
+  if ($('viewWrap').style.display === 'none') return;
+  if ($('vSpin').checked && vMesh) vcam.theta += 0.004;
+  const sp = Math.max(0.05, Math.min(Math.PI - 0.05, vcam.phi));
+  vCam.position.set(
+    vcam.tx + vcam.dist * Math.sin(sp) * Math.sin(vcam.theta),
+    vcam.ty + vcam.dist * Math.cos(sp),
+    vcam.tz + vcam.dist * Math.sin(sp) * Math.cos(vcam.theta)
+  );
+  vCam.lookAt(vcam.tx, vcam.ty, vcam.tz);
+  vRend.render(vScene, vCam);
+}
+
+function selectRow(row) {
+  VSEL = row;
+  $('vPick').value = row.id;
+
+  // 위쪽: 스토리지 도면 이미지
+  const p = row.qc_part || {};
+  const img = $('vDraw');
+  if (p.drawing_path) {
+    $('vDrawMsg').textContent = '도면 불러오는 중…';
+    $('vDrawMsg').style.display = 'block';
+    img.style.display = 'none';
+    img.onload = function () {
+      // 주의: style.display='' 로 되돌리면 스타일시트의 display:none 이
+      // 다시 적용된다. 반드시 명시적으로 'block' 을 넣어야 한다.
+      img.style.display = 'block';
+      $('vDrawMsg').style.display = 'none';
+    };
+    img.onerror = function () {
+      img.style.display = 'none';
+      $('vDrawMsg').style.display = 'block';
+      $('vDrawMsg').textContent = '도면 로드 실패: ' + p.drawing_path;
+    };
+    img.src = drawingUrl(p.drawing_path);
+  } else {
+    img.style.display = 'none';
+    $('vDrawMsg').style.display = 'block';
+    $('vDrawMsg').textContent = '이 품번에 등록된 도면이 없다.';
+  }
+
+  // 아래쪽: 3D
+  initViewGL();
+  resizeViewGL();
+  const prof = profileFromRow(row);
+  if (!prof) { $('vInfo').textContent = '형상 데이터가 불완전하다.'; return; }
+
+  if (vMesh) { vScene.remove(vMesh); vMesh.geometry.dispose(); vMesh.material.dispose(); }
+  const geo = latheFromProfile(prof, row);
+  geo.computeVertexNormals();
+  vMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color: 0xb9c4d0, metalness: 0.55, roughness: 0.42, side: THREE.DoubleSide
+  }));
+  vScene.add(vMesh);
+
+  if (vAxis) vScene.remove(vAxis);
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  const h = bb.max.y - bb.min.y;
+  vAxis = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, bb.min.y - h * 0.35, 0),
+      new THREE.Vector3(0, bb.max.y + h * 0.35, 0)
+    ]),
+    new THREE.LineBasicMaterial({ color: 0xff5a5a })
+  );
+  vScene.add(vAxis);
+
+  const c = new THREE.Vector3(); bb.getCenter(c);
+  const sz = new THREE.Vector3(); bb.getSize(sz);
+  vcam.tx = c.x; vcam.ty = c.y; vcam.tz = c.z;
+  vcam.dist = Math.max(sz.x, sz.y, sz.z) * 2.4 + 1;
+
+  const u = prof.unit;
+  let vp = '';
+  if (row.vpts && row.vpts.length) {
+    vp = row.vpts.map(function (v) { return (v.isRad ? 'R' : 'Ø') + v.mm; }).join(', ');
+  }
+  $('vInfo').innerHTML =
+    '<b style="color:#e6e6e6;font-size:13px">' + (p.part_number || '') + '</b>' +
+    (row.label !== 'main' ? ' <span style="color:#ffd24a">[' + row.label + ']</span>' : '') +
+    '　<span style="color:#8d95a0">' + (p.part_name || '') +
+      (p.customer ? '  ·  ' + p.customer : '') + '</span>' +
+    '<br>외경 <span class="k">Ø' + prof.maxD.toFixed(3) + '</span>' +
+    ' · 내경 <span class="k">Ø' + prof.minD.toFixed(3) + '</span>' +
+    ' · 높이 <span class="k">' + prof.height.toFixed(3) + '</span> ' + u +
+    '<br>윤곽 ' + row.pts.length + '점 · 삼각형 ' +
+    (geo.attributes.position.count / 3 | 0) + '개' +
+    (vp ? ' · 검증 기준 ' + vp : '') +
+    (row.mm_per_px ? ' · 1px=' + row.mm_per_px.toFixed(6) + 'mm' : ' <span style="color:#ffb347">· 배율 미설정</span>') +
+    '<br><span style="color:#5d656f">수정 ' + String(row.updated_at).slice(0, 16).replace('T', ' ') + '</span>';
+}
+
+/* 조회 탭에서 STL 저장 */
+$('vStl').onclick = function () {
+  if (!vMesh) { $('vInfo').innerHTML = '먼저 품번을 골라라.'; return; }
+  const p = (VSEL && VSEL.qc_part) ? VSEL.qc_part.part_number : 'lathe';
+  exportStl(vMesh, p.replace(/[\\/:*?"<>|]/g, '_'));
+};
+
+/* 조회 -> 작성 탭으로 이동해서 편집 */
+$('vEdit').onclick = function () {
+  if (!VSEL) { $('vInfo').innerHTML = '먼저 품번을 골라라.'; return; }
+  const q = VSEL.qc_part;
+  if (!q || !q.drawing_path) { $('vInfo').innerHTML = '이 품번에 도면 경로가 없다.'; return; }
+  showTab('edit');
+  $('profLabel').value = VSEL.label;
+  const sel = $('partSel');
+  if (sel) sel.value = VSEL.part_id;
+  openDrawing({ id: VSEL.part_id, part_number: q.part_number, drawing_path: q.drawing_path }, VSEL);
+};
+
+/* ---------------- 탭 전환 ---------------- */
+function showTab(which) {
+  const view = which === 'view';
+  $('viewWrap').style.display = view ? 'flex' : 'none';
+  $('wrap').style.display = view ? 'none' : 'flex';
+  $('tabView').classList.toggle('on', view);
+  $('tabEdit').classList.toggle('on', !view);
+  $('headHint').textContent = view ? '저장된 형상을 한눈에 보기'
+                                   : '단면 도면을 축 기준 360° 회전시켜 형상만 생성';
+  if (view) {
+    resizeViewGL();
+    loadViewRows();
+  } else {
+    // 숨겨진 동안 크기가 0 이었으므로 다시 잡아준다
+    resizeCanvas();
+    resizeGL();
+    if (!PARTS.length) loadParts();
+  }
+}
+$('tabView').onclick = function () { showTab('view'); };
+$('tabEdit').onclick = function () { showTab('edit'); };
+window.addEventListener('resize', resizeViewGL);
+
+/* ---------------- 시작 ---------------- */
+initGL();
+setMode('axis');
+showTab('view');       // 조회 탭이 기본
+initViewGL();
+loadViewRows();
+loadParts();           // 작성 탭 품번 목록 미리 준비
+</script>
+</body>
+</html>
