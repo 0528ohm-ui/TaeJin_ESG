@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>도면 → 3D 회전체 변환 v2.0</title>
+<title>도면 → 3D 회전체 변환 v2.1</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -168,7 +168,7 @@
 
 <header>
   <h1>도면 &rarr; 3D 회전체 변환</h1>
-  <span class="badge">v2.0</span>
+  <span class="badge">v2.1</span>
   <div class="tabs">
     <button id="tabView" class="on">조회</button>
     <button id="tabEdit">작성</button>
@@ -525,6 +525,17 @@
         <div class="grp">
           <div class="t">3D 표시</div>
           <div class="row">
+            <label><input type="checkbox" id="axisSnap" checked> 축 스냅(중심 막기)</label>
+          </div>
+          <div class="row">
+            <label>허용 <input type="number" id="axisSnapPx" value="5" min="0" max="60" style="width:46px"></label>
+            <label>이미지px</label>
+          </div>
+          <div class="row hint" style="margin-top:-2px">
+            축에서 이 거리 안쪽 점은 반지름 0 으로 붙인다.<br>
+            캡·마개처럼 중심이 막힌 제품에 필요.
+          </div>
+          <div class="row">
             <label>배경 <input type="color" id="bgColor" value="#ffffff"></label>
             <label>형상 <input type="color" id="mdColor" value="#9fb0c2"></label>
             <button class="sm" id="colReset">기본</button>
@@ -569,7 +580,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* =========================================================
-   도면 -> 3D 회전체 변환  v2.0
+   도면 -> 3D 회전체 변환  v2.1
    v0.1 -> v0.2 변경점
    - 기준선 2점으로 이미지 자체를 회전시켜 기울기 보정 (픽셀 베이크)
    - 직교 보정: 이전 점 대비 +-N도 이내면 완전 수평/수직으로 정렬
@@ -688,6 +699,13 @@
    - 3D 배경색 / 형상색을 사용자가 지정 가능. 기본 배경은 흰색
    - 조회 탭과 작성 탭이 같은 색을 쓰고 localStorage 에 기억된다
    - 밝은 배경에서는 축선 색을 자동으로 어둡게 바꿔 가시성 유지
+
+   v2.0 -> v2.1 변경점
+   - 축 스냅 추가. 축에서 지정 거리(기본 이미지 5px) 안쪽 점은 반지름을
+     0 으로 붙인다. 캡·마개처럼 중심이 막힌 제품이 뚫린 채로 나오던 문제 해결
+     (회전체는 반지름이 정확히 0 이어야 중심이 닫힌다)
+   - 저장 옵션에 포함되어 조회 탭에서도 동일하게 재현된다
+   - 중심에 미세한 구멍이 남으면 상태바에서 안내
    ========================================================= */
 
 const S = {
@@ -1642,7 +1660,8 @@ $('btnDbSave').onclick = function () {
       snap: $('snap').checked, snapR: $('snapR').value,
       ortho: $('ortho').checked, orthoTol: $('orthoTol').value,
       axisLock: $('axisLock').checked, dpEps: $('dpEps').value,
-      vIsRad: $('vIsRad').checked
+      vIsRad: $('vIsRad').checked,
+      axisSnap: $('axisSnap').checked, axisSnapPx: $('axisSnapPx').value
     },
     updated_at: new Date().toISOString()
   }];
@@ -1737,6 +1756,8 @@ function applyDbRow(row, im) {
   if (o.axisLock !== undefined) $('axisLock').checked = o.axisLock;
   if (o.dpEps) $('dpEps').value = o.dpEps;
   if (o.vIsRad !== undefined) $('vIsRad').checked = o.vIsRad;
+  if (o.axisSnap !== undefined) $('axisSnap').checked = o.axisSnap;
+  if (o.axisSnapPx) $('axisSnapPx').value = o.axisSnapPx;
 
   S.mmPerPx = row.mm_per_px || 0;
   $('mmPerPx').value = S.mmPerPx ? S.mmPerPx.toFixed(6) : 0;
@@ -1812,7 +1833,9 @@ function collectProject() {
       orthoTol: $('orthoTol').value,
       axisLock: $('axisLock').checked,
       dpEps: $('dpEps').value,
-      vIsRad: $('vIsRad').checked
+      vIsRad: $('vIsRad').checked,
+      axisSnap: $('axisSnap').checked,
+      axisSnapPx: $('axisSnapPx').value
     },
     image: encodeImage($('saveImgMode').value)
   };
@@ -1885,6 +1908,8 @@ function applyProject(o, im) {
   if (p.axisLock !== undefined) $('axisLock').checked = p.axisLock;
   if (p.dpEps) $('dpEps').value = p.dpEps;
   if (p.vIsRad !== undefined) $('vIsRad').checked = p.vIsRad;
+  if (p.axisSnap !== undefined) $('axisSnap').checked = p.axisSnap;
+  if (p.axisSnapPx) $('axisSnapPx').value = p.axisSnapPx;
 
   // 회전 먼저 굽고, 저장된 원본좌표를 작업좌표로 환산
   const deg = o.rot || 0;
@@ -2392,11 +2417,23 @@ function buildProfile() {
     const vx = p.x - A.x, vy = p.y - A.y;
     return { h: (vx * ux + vy * uy) * k, r: (vx * nx + vy * ny) * k };
   });
-  const pos = raw.filter(function (p) { return p.r > 0; }).length;
-  const sign = pos >= raw.length - pos ? 1 : -1;
-  const mixed = pos > 0 && pos < raw.length;
-  const pts2 = raw.map(function (p) { return new THREE.Vector2(Math.abs(p.r), p.h * sign); });
-  return { pts2: pts2, mixed: mixed, unit: S.mmPerPx > 0 ? 'mm' : 'px' };
+
+  // 축 스냅: 축에 아주 가까운 점은 반지름 0 으로 붙인다.
+  // 0 이 아니면 회전 시 그만큼 중심에 구멍이 생긴다 (캡·마개 형상에서 필수)
+  const snapOn = $('axisSnap').checked;
+  const thr = (parseFloat($('axisSnapPx').value) || 0) * k;   // 이미지px -> 현재 단위
+  let snapped = 0;
+  const bigSide = raw.filter(function (p) { return p.r > 0; }).length;
+  const sign = bigSide >= raw.length - bigSide ? 1 : -1;
+  const mixed = bigSide > 0 && bigSide < raw.length;
+
+  const pts2 = raw.map(function (p) {
+    let r = Math.abs(p.r);
+    if (snapOn && thr > 0 && r <= thr) { r = 0; snapped++; }
+    return new THREE.Vector2(r, p.h * sign);
+  });
+  return { pts2: pts2, mixed: mixed, snapped: snapped,
+           unit: S.mmPerPx > 0 ? 'mm' : 'px' };
 }
 
 $('build').onclick = build3D;
@@ -2445,6 +2482,13 @@ function build3D() {
             ' / 높이 ' + (bb.max.y - bb.min.y).toFixed(2) + ' ' + prof.unit +
             ' / 점 ' + prof.pts2.length + '개';
   if (prof.unit === 'px') msg += ' <span class="k">(배율 미설정)</span>';
+  if (prof.snapped) {
+    msg += '<br><span style="color:#4ade80">축 스냅: ' + prof.snapped +
+           '점을 반지름 0 으로 붙임 (중심 막힘)</span>';
+  } else if (minR > 0 && minR * 2 < maxR * 0.06) {
+    msg += '<br><span style="color:#ffb347">중심에 Ø' + (minR * 2).toFixed(3) +
+           ' 구멍이 남아 있다. 막힌 형상이면 고급 &gt; <span class="k">축 스냅</span> 허용값을 키워라.</span>';
+  }
   if (prof.mixed) msg += '<br><span style="color:#ffb347">경고: 윤곽이 축 양쪽에 걸쳐 있다.</span>';
   setStatus(msg);
 }
@@ -2453,6 +2497,8 @@ $('phi').oninput = function (e) { $('phiV').textContent = e.target.value + '°';
 $('seg').oninput = function (e) { $('segV').textContent = e.target.value; };
 $('seg').onchange = function () { if (mesh) build3D(); };
 $('wire').onchange = function (e) { if (mesh) mesh.material.wireframe = e.target.checked; };
+$('axisSnap').onchange = function () { if (mesh) build3D(); };
+$('axisSnapPx').onchange = function () { if (mesh) build3D(); };
 $('closeLoop').onchange = function () { draw(); if (mesh) build3D(); };
 
 /* ---------------- STL (바이너리) ----------------
@@ -2525,7 +2571,15 @@ function profileFromRow(row) {
   });
   const pos = raw.filter(function (p) { return p.r > 0; }).length;
   const sign = pos >= raw.length - pos ? 1 : -1;
-  const v2 = raw.map(function (p) { return new THREE.Vector2(Math.abs(p.r), p.h * sign); });
+  // 저장된 옵션의 축 스냅을 그대로 재현한다
+  const o = row.opts || {};
+  const snapOn = o.axisSnap !== false;
+  const thr = (parseFloat(o.axisSnapPx) || 5) * k;
+  const v2 = raw.map(function (p) {
+    let r = Math.abs(p.r);
+    if (snapOn && thr > 0 && r <= thr) r = 0;
+    return new THREE.Vector2(r, p.h * sign);
+  });
 
   let maxR = -Infinity, minR = Infinity, maxH = -Infinity, minH = Infinity;
   v2.forEach(function (p) {
