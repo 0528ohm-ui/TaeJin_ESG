@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>도면 → 3D 회전체 변환 v1.9</title>
+<title>도면 → 3D 회전체 변환 v2.0</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -99,6 +99,11 @@
   .step button { min-width: 92px; }
   #vList { margin: 4px 0 8px 0; }
   #rpanel { width: 176px; }
+  input[type=color] {
+    width: 30px; height: 20px; padding: 0; border: 1px solid #4a515c;
+    border-radius: 3px; background: #14171b; cursor: pointer; vertical-align: middle;
+  }
+  .csep { width: 1px; height: 18px; background: #3a3f47; margin: 0 3px; }
 
   /* ===== 탭 ===== */
   .tabs { display: flex; gap: 3px; margin-left: 6px; }
@@ -163,7 +168,7 @@
 
 <header>
   <h1>도면 &rarr; 3D 회전체 변환</h1>
-  <span class="badge">v1.9</span>
+  <span class="badge">v2.0</span>
   <div class="tabs">
     <button id="tabView" class="on">조회</button>
     <button id="tabEdit">작성</button>
@@ -195,6 +200,10 @@
       <button id="vEdit">작성 탭에서 열기</button>
       <button id="vStl">STL 저장</button>
       <label><input type="checkbox" id="vSpin" checked> 자동 회전</label>
+      <span class="csep"></span>
+      <label>배경 <input type="color" id="vBgColor" value="#ffffff"></label>
+      <label>형상 <input type="color" id="vMdColor" value="#9fb0c2"></label>
+      <button class="sm" id="vColReset">기본</button>
     </div>
   </div>
 </div>
@@ -516,6 +525,11 @@
         <div class="grp">
           <div class="t">3D 표시</div>
           <div class="row">
+            <label>배경 <input type="color" id="bgColor" value="#ffffff"></label>
+            <label>형상 <input type="color" id="mdColor" value="#9fb0c2"></label>
+            <button class="sm" id="colReset">기본</button>
+          </div>
+          <div class="row">
             <label>회전각</label>
             <input type="range" id="phi" min="30" max="360" value="270" step="10" style="flex:1">
             <span id="phiV">270&deg;</span>
@@ -555,7 +569,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* =========================================================
-   도면 -> 3D 회전체 변환  v1.9
+   도면 -> 3D 회전체 변환  v2.0
    v0.1 -> v0.2 변경점
    - 기준선 2점으로 이미지 자체를 회전시켜 기울기 보정 (픽셀 베이크)
    - 직교 보정: 이전 점 대비 +-N도 이내면 완전 수평/수직으로 정렬
@@ -669,6 +683,11 @@
 
    v1.8 -> v1.9 변경점
    - 회전각 기본값 360도 -> 270도 (단면이 보여 형상 확인이 쉽다)
+
+   v1.9 -> v2.0 변경점
+   - 3D 배경색 / 형상색을 사용자가 지정 가능. 기본 배경은 흰색
+   - 조회 탭과 작성 탭이 같은 색을 쓰고 localStorage 에 기억된다
+   - 밝은 배경에서는 축선 색을 자동으로 어둡게 바꿔 가시성 유지
    ========================================================= */
 
 const S = {
@@ -2313,7 +2332,7 @@ function initGL() {
   renderer = new THREE.WebGLRenderer({ canvas: glCv, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x101215);
+  scene.background = new THREE.Color(COL.bg);
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200000);
   scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x202430, 0.9));
   const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(1, 2, 1.5); scene.add(dl);
@@ -2396,7 +2415,7 @@ function build3D() {
   const geo = new THREE.LatheGeometry(pts2, seg, 0, phi);
   geo.computeVertexNormals();
   mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    color: 0xb9c4d0, metalness: 0.55, roughness: 0.42,
+    color: new THREE.Color(COL.md), metalness: 0.55, roughness: 0.42,
     side: THREE.DoubleSide, wireframe: $('wire').checked
   }));
   scene.add(mesh);
@@ -2408,7 +2427,7 @@ function build3D() {
     new THREE.Vector3(0, bb.min.y - (bb.max.y - bb.min.y) * 0.3, 0),
     new THREE.Vector3(0, bb.max.y + (bb.max.y - bb.min.y) * 0.3, 0)
   ]);
-  axisHelper = new THREE.Line(g2, new THREE.LineBasicMaterial({ color: 0xff5a5a }));
+  axisHelper = new THREE.Line(g2, new THREE.LineBasicMaterial({ color: axisColor() }));
   scene.add(axisHelper);
 
   const c = new THREE.Vector3(); bb.getCenter(c);
@@ -2611,7 +2630,7 @@ function initViewGL() {
   vRend = new THREE.WebGLRenderer({ canvas: $('viewCanvas'), antialias: true });
   vRend.setPixelRatio(Math.min(devicePixelRatio, 2));
   vScene = new THREE.Scene();
-  vScene.background = new THREE.Color(0x101215);
+  vScene.background = new THREE.Color(COL.bg);
   vCam = new THREE.PerspectiveCamera(45, 1, 0.01, 200000);
   vScene.add(new THREE.HemisphereLight(0xdfe8ff, 0x202430, 0.95));
   const d1 = new THREE.DirectionalLight(0xffffff, 0.85); d1.position.set(1, 2, 1.5);
@@ -2702,7 +2721,7 @@ function selectRow(row) {
   const geo = latheFromProfile(prof, row);
   geo.computeVertexNormals();
   vMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-    color: 0xb9c4d0, metalness: 0.55, roughness: 0.42, side: THREE.DoubleSide
+    color: new THREE.Color(COL.md), metalness: 0.55, roughness: 0.42, side: THREE.DoubleSide
   }));
   vScene.add(vMesh);
 
@@ -2715,7 +2734,7 @@ function selectRow(row) {
       new THREE.Vector3(0, bb.min.y - h * 0.35, 0),
       new THREE.Vector3(0, bb.max.y + h * 0.35, 0)
     ]),
-    new THREE.LineBasicMaterial({ color: 0xff5a5a })
+    new THREE.LineBasicMaterial({ color: axisColor() })
   );
   vScene.add(vAxis);
 
@@ -2791,12 +2810,72 @@ $('tabEdit').onclick = function () { showTab('edit'); };
 $('tabHelp').onclick = function () { showTab('help'); };
 window.addEventListener('resize', resizeViewGL);
 
+/* =========================================================
+   3D 색상 설정 (배경 / 형상)
+   조회 탭과 작성 탭이 같은 값을 쓰며 localStorage 에 남는다.
+   ========================================================= */
+const COL_DEF = { bg: '#ffffff', md: '#9fb0c2' };
+const COL = { bg: COL_DEF.bg, md: COL_DEF.md };
+
+function loadColors() {
+  try {
+    const raw = localStorage.getItem('d3_colors');
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (/^#[0-9a-f]{6}$/i.test(o.bg || '')) COL.bg = o.bg;
+      if (/^#[0-9a-f]{6}$/i.test(o.md || '')) COL.md = o.md;
+    }
+  } catch (e) { /* 접근 불가 환경이면 기본값 사용 */ }
+}
+function saveColors() {
+  try { localStorage.setItem('d3_colors', JSON.stringify(COL)); } catch (e) { }
+}
+
+function applyColors() {
+  // 입력칸 4개 동기화
+  ['bgColor', 'vBgColor'].forEach(function (id) { if ($(id)) $(id).value = COL.bg; });
+  ['mdColor', 'vMdColor'].forEach(function (id) { if ($(id)) $(id).value = COL.md; });
+
+  const bg = new THREE.Color(COL.bg);
+  const md = new THREE.Color(COL.md);
+  if (scene) scene.background = bg.clone();
+  if (vScene) vScene.background = bg.clone();
+  if (mesh) mesh.material.color.set(md);
+  if (vMesh) vMesh.material.color.set(md);
+
+  // 밝은 배경에서는 붉은 축선이 잘 안 보여 약간 어둡게 잡는다
+  const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
+  const axCol = lum > 0.6 ? 0xd02020 : 0xff5a5a;
+  if (axisHelper) axisHelper.material.color.setHex(axCol);
+  if (vAxis) vAxis.material.color.setHex(axCol);
+  saveColors();
+}
+function axisColor() {
+  const bg = new THREE.Color(COL.bg);
+  return (0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b) > 0.6 ? 0xd02020 : 0xff5a5a;
+}
+
+['bgColor', 'vBgColor'].forEach(function (id) {
+  const el = $(id);
+  if (el) el.oninput = function () { COL.bg = el.value; applyColors(); };
+});
+['mdColor', 'vMdColor'].forEach(function (id) {
+  const el = $(id);
+  if (el) el.oninput = function () { COL.md = el.value; applyColors(); };
+});
+['colReset', 'vColReset'].forEach(function (id) {
+  const el = $(id);
+  if (el) el.onclick = function () { COL.bg = COL_DEF.bg; COL.md = COL_DEF.md; applyColors(); };
+});
+
 /* ---------------- 시작 ---------------- */
+loadColors();          // 저장된 색을 먼저 읽어야 씬 배경이 맞게 만들어진다
 initGL();
 setMode('axis');
 fitPanelHeight();
 showTab('view');       // 조회 탭이 기본
 initViewGL();
+applyColors();
 loadViewRows();
 loadParts();           // 작성 탭 품번 목록 미리 준비
 </script>
