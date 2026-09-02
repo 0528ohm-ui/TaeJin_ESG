@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v1.97</title>
+<title>공정검사 입력 v1.99</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -471,6 +471,12 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .pt-cell{display:flex;flex-direction:column;gap:3px}
 .pt-label{font-size:13px;font-weight:700;color:#94a3b8;text-align:center}
 .pt-inp{width:100%;padding:10px 4px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:18px;text-align:center;outline:none}
+/* [v1.98] 자동 계산 항목 */
+.pt-inp.calc-inp{background:#f8fafc;color:#475569;border-style:dashed;cursor:default}
+.pt-inp.calc-inp::placeholder{font-size:14px;color:#cbd5e1}
+.calc-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px}
+.calc-badge{font-size:13px;font-weight:800;color:#0e7490;background:#cffafe;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.calc-desc{font-size:13px;color:#64748b}
 .pt-inp:focus{border-color:#3b82f6}
 .pt-inp.ng{border-color:#fca5a5;background:#fff5f5;color:#dc2626}
 .pt-inp.ok{border-color:#86efac}
@@ -573,7 +579,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v1.97</span></h1>
+      <h1>공정검사 입력 <span class="badge">v1.99</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2295,6 +2301,7 @@ function renderTabBar() {
 // ══════════════════════════════════
 function renderSpecs() {
   closeAdjustPanel();   // [v0.38] 탭/variant 전환 시 이전 패널 참조 끊기
+  recalcAll();          // [v1.98] 자동 계산 항목 초기값 맞춤
   const list = document.getElementById('specs-list');
   const rendered = new Set();
   const html = [];
@@ -2574,7 +2581,14 @@ function renderSpecCard(s) {
   } else {
     // 치수 항목: 모드 토글 (포인트 ↔ 최소/최대) + 포인트 모드일 때 칸수 조절
     const isMM = inp.type === 'minmax';
-    ctrlHtml = `
+    // [v1.98] 자동 계산 항목은 모드·칸수를 바꿀 수 없다 (계산 결과 1칸 고정)
+    const isCalc = !!(s.calc_type && s.calc_src_item_no != null);
+    const srcSpec = isCalc ? specs.find(x => x.item_no === s.calc_src_item_no) : null;
+    ctrlHtml = isCalc ? `
+      <div class="calc-bar">
+        <span class="calc-badge">⚙ 자동 계산</span>
+        <span class="calc-desc">No.${srcSpec ? dno(srcSpec) : s.calc_src_item_no} ${srcSpec ? srcSpec.item_name : ''} 의 최대−최소</span>
+      </div>` : `
       <div class="mode-bar">
         <div class="mode-toggle">
           <button class="mt-btn ${!isMM?'sel':''}" onclick="switchMode(${s.id},'points')">포인트</button>
@@ -2611,6 +2625,14 @@ function renderSpecCard(s) {
       const cols = Math.min(n, 5);   // 한 줄 최대 5칸, 초과 시 자동 줄바꿈
       const cells = inp.vals.map((v, i) => {
         const cls = getValClass(parseFloat(v), s.lsl, s.usl);
+        // [v1.98] 계산 항목은 직접 입력 불가 — 소스 값이 바뀌면 자동으로 채워진다
+        if (isCalc) {
+          return `<div class="pt-cell">
+            <span class="pt-label">X${i+1}</span>
+            <input class="pt-inp calc-inp ${cls}" type="text" id="pt-${s.id}-${i}"
+              value="${v}" placeholder="소스 입력 대기" readonly tabindex="-1">
+          </div>`;
+        }
         return `<div class="pt-cell">
           <span class="pt-label">X${i+1}</span>
           <input class="pt-inp ${cls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${s.id}-${i}"
@@ -2696,8 +2718,94 @@ function setMinMax(id, key, el) {
   el.classList.remove('prefilled');
   el.classList.toggle('touched', el.value !== '');
   updateCardState(id);
+  recalcFrom(id);   // [v1.98] 이 항목을 소스로 쓰는 계산 항목 갱신
   if (_ngPending) ngCardSync();   // [v1.68] NG 카드가 떠 있으면 표시값 실시간 갱신
   persistDraft();   // [v1.31] min/max 변경 → 드래프트 갱신
+}
+
+// ══════════════════════════════════
+// [v1.98] 자동 계산 항목
+//   qc_part_spec.calc_type / calc_src_item_no 로 정의.
+//     'range' = 소스 항목 측정값의 (최대 - 최소)
+//   예: SV MAIN PLATE '비드높이 편차' ← '비드 높이' 3점의 최대-최소
+//   소스 칸을 치는 즉시 다시 계산되고, 계산 항목은 직접 입력할 수 없다.
+//   자릿수는 소스 값 중 가장 긴 소수 자릿수를 따라간다 (1.92/1.95 → 0.03).
+// ══════════════════════════════════
+function calcSpecs() {
+  return specs.filter(s => s.calc_type && s.calc_src_item_no != null);
+}
+
+// 이 spec을 소스로 쓰는 계산 항목들
+function calcTargetsOf(srcSpecId) {
+  const src = specs.find(x => x.id === srcSpecId);
+  if (!src) return [];
+  return calcSpecs().filter(t => t.calc_src_item_no === src.item_no);
+}
+
+// 소스 항목에 실제로 입력된 숫자들
+function calcSrcNums(srcSpec) {
+  const inp = specInputs[srcSpec.id];
+  if (!inp) return [];
+  let raw = [];
+  if (inp.type === 'points') raw = inp.vals || [];
+  else if (inp.type === 'minmax') raw = [inp.min, inp.max];
+  return raw.map(v => parseFloat(v)).filter(v => !isNaN(v));
+}
+
+// 소스 값들의 최대 소수 자릿수
+function maxDp(srcSpec) {
+  const inp = specInputs[srcSpec.id];
+  if (!inp) return 2;
+  let raw = inp.type === 'points' ? (inp.vals || []) : [inp.min, inp.max];
+  let dp = 0;
+  raw.forEach(v => {
+    const m = String(v ?? '').match(/\.(\d+)$/);
+    if (m) dp = Math.max(dp, m[1].length);
+  });
+  return dp || 2;
+}
+
+// 계산 항목 하나를 다시 계산해 입력값에 반영. 반환: 값이 바뀌었는지
+function recalcOne(target) {
+  const src = specs.find(x => x.item_no === target.calc_src_item_no);
+  const inp = specInputs[target.id];
+  if (!src || !inp) return false;
+
+  const nums = calcSrcNums(src);
+  let out = '';
+  // 값이 2개 이상 있어야 편차가 성립. 1개뿐이면 비워둔다.
+  if (target.calc_type === 'range' && nums.length >= 2) {
+    const dp = maxDp(src);
+    out = (Math.max(...nums) - Math.min(...nums)).toFixed(dp);
+    out = String(parseFloat(out));   // 0.030 → 0.03
+  }
+
+  const before = inp.type === 'points' ? (inp.vals[0] ?? '') : (inp.min ?? '');
+  if (String(before) === String(out)) return false;
+
+  if (inp.type === 'points') {
+    if (!inp.vals || !inp.vals.length) inp.vals = [''];
+    inp.vals[0] = out;
+    if (inp.prefilled) inp.prefilled[0] = false;
+  } else {
+    inp.min = out; inp.max = out;
+  }
+  return true;
+}
+
+// 소스가 바뀌었을 때 관련 계산 항목을 갱신하고 화면에 반영
+function recalcFrom(srcSpecId) {
+  const targets = calcTargetsOf(srcSpecId);
+  if (!targets.length) return;
+  targets.forEach(t => {
+    if (recalcOne(t)) refreshCard(t.id);
+    updateCardState(t.id);
+  });
+}
+
+// 탭을 열었을 때 한 번 돌려 초기값을 맞춤 (렌더 전 호출)
+function recalcAll() {
+  calcSpecs().forEach(t => recalcOne(t));
 }
 
 function setPt(id, idx, el) {
@@ -2713,6 +2821,7 @@ function setPt(id, idx, el) {
   el.classList.remove('ok', 'ng');
   if (cls) el.classList.add(cls);
   updateCardState(id);
+  recalcFrom(id);   // [v1.98] 이 항목을 소스로 쓰는 계산 항목 갱신
   if (_ngPending) ngCardSync();   // [v1.68] NG 카드가 떠 있으면 표시값 실시간 갱신
   persistDraft();   // [v1.31] 측정값 변경 → 드래프트 갱신
 }
@@ -6897,6 +7006,17 @@ async function renderCfgSpecs() {
               <option value="1" ${s.is_min_max?'selected':''}>최소/최대</option>
             </select></div>
         </div>
+        <!-- [v1.99] 자동 계산 — 다른 항목의 측정값에서 값을 만들어 넣는다 -->
+        <div class="cfg-row2">
+          <div class="cfg-field"><label>자동 계산</label>
+            <select id="cfgf-calc-${s.id}" ${s.is_visual?'disabled':''} onchange="onCalcTypeChange(${s.id})">
+              <option value="" ${!s.calc_type?'selected':''}>사용 안 함</option>
+              <option value="range" ${s.calc_type==='range'?'selected':''}>최대 − 최소</option>
+            </select></div>
+          <div class="cfg-field" id="cfgf-calcsrc-wrap-${s.id}" style="${s.calc_type?'':'display:none'}">
+            <label>소스 항목</label>
+            <select id="cfgf-calcsrc-${s.id}">${calcSrcOptions(s)}</select></div>
+        </div>
         <div class="cfg-btn-row">
           <button class="cfg-save-btn" onclick="saveCfgSpec(${s.id})">저장</button>
           <button class="cfg-del-btn" onclick="deleteCfgSpec(${s.id})">🗑</button>
@@ -7743,7 +7863,45 @@ async function deleteCfgSpec(id) {
 
 function toggleCfgEdit(id) {
   const panel = document.getElementById(`cfgedit-${id}`);
-  panel.classList.toggle('open');
+  const opened = panel.classList.toggle('open');
+  // [v1.99] 계산 항목이면 칸수·입력방식을 잠근 상태로 보여준다
+  if (opened) onCalcTypeChange(id);
+}
+
+// ══════════════════════════════════
+// [v1.99] 자동 계산 설정 (설정 → 항목 편집)
+//   소스로 고를 수 있는 것: 같은 부품의 치수 항목 중
+//     - 자기 자신 제외 (자기를 참조하면 무한 루프)
+//     - 외관 항목 제외 (숫자가 없음)
+//     - 계산 항목 제외 (계산이 계산을 참조하면 갱신 순서가 꼬임)
+// ══════════════════════════════════
+function calcSrcOptions(s) {
+  const cands = cfgSpecs.filter(x =>
+    x.id !== s.id && !x.is_visual && !x.calc_type && x.item_no != null);
+  const opts = cands.map(x =>
+    `<option value="${x.item_no}" ${s.calc_src_item_no === x.item_no ? 'selected' : ''}>No.${dno(x)} ${x.item_name || ''}</option>`);
+  return `<option value="">선택…</option>` + opts.join('');
+}
+
+function onCalcTypeChange(id) {
+  const sel = document.getElementById(`cfgf-calc-${id}`);
+  const wrap = document.getElementById(`cfgf-calcsrc-wrap-${id}`);
+  if (!sel || !wrap) return;
+  const on = sel.value !== '';
+  wrap.style.display = on ? '' : 'none';
+  // 계산을 켜면 칸수는 1, 입력방식은 포인트로 고정 (계산 결과는 값 하나)
+  if (on) {
+    const pts = document.getElementById(`cfgf-pts-${id}`);
+    const mm  = document.getElementById(`cfgf-mm-${id}`);
+    if (pts) { pts.value = 1; pts.disabled = true; }
+    if (mm)  { mm.value = '0'; mm.disabled = true; }
+  } else {
+    const pts = document.getElementById(`cfgf-pts-${id}`);
+    const mm  = document.getElementById(`cfgf-mm-${id}`);
+    const sp  = cfgSpecs.find(x => x.id === id);
+    if (pts && !(sp && sp.is_visual)) pts.disabled = false;
+    if (mm  && !(sp && sp.is_visual)) mm.disabled = false;
+  }
 }
 
 async function saveCfgSpec(id) {
@@ -7762,6 +7920,20 @@ async function saveCfgSpec(id) {
       process_type:   document.getElementById(`cfgf-ptype-${id}`).value,
       is_min_max:     document.getElementById(`cfgf-mm-${id}`).value === '1'
     };
+    // [v1.99] 자동 계산 설정
+    const calcType = (document.getElementById(`cfgf-calc-${id}`) || {}).value || '';
+    if (calcType) {
+      const srcEl = document.getElementById(`cfgf-calcsrc-${id}`);
+      const srcNo = srcEl && srcEl.value !== '' ? parseInt(srcEl.value) : null;
+      if (srcNo == null || isNaN(srcNo)) throw new Error('소스 항목을 선택하세요');
+      patch.calc_type = calcType;
+      patch.calc_src_item_no = srcNo;
+      patch.measure_points = 1;      // 계산 결과는 1칸
+      patch.is_min_max = false;
+    } else {
+      patch.calc_type = null;
+      patch.calc_src_item_no = null;
+    }
     await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch });
     // 로컬 cfgSpecs + 측정 탭 specs 동시 갱신
     const idx = cfgSpecs.findIndex(s => s.id === id);
