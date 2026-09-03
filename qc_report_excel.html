@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.43 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.44 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.43</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.44</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -974,6 +974,7 @@ function cloneSheet(wb, srcWs, name){
 //     - press     → shipping 만
 //     - machining → machining 만 (없으면 빈 행)
 //     - both      → machining 우선, 없으면 shipping
+//     - archived  → [v0.44] 폐지 항목. 과거 측정값이 있으면 표시, 없으면 행 자체를 제외
 //   spec 에 매칭되는 measurement 가 한쪽에도 없으면 spec 정보만으로 빈 행 생성
 function mergeMeasurements(specs, shipMeas, machMeas){
   const shipBySpec = {};
@@ -988,14 +989,22 @@ function mergeMeasurements(specs, shipMeas, machMeas){
     return (a.sort_order||0) - (b.sort_order||0);
   });
   
-  let cntPress = 0, cntMach = 0, cntEmpty = 0;
+  let cntPress = 0, cntMach = 0, cntEmpty = 0, cntArch = 0;   // [v0.44] cntArch = 폐지 항목 제외 수
   
   const merged = sorted.map(s => {
     const shipRow = shipBySpec[s.id];
     const machRow = machBySpec[s.id];
     let chosen = null, source = 'empty';
     
-    if(s.process_type === 'machining'){
+    // [v0.44] archived = 규격 변경으로 폐지된 항목.
+    //   삭제하면 과거 measurement 의 판정 근거가 사라지므로 spec 은 남겨두고 이 값으로 표시.
+    //   → 그 검사에 실측값이 있으면(폐지 이전 LOT 재발행) 정상 표시,
+    //     없으면(폐지 이후 LOT) 빈 행을 만들지 말고 아예 제외.
+    if(s.process_type === 'archived'){
+      chosen = shipRow || machRow || null;
+      if(!chosen) { cntArch++; return null; }   // 아래 filter(Boolean) 로 제거됨
+      source = shipRow ? 'shipping' : 'machining';   // 집계는 아래 공통 로직에서
+    } else if(s.process_type === 'machining'){
       chosen = machRow || null;
       source = chosen ? 'machining' : 'empty';
     } else if(s.process_type === 'both'){
@@ -1035,9 +1044,9 @@ function mergeMeasurements(specs, shipMeas, machMeas){
       });
     }
     return row;
-  });
+  }).filter(Boolean);   // [v0.44] archived + 실측값 없음 → null 로 반환된 행 제거
   
-  return {merged, stats: {press: cntPress, machining: cntMach, empty: cntEmpty}};
+  return {merged, stats: {press: cntPress, machining: cntMach, empty: cntEmpty, archived: cntArch}};
 }
 
 // [v0.14] 표준정규분포 샘플 (Box-Muller)
@@ -1608,7 +1617,9 @@ async function generateXlsx(){
       full.measurements = merged;
       
       // 로그: 출처 통계
-      const sourceLog = `프레스 ${stats.press} / 가공 ${stats.machining}` + (stats.empty>0 ? ` / 미측정 ${stats.empty}` : '');
+      const sourceLog = `프레스 ${stats.press} / 가공 ${stats.machining}`
+        + (stats.empty>0 ? ` / 미측정 ${stats.empty}` : '')
+        + (stats.archived>0 ? ` / 폐지제외 ${stats.archived}` : '');   // [v0.44]
       if(item.machInsp){
         log(`  📊 측정값: ${sourceLog} (가공검사 ${item.machInsp.inspection_date} 적용)`);
       } else {
