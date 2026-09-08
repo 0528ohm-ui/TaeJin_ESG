@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>작업일보 v14.6</title>
+<title>작업일보 v14.7</title>
 <style>
   :root{
     --bg:#0f1419; --panel:#1a2332; --border:#2a3a52;
@@ -330,7 +330,7 @@
 <body>
 
 <div class="header">
-  <h1>📋 작업일보 v14.6</h1>
+  <h1>📋 작업일보 v14.7</h1>
   <div class="meta">
     <span><span class="status-dot" id="connDot"></span><b id="connText">연결 확인 중</b></span>
     <span>장비: <b id="deviceCount">0</b></span>
@@ -478,7 +478,7 @@
 
 <div class="footer">
   <span>Supabase <b>shot_count</b> · 폴링 <b>10초</b> · 매핑은 <b>Supabase</b>에 저장 (localStorage 캐시)</span>
-  <span>v14.6</span>
+  <span>v14.7</span>
 </div>
 
 <!-- 설정 모달 -->
@@ -1288,6 +1288,40 @@
     }
   }
 
+  // [v14.7] 전일 수량 보완 조회
+  // 자동마감은 '다음 날 누군가 화면을 열 때' 실행되는데, 그 시점에는 이미
+  // 00:20 cron(rollup_shot_count)이 shot_count 원본을 지운 뒤라 계산값이 0이 된다.
+  // 그래서 원본이 없으면 일별 집계본(shot_count_daily)에서 전일 수량을 역산한다.
+  //   전일수량 = counter_max(전일 최종 카운터) - baseline_count(전일 0점)
+  async function prevDayCountFromDaily(prevDate){
+    const o={};
+    try{
+      const [rD,rB]=await Promise.all([
+        fetch(SUPABASE_URL+'/rest/v1/shot_count_daily?work_date=eq.'+prevDate
+              +'&select=device_id,machine_code,counter_max',{headers:HDR_R}),
+        fetch(SUPABASE_URL+'/rest/v1/daily_baseline?baseline_date=eq.'+prevDate
+              +'&select=device_id,machine_code,baseline_count',{headers:HDR_R})
+      ]);
+      if(!rD.ok) return o;
+      const daily=await rD.json();
+      const bl={};
+      if(rB.ok){
+        (await rB.json()).forEach(b=>{ bl[b.device_id+'|'+b.machine_code]=b.baseline_count||0; });
+      }
+      daily.forEach(d=>{
+        const map=getMap(d.device_id,d.machine_code);
+        if(!map||!map.machine) return;
+        if(outletKind(map.outlet)==='fail') return;   // 양품만
+        const key=d.device_id+'|'+d.machine_code;
+        const base=(key in bl)?bl[key]:0;
+        const q=Math.max(0,(d.counter_max||0)-base);
+        const m=normMachine(map.machine);
+        o[m]=(o[m]||0)+q;
+      });
+    }catch(e){ console.error('prevDayCountFromDaily', e); }
+    return o;
+  }
+
   // 00시 자동 마감: 등록된 호기(작업자·기종)의 전일 카운트를 qc_daily_report에 저장하고 세션 해지
   async function autoSaveDailyReport(prevDate){
     try{
@@ -1302,10 +1336,16 @@
       }catch(_){}
       const rows=[];
       const doneMachines=[];
-      sess.forEach(s=>{
+      let fb=null;   // [v14.7] 집계본 보완값 (필요할 때 1회만 조회)
+      for(const s of sess){
         const m=normMachine(s.machine);
-        if(existed.includes(m)) { doneMachines.push(m); return; }
-        const qty=cur[m]||0;
+        if(existed.includes(m)) { doneMachines.push(m); continue; }
+        let qty=cur[m]||0;
+        // [v14.7] 원본이 이미 삭제돼 0으로 나오면 shot_count_daily에서 역산
+        if(!qty){
+          if(fb===null) fb=await prevDayCountFromDaily(prevDate);
+          qty=fb[m]||0;
+        }
         rows.push({
           report_date: prevDate,
           inspector: s.inspector,
@@ -1319,7 +1359,7 @@
           end_time: prevDate+'T23:59:59+09:00'
         });
         doneMachines.push(m);
-      });
+      }
       if(rows.length){
         const r=await fetch(SUPABASE_URL+'/rest/v1/'+REPORT_TABLE,{method:'POST',headers:HDR_RJ,body:JSON.stringify(rows)});
         if(!r.ok) console.error('일일 자동저장 실패', await r.text());
