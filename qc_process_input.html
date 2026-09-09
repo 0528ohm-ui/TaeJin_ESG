@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.00</title>
+<title>공정검사 입력 v2.01</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -581,7 +581,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.00</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.01</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1786,6 +1786,7 @@ async function loadVariant(part, ctx = {}) {
   // [v1.24] 입력 순서 삽입 규칙 로드 — 세동 포함 모든 부품에 적용
   let insertRules = [];
   let orderSeq = null;   // [v1.89] 드래그로 정한 절대 순서 (있으면 insert_rules보다 우선)
+  let groupOrders = {};  // [v2.01] 이 부품의 연동그룹 멤버 순서 — variant 에 붙여서 탭마다 독립 보관
   try {
     // [v1.27] insert_rules + group_orders 함께 로드. group_orders는 activeGroupOrders에 머지
     //   (이게 없어서 껐다 켜면 측정 탭 연동 순서가 원본으로 원복되던 버그)
@@ -1793,10 +1794,13 @@ async function loadVariant(part, ctx = {}) {
     if (rr.length) {
       if (Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
       if (Array.isArray(rr[0].order_seq) && rr[0].order_seq.length) orderSeq = rr[0].order_seq;
-      if (rr[0].group_orders && typeof rr[0].group_orders === 'object') Object.assign(activeGroupOrders, rr[0].group_orders);
+      if (rr[0].group_orders && typeof rr[0].group_orders === 'object') {
+        groupOrders = rr[0].group_orders;                     // [v2.01] variant 전용 사본
+        Object.assign(activeGroupOrders, rr[0].group_orders); // 전역도 유지 (렌더 즉시 반영용)
+      }
     }
   } catch(e){}
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, insertRules, orderSeq };
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, insertRules, orderSeq, groupOrders };
 }
 
 // 부품 선택 → 가공 모드면 바로 탭 생성, 프레스 모드면 pending UI
@@ -1950,7 +1954,9 @@ async function confirmAddTab() {
   }
 
   document.getElementById('main-loading').style.display = 'block';
-  activeGroupOrders = {};  // [v1.27] 새 탭 생성 시 초기화 → loadVariant에서 이 부품 group_orders만 다시 로드
+  // [v2.01] 전역 초기화 제거. 예전엔 여기서 {} 로 비웠는데, 열려있던 다른 탭의
+  //   그룹 순서까지 같이 날아가는 게 이 버그의 원인이었다.
+  //   이제 순서는 variant.groupOrders 가 들고 있고 applyVariant 가 다시 얹는다.
   try {
     let variants;
     if (pendingSel.isGroup) {
@@ -2152,6 +2158,14 @@ function applyVariant(t) {
   specInputs = v.inputs;
   activeRules = v.insertRules || [];   // [v1.17] 현재 입력 흐름 규칙
   activeOrderSeq = Array.isArray(v.orderSeq) && v.orderSeq.length ? v.orderSeq : null;   // [v1.89]
+  // [v2.01] 연동그룹 멤버 순서를 variant 에서 되살린다.
+  //   전역 activeGroupOrders 하나로 쓰던 시절엔 새 탭을 만들 때마다 {} 로 초기화돼서
+  //   앞 탭 순서가 메모리에서 사라졌고, 그대로 persistDraft 되면 백그라운드 복귀 후
+  //   번호순으로 되돌아갔다. variant 에 붙이면 tabs 직렬화에 같이 실려 탭마다 독립 유지됨.
+  //   groupOrders 가 없는 예전 draft 는 전역값을 그대로 두어 하위호환.
+  if (v.groupOrders && typeof v.groupOrders === 'object') {
+    activeGroupOrders = Object.assign({}, activeGroupOrders, v.groupOrders);
+  }
   activeTransfer = !!v.transfer;   // [v1.95] 트랜스퍼 탭 여부 (모드 전환·spec 반영에 영향)
 
   renderVariantToggle(t);
@@ -7665,9 +7679,20 @@ async function moveGroupMember(groupKey, specId, dir) {
   for (const k of Object.keys(cfgGroupOrders)) {
     if (myGroupKeys.has(k)) myOrders[k] = cfgGroupOrders[k];
   }
+  // [v2.01] 열려있는 탭의 variant 에도 새 순서를 반영. 안 하면 다음 탭 전환/복원 때
+  //   variant 에 남아있던 옛 순서가 다시 얹혀 방금 바꾼 순서를 덮는다.
+  try {
+    (tabs || []).forEach(t => (t.variants || []).forEach(v => {
+      if (v.part && v.part.id === cfgPart.id) {
+        v.groupOrders = Object.assign({}, v.groupOrders || {}, { [groupKey]: ids });
+      }
+    }));
+  } catch(e) {}
+
   // UI 즉시 갱신
   if (specs && specs.length) renderSpecs();
   renderCfgSpecs();
+  persistDraft();   // [v2.01] 바뀐 순서를 draft 스냅샷에 즉시 반영
   // 백그라운드 저장 (await 없이 비동기)
   (async () => {
     try {
