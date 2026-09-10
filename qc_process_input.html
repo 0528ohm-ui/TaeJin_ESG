@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.06</title>
+<title>공정검사 입력 v2.07</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -604,7 +604,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.06</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.07</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -706,7 +706,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         </div>
         <div>
           <label>금형호기</label>
-          <input class="inp" id="insp-mold" type="text" placeholder="예) 1호기 …" style="margin-top:4px" onchange="persistDraft()">
+          <select class="inp" id="insp-mold" style="margin-top:4px" onchange="persistDraft()"></select>
         </div>
       </div>
       <div style="margin-bottom:10px">
@@ -2188,11 +2188,9 @@ function applyMoldLastHo(moldNo) {
 let _moldHoToken = 0;
 
 // [v2.06] 역방향 — 설비호기를 넣으면 금형호기를 자동으로 고른다.
-//   그 설비에서 최근에 돌린 금형이 "한 종류뿐일 때만" 확정한다.
-//   두 종류 이상이면 사람이 골라야 하므로 아무것도 하지 않는다.
-//   (예: 1179는 47/48/49 ↔ 금형 1/2/3 이 붙어 다녀 호기만으로 확정됨.
-//        1113은 같은 설비에 여러 금형이 올라가므로 확정 불가.)
-//   판정 범위는 최근 90일 — 오래전에 잠깐 올렸던 금형까지 세면 확정이 안 된다.
+//   v1.96(금형→설비)의 getLastHoFromDB 와 같은 방식: 그 설비의 마지막 검사 1건만 읽는다.
+//   설비에 금형이 번갈아 올라가도 "마지막에 그 설비에서 돌린 금형" = 지금 걸려 있는 금형이므로
+//   그게 곧 정답이다. 틀렸으면 사람이 태그를 눌러 바꾸면 된다.
 let _hoMoldToken = 0;
 async function applyHoLastMold(ho) {
   if (!pendingSel || pendingSel.moldCount < 2) return;
@@ -2204,24 +2202,19 @@ async function applyHoLastMold(ho) {
 
   const token = ++_hoMoldToken;
   try {
-    const since = new Date();
-    since.setDate(since.getDate() - 90);
-    const pad = n => String(n).padStart(2, '0');
-    const sinceStr = `${since.getFullYear()}-${pad(since.getMonth()+1)}-${pad(since.getDate())}`;
     const rows = await sbAll('qc_shipping_inspection',
       `part_id=eq.${repId}&ho=eq.${encodeURIComponent(hoNum)}&mold_no=not.is.null`
-      + `&inspection_date=gte.${sinceStr}&select=mold_no&order=id.desc&limit=200`);
-    if (token !== _hoMoldToken) return;                       // 더 최근 입력이 있으면 버림
-    if (!pendingSel || pendingSel.moldNo) return;
+      + `&order=id.desc&limit=1&select=mold_no`);
+    if (token !== _hoMoldToken) return;                        // 더 최근 입력이 있으면 버림
+    if (!rows.length || !pendingSel || pendingSel.moldNo) return;
     const inp = document.getElementById('pending-equip');
-    if (!inp || inp.value.trim() !== hoNum) return;            // 그새 호기를 바꿨으면 버림
+    if (!inp || inp.value.trim() !== hoNum) return;             // 그새 호기를 바꿨으면 버림
 
-    const uniq = [...new Set(rows.map(r => r.mold_no).filter(Boolean))];
-    if (uniq.length !== 1) return;                             // 겹치면 사람이 고른다
-    const tag = document.querySelector(`#pending-mold-tags .mold-tag[data-mold="${uniq[0]}"]`);
-    if (!tag) return;                                          // 금형 벌수가 바뀐 경우 방어
-    selectPendingMold(uniq[0], true);
-    toast(`${hoNum}호기 → 금형 ${uniq[0]} 자동 선택`);
+    const mold = rows[0].mold_no;
+    const tag = document.querySelector(`#pending-mold-tags .mold-tag[data-mold="${mold}"]`);
+    if (!tag) return;                                           // 금형 벌수가 바뀐 경우 방어
+    selectPendingMold(mold, true);
+    toast(`${hoNum}호기 → 금형 ${mold}`);
   } catch (e) {}
 }
 
@@ -2430,6 +2423,28 @@ function restoreDraft() {
   switchTab(idx);      // applyVariant→renderSpecs가 inputs 값으로 입력칸을 다시 그림
 }
 
+// [v2.07] 금형호기 드롭다운 — 그 탭 부품의 금형 벌수만큼 선택지를 만든다.
+//   1벌이면 고를 게 없으므로 잠근다. 이력에 남아있는 값이 목록에 없으면(금형 벌수 변경 등)
+//   그 값도 옵션으로 넣어 기존 기록이 사라지지 않게 한다.
+function renderMoldSelect(t) {
+  const sel = document.getElementById('insp-mold');
+  if (!sel) return;
+  // moldCount 는 탭 생성 시 저장되지만, 예전 draft 에는 없을 수 있어 부품 정보로 폴백
+  const vPart = t.variants && t.variants[t.activeVariant] && t.variants[t.activeVariant].part;
+  const cnt = Math.max(1, t.moldCount || (vPart && vPart.mold_count) || 1);
+  const cur = t.moldNo || '';
+  const list = [];
+  for (let i = 1; i <= cnt; i++) list.push(`${i}호기`);
+  if (cur && !list.includes(cur)) list.push(cur);
+
+  sel.innerHTML = `<option value="">${cnt >= 2 ? '선택 안 함' : '해당 없음'}</option>`
+    + list.map(m => `<option value="${m}">${m}</option>`).join('');
+  sel.value = cur;
+  sel.disabled = cnt < 2;
+  sel.style.background = cnt < 2 ? '#f1f5f9' : '';
+  sel.style.color      = cnt < 2 ? '#94a3b8' : '';
+}
+
 function switchTab(idx) {
   if (idx < 0 || idx >= tabs.length) return;
   stashActiveTab();
@@ -2439,7 +2454,7 @@ function switchTab(idx) {
   document.getElementById('insp-date').value   = t.date;
   document.getElementById('insp-time').value   = t.time;
   document.getElementById('insp-ho').value     = t.equip ?? getLastHo(t.label);  // 설비호기
-  document.getElementById('insp-mold').value   = t.moldNo ?? '';   // 금형호기
+  renderMoldSelect(t);   // [v2.07] 금형호기 드롭다운 (값 세팅 포함)
   document.getElementById('insp-reason').value = t.reason ?? '';
   document.getElementById('insp-remark').value = t.remark ?? '';
   document.getElementById('insp-info-card').style.display = 'block';
