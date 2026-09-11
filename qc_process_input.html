@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.08</title>
+<title>공정검사 입력 v2.11</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,32 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.10] 탭 추가 모달 */
+.addtab-btn{background:#1e293b;color:#fff;border:none;border-radius:9px;padding:9px 14px;
+  font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap}
+.addtab-btn:active{background:#0f172a}
+.addtab-ov{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;
+  display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;
+  padding:16px 16px 280px}   /* 아래 여백 = 검색 드롭다운이 펼쳐질 공간 */
+/* overflow:hidden 을 쓰면 검색 드롭다운(position:absolute)이 잘린다 → visible + 모서리는 각자 처리 */
+.addtab-box{background:#f1f5f9;border-radius:14px;width:100%;max-width:560px;margin-top:24px;
+  box-shadow:0 18px 50px rgba(0,0,0,.3);overflow:visible}
+.addtab-head{display:flex;align-items:center;justify-content:space-between;
+  background:#1e293b;color:#fff;padding:13px 16px;font-size:17px;font-weight:700;
+  border-radius:14px 14px 0 0}
+.addtab-x{background:transparent;border:none;color:#cbd5e1;font-size:20px;cursor:pointer;padding:0 4px}
+.addtab-slot{padding:10px;border-radius:0 0 14px 14px}
+.addtab-slot .card{margin:0;overflow:visible}
+/* 모달 제목이 이미 "＋ 탭 추가" 이므로 카드 안의 제목은 중복 */
+.addtab-slot .card-title{display:none}
+
+body.addtab-open{overflow:hidden}
+
+/* [v2.09] 조회 전용(viewer) */
+.role-badge{font-size:12px;font-weight:700;background:#e0e7ff;color:#3730a3;padding:3px 9px;border-radius:6px;margin-right:6px}
+body.role-viewer .hist-del-btn,
+body.role-viewer .hist-edit-btn{display:none !important}
+
 /* [v2.04] 생산 대조 카드 */
 .pc-sel{font-size:14px;font-weight:600;padding:3px 6px;border:1px solid #cbd5e1;border-radius:6px;text-transform:none;letter-spacing:0;color:#334155;background:#fff}
 .pc-status{font-size:13px;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:0}
@@ -605,11 +631,12 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.08</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.11</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
       <span class="user-name" id="user-name-disp"></span>
+      <span class="role-badge" id="role-badge" style="display:none"></span>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
   </div>
@@ -637,13 +664,19 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
           <!-- IW/OW 등 variant 토글 (그룹 부품일 때만 표시) -->
           <div class="variant-toggle" id="variant-toggle" style="display:none"></div>
         </div>
-        <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
-          📐 도면 보기
-        </button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <!-- [v2.10] 측정 중에 새 제품이 오면 위로 올라가지 않고 여기서 바로 탭 추가 -->
+          <button class="addtab-btn" id="addtab-btn" onclick="openAddTab()">＋ 탭 추가</button>
+          <button class="drawing-btn no-drawing" id="drawing-btn" onclick="openDrawing()">
+            📐 도면 보기
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- 부품 검색 -->
+    <!-- [v2.10] 모달로 옮겼다가 되돌릴 때 쓰는 제자리 표식 -->
+    <div id="part-card-anchor"></div>
     <div class="card" id="part-card">
       <div class="card-title">부품 검색 → 탭 추가</div>
       <!-- 고객사 필터 -->
@@ -839,6 +872,18 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 
     <div id="main-loading" class="loading" style="display:none">항목 불러오는 중…</div>
   </div><!-- /measure-screen -->
+
+  <!-- [v2.10] 탭 추가 모달 — 열 때 #part-card 를 통째로 옮겨 넣는다.
+       검색·금형선택·설비호기 자동입력이 기존 로직 그대로 동작한다. -->
+  <div class="addtab-ov" id="addtab-modal" style="display:none" onclick="if(event.target===this)closeAddTab()">
+    <div class="addtab-box">
+      <div class="addtab-head">
+        <span>＋ 탭 추가</span>
+        <button class="addtab-x" onclick="closeAddTab()">✕</button>
+      </div>
+      <div class="addtab-slot" id="addtab-slot"></div>
+    </div>
+  </div>
 
   <!-- ── 이력조회 탭 ── -->
   <div id="hist-screen">
@@ -1469,6 +1514,40 @@ function pcToggle() {
   if (pcCache[d]) renderProdCheck(pcCache[d]);
 }
 
+// ══════════════════════════════════
+// [v2.10] 탭 추가 모달
+//   #part-card 를 모달 안으로 옮겼다가 닫을 때 제자리로 되돌린다.
+//   같은 DOM 을 그대로 쓰므로 검색·그룹선택·금형선택·설비호기 자동입력이
+//   평소 흐름 그대로 동작한다 (로직 복사 없음).
+// ══════════════════════════════════
+function openAddTab() {
+  const card = document.getElementById('part-card');
+  const slot = document.getElementById('addtab-slot');
+  if (!card || !slot) return;
+  cancelPending();                       // 이전에 고르다 만 상태가 남아있으면 정리
+  slot.appendChild(card);
+  document.getElementById('addtab-modal').style.display = 'flex';
+  document.body.classList.add('addtab-open');
+  const q = document.getElementById('part-search');
+  if (q) { q.value = ''; q.dispatchEvent(new Event('input')); setTimeout(() => q.focus(), 50); }
+}
+
+function closeAddTab() {
+  const card = document.getElementById('part-card');
+  const anchor = document.getElementById('part-card-anchor');
+  const modal = document.getElementById('addtab-modal');
+  if (card && anchor) anchor.after(card);   // 제자리 복귀
+  if (modal) modal.style.display = 'none';
+  document.body.classList.remove('addtab-open');
+  cancelPending();
+  placeProdCheckCard();                     // [v2.04] 카드 위치 재정렬
+}
+
+function isAddTabOpen() {
+  const m = document.getElementById('addtab-modal');
+  return !!m && m.style.display !== 'none';
+}
+
 // [v2.05] 탭 생성 시각 오버라이드 — 생산 대조에서 연 경우에만 채워진다
 let pcOverride = null;
 
@@ -1569,14 +1648,19 @@ async function verifyPin() {
   try {
     // user_pin: name, pin_plain, dept (품질관리팀 또는 PIN 첫자리 4)
     const rows = await sbFetch(`user_pin?pin_plain=eq.${pinBuf}&select=name,dept,pin_plain`);
-    const hit = (rows || []).find(r => {
-      const dept = (r.dept || '').trim();
-      if (dept === '품질관리팀') return true;
-      if (!dept && String(r.pin_plain).charAt(0) === '4') return true;
-      return false;
-    });
+    // [v2.09] 역할 구분
+    //   editor = 품질관리팀 (측정 입력·수정·설정 전부)
+    //   viewer = 그 외 전 부서 (이력조회만 — 제품 실측값 확인용)
+    //   예전처럼 dept 가 비어있고 PIN 이 4로 시작하면 품질관리팀으로 본다.
+    const hit = (rows || [])[0];
+    let role = null;
     if (hit) {
-      auth = { name: hit.name };
+      const dept = (hit.dept || '').trim();
+      if (dept === '품질관리팀' || (!dept && String(hit.pin_plain).charAt(0) === '4')) role = 'editor';
+      else role = 'viewer';
+    }
+    if (hit && role) {
+      auth = { name: hit.name, role, dept: (hit.dept || '').trim() };
       localStorage.setItem(SK.AUTH, JSON.stringify(auth));
       await enterMain();
     } else {
@@ -1611,8 +1695,28 @@ function logout() {
 // ══════════════════════════════════
 // 메인 진입
 // ══════════════════════════════════
+// [v2.09] 역할 판정 — 예전 localStorage 에는 role 이 없으므로 없으면 editor 로 본다
+function isViewer() { return auth && auth.role === 'viewer'; }
+
+// [v2.09] viewer 화면 구성 — 측정·설정 탭을 감추고 이력조회만 남긴다
+function applyRoleUI() {
+  const viewer = isViewer();
+  document.body.classList.toggle('role-viewer', viewer);
+  ['snav-measure', 'snav-cfg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = viewer ? 'none' : '';
+  });
+  const badge = document.getElementById('role-badge');
+  if (badge) {
+    badge.style.display = viewer ? '' : 'none';
+    badge.textContent = '조회 전용';
+  }
+  if (viewer) switchNav('hist');
+}
+
 async function enterMain() {
   document.getElementById('user-name-disp').textContent = auth.name;
+  applyRoleUI();
   // 오늘 날짜/시간 기본값 (KST 로컬 구성 — toISOString 금지)
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
@@ -2295,6 +2399,7 @@ async function confirmAddTab() {
     });
     document.getElementById('main-loading').style.display = 'none';
     pcOverride = null;   // [v2.05] 1회용 — 다음 탭은 다시 현재 시각
+    if (isAddTabOpen()) closeAddTab();   // [v2.10] 모달에서 추가했으면 닫고 측정 화면으로
     cancelPending();
     switchTab(tabs.length - 1);
   } catch(e) {
@@ -4746,6 +4851,7 @@ async function checkSedongClose() {
 // 저장
 // ══════════════════════════════════
 async function saveAll() {
+  if (!guardEditor()) return;   // [v2.09]
   const t = tabs[activeTabIdx];
   if (!t) return;
   if (t.sedong) return saveSedong(t);   // [v0.46] 세동 9시간대 저장 분기
@@ -5200,7 +5306,11 @@ function initHistView() {
   const fromEl = document.getElementById('hist-date-from');
   const toEl = document.getElementById('hist-date-to');
   if (!fromEl.value || !toEl.value) {
-    setHistRange('today', true);   // 기본 오늘 (조회는 아래서 한 번만)
+    // [v2.11] 조회 전용(viewer)은 7일 + 건별이 기본.
+    //   현장에서 "이 제품 최근 값이 뭐였나"를 보는 용도라 하루치·슬롯요약보다
+    //   최근 며칠의 검사 건을 그대로 보는 쪽이 맞다. 품질관리팀은 기존대로 오늘·일별.
+    setHistRange(isViewer() ? '7' : 'today', true);
+    if (isViewer() && histMode !== 'each') switchHistMode('each');
   }
   document.getElementById('hist-filter-area').style.display = 'block';
   // [v1.01] 서브토글(목록/관리도)은 항상 표시 — 관리도는 부품 선택 시 동작
@@ -6197,6 +6307,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
 
 // ── 수정 모드 진입 ──
 function enterHistEdit(idx) {
+  if (!guardEditor()) return;   // [v2.09]
   const insp = histInspections[idx];
   const detail = document.getElementById(`hdetail-${idx}`);
   detail.innerHTML = buildMeasDetail(histMeasCache[insp.id], idx, true);
@@ -6288,7 +6399,14 @@ async function saveHistEdit(idx) {
 }
 
 // ── 검사 기록 삭제 ──
+// [v2.09] viewer 차단 — 버튼은 CSS 로 감추지만 함수 자체도 막는다
+function guardEditor() {
+  if (isViewer()) { toast('조회 전용 계정입니다'); return false; }
+  return true;
+}
+
 async function deleteHistInsp(idx) {
+  if (!guardEditor()) return;   // [v2.09]
   const insp = histInspections[idx];
   const d = (insp.inspection_date || '').replace(/-/g, '.');
   if (!confirm(`${d} 검사 기록을 삭제합니다.\n측정값도 함께 삭제됩니다. 계속?`)) return;
