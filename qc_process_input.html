@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.13</title>
+<title>공정검사 입력 v2.16</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -631,7 +631,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.13</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.16</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -5889,6 +5889,18 @@ async function toggleDayCard(gi) {
     const rows = await sbAll(table,
       `inspection_id=in.(${ids})&select=id,inspection_id,spec_id,item_no,item_name,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count`);
 
+    // [v2.16] 자동 생성 슬롯이 그날 첫 실측보다 앞설 때 쓸 "직전 로트".
+    //   그날 첫 실측이 소재교환이면 그 로트를 앞 시각에 쓰면 안 된다
+    //   (교환 전인데 교환 후 소재로 측정한 꼴이 됨) → 이전 날짜의 마지막 로트를 가져온다.
+    if (g.part_id && g._prevLot === undefined) {
+      try {
+        const pv = await sbAll('qc_shipping_inspection',
+          `part_id=eq.${g.part_id}&inspection_date=lt.${g.date}&remark=not.is.null`
+          + `&order=inspection_date.desc,inspection_time.desc.nullsfirst&limit=1&select=remark`);
+        g._prevLot = (pv && pv[0] && (pv[0].remark || '').trim()) || '';
+      } catch (e) { g._prevLot = ''; }
+    }
+
     if (g.part_id) await loadDispNoMap(g.part_id);   // [v1.57] 표시번호 확보
     // [v1.67] 세동: 빈 시간대 채움에 lsl/usl 필요 → 부품 단위 1회만 조회
     if (isSedongPart(g.part) && g.part_id && !specLimCache[g.part_id]) {
@@ -6034,20 +6046,35 @@ function buildDayTable(g, measBy) {
   // 슬롯 메타 (시간·사유·로트)
   const fillTimes = fillSlotTimes(slot, `${g.part_id}|${g.date}`);   // [v1.74] 결정론 시드
 
-  // [v2.13] 자동 채운 슬롯의 소재로트(remark).
-  //   items[0] 하나만 보면 안 된다 — 첫 항목이 '외관'이면 x값이 없어 채움(fill)이 절대 일어나지 않고,
-  //   그 결과 fillRemark 가 늘 비어 비고란이 '—' 로 남는다(v2.13 최초 구현의 실제 버그).
-  //   슬롯별로 fill 이 잡힐 때까지 항목을 훑는다.
+  // [v2.14] 자동 채운 슬롯의 소재로트(remark) — 시간상 가장 가까운 실측 검사의 로트를 쓴다.
+  //   값(measurement)은 donor 우선순위 [종,중,초,셋업] 로 빌려오지만, 로트는 그 순서를 따르면 안 된다.
+  //   예) 07-31: 실측 13:33(-3, 소재교환) / 14:49(-4), 자동 09:20
+  //       → 09:20 은 -3 으로 교환하기 전이므로 전날 마지막 로트(-2)를 쓴다.
+  const toMin = t => {
+    const m = String(t || '').match(/(\d{1,2}):(\d{2})/);
+    return m ? (+m[1]) * 60 + (+m[2]) : null;
+  };
+  const realInsps = [slot.setup, slot.first, slot.mid, slot.last, ...(slot.extras || [])].filter(Boolean);
   const fillRemarks = {};
-  for (const it of items) {
-    const probe = calcSlotValues(slot, it.spec_id, measBy, fillTimes);
-    SLOT_KEYS.forEach(k => {
-      if (fillRemarks[k] == null && probe[k] && probe[k].fill) {
-        fillRemarks[k] = probe[k].fillRemark || '';
-      }
+  SLOT_KEYS.forEach(k => {
+    if (slot[k]) return;            // 실측이 있는 슬롯은 자기 remark 를 쓴다
+    if (!fillTimes[k]) return;      // 그 시간대에 검사가 없었던 것으로 판단된 슬롯
+    const tmin = toMin(fillTimes[k]);
+    // 이 시각보다 "앞선" 실측 중 가장 가까운 것을 쓴다.
+    //   자동 생성은 순회뿐이고, 그 시점에 물려 있던 소재는 이후의 소재교환과 무관하기 때문.
+    //   앞에 실측이 하나도 없으면(예: 자동 09:20, 첫 실측 13:33) 뒤쪽에서 가장 이른 것을 쓴다.
+    let prev = null, prevGap = Infinity;
+    realInsps.forEach(i => {
+      const r = (i.remark || '').trim();
+      if (!r) return;
+      const im = toMin(i.inspection_time);
+      if (im == null || tmin == null) return;
+      if (im <= tmin) { const gp = tmin - im; if (gp < prevGap) { prevGap = gp; prev = r; } }
     });
-    if (SLOT_KEYS.every(k => fillRemarks[k] != null)) break;   // 다 찾으면 조기 종료
-  }
+    //   앞선 실측 > 이전 날짜의 마지막 로트 순. 뒤쪽 실측은 쓰지 않는다.
+    const best = prev || g._prevLot || '';
+    if (best) fillRemarks[k] = best;
+  });
 
   // 빈 슬롯 표시값: 시간은 산출값, 사유는 순회, 비고는 채운 슬롯이면 donor 소재로트
   //   라벨은 No·항목 두 칸을 그대로 쓴다 (colspan 을 쓰면 항목열 sticky 가 깨진다)
