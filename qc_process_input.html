@@ -6034,12 +6034,19 @@ function buildDayTable(g, measBy) {
   // 슬롯 메타 (시간·사유·로트)
   const fillTimes = fillSlotTimes(slot, `${g.part_id}|${g.date}`);   // [v1.74] 결정론 시드
 
-  // [v2.13] 자동 채운 슬롯의 소재로트(remark) — 아무 spec 이나 하나로 슬롯별 fillRemark 를 뽑는다.
-  //   (fillRemark 는 spec 과 무관하게 donor 검사 remark 라 어떤 항목으로 계산해도 같다.)
+  // [v2.13] 자동 채운 슬롯의 소재로트(remark).
+  //   items[0] 하나만 보면 안 된다 — 첫 항목이 '외관'이면 x값이 없어 채움(fill)이 절대 일어나지 않고,
+  //   그 결과 fillRemark 가 늘 비어 비고란이 '—' 로 남는다(v2.13 최초 구현의 실제 버그).
+  //   슬롯별로 fill 이 잡힐 때까지 항목을 훑는다.
   const fillRemarks = {};
-  if (items.length) {
-    const probe = calcSlotValues(slot, items[0].spec_id, measBy, fillTimes);
-    SLOT_KEYS.forEach(k => { if (probe[k] && probe[k].fill) fillRemarks[k] = probe[k].fillRemark || ''; });
+  for (const it of items) {
+    const probe = calcSlotValues(slot, it.spec_id, measBy, fillTimes);
+    SLOT_KEYS.forEach(k => {
+      if (fillRemarks[k] == null && probe[k] && probe[k].fill) {
+        fillRemarks[k] = probe[k].fillRemark || '';
+      }
+    });
+    if (SLOT_KEYS.every(k => fillRemarks[k] != null)) break;   // 다 찾으면 조기 종료
   }
 
   // 빈 슬롯 표시값: 시간은 산출값, 사유는 순회, 비고는 채운 슬롯이면 donor 소재로트
