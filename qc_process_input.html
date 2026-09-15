@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.16</title>
+<title>공정검사 입력 v2.17</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,18 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.17] 품번 매핑 모달 */
+.mm-code{font-size:19px;font-weight:800;color:#1e293b;word-break:break-all;margin-bottom:4px}
+.mm-hint{font-size:13px;color:#94a3b8;margin-bottom:10px}
+.mm-opt{padding:11px 12px;border:1.5px solid #e2e8f0;border-radius:9px;margin-bottom:6px;cursor:pointer;background:#fff}
+.mm-opt:active{background:#eff6ff;border-color:#93c5fd}
+.mm-opt b{font-size:15px;color:#1e293b}
+.mm-opt span{font-size:13px;color:#64748b;margin-left:6px}
+.mm-opt .mm-grp{font-size:12px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:1px 6px;border-radius:4px;margin-left:6px}
+.mm-skip{width:100%;margin-top:6px;padding:10px;font-size:14px;font-weight:600;color:#92400e;
+  background:#fffbeb;border:1.5px solid #fde68a;border-radius:9px;cursor:pointer}
+.mm-empty{font-size:14px;color:#94a3b8;padding:10px 2px}
+
 /* [v2.10] 탭 추가 모달 */
 .addtab-btn{background:#1e293b;color:#fff;border:none;border-radius:9px;padding:9px 14px;
   font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -631,7 +643,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.16</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.17</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -872,6 +884,26 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 
     <div id="main-loading" class="loading" style="display:none">항목 불러오는 중…</div>
   </div><!-- /measure-screen -->
+
+  <!-- [v2.17] 생산일보 품번 ↔ 부품 매핑 모달 -->
+  <div class="addtab-ov" id="mesmap-modal" style="display:none" onclick="if(event.target===this)closeMesMap()">
+    <div class="addtab-box">
+      <div class="addtab-head">
+        <span>🔗 품번 매핑</span>
+        <button class="addtab-x" onclick="closeMesMap()">✕</button>
+      </div>
+      <div class="addtab-slot">
+        <div class="card" style="margin:0">
+          <div class="mm-code" id="mm-code"></div>
+          <div class="mm-hint">이 생산일보 품번에 해당하는 부품을 고르세요</div>
+          <input class="inp" id="mm-search" type="text" placeholder="부품번호 또는 부품명 검색…"
+                 oninput="mmFilter(this.value)" style="margin-bottom:8px">
+          <div id="mm-list"></div>
+          <button class="mm-skip" onclick="mmSetSkip()">이 품번은 검사 대상 아님 (제외)</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- [v2.10] 탭 추가 모달 — 열 때 #part-card 를 통째로 옮겨 넣는다.
        검색·금형선택·설비호기 자동입력이 기존 로직 그대로 동작한다. -->
@@ -1489,7 +1521,10 @@ function renderProdCheck(rows) {
               : r.state === 'nomap'   ? `<span class="pc-tag nomap">${r.label}</span>`
               : '<span class="pc-tag done">✓</span>';
     const click = (r.state === 'miss' || r.state === 'otherho')
-      ? ` onclick="pcOpenTab('${(r.group || '').replace(/'/g, "\\'")}', ${r.partId || 'null'}, ${r.ho})"` : '';
+      ? ` onclick="pcOpenTab('${(r.group || '').replace(/'/g, "\\'")}', ${r.partId || 'null'}, ${r.ho})"`
+      : (r.state === 'nomap'
+          ? ` onclick="openMesMap('${String(r.code).replace(/'/g, "\\'")}')"`   // [v2.17] 매핑 등록
+          : '');
     return `<div class="pc-item ${cls}"${click}>
       <span class="pc-ho">${r.ho ?? '—'}</span>
       <span class="pc-pn">${r.pn || r.code}</span>
@@ -1546,6 +1581,97 @@ function closeAddTab() {
 function isAddTabOpen() {
   const m = document.getElementById('addtab-modal');
   return !!m && m.style.display !== 'none';
+}
+
+// ══════════════════════════════════
+// [v2.17] 생산일보 품번 ↔ 부품 매핑 등록
+//   생산 대조에서 "매핑 없음" 을 누르면 열린다. qc_mes_item_map 에 바로 기록.
+//   접미어 의미가 계열마다 달라(BDA=금형호기 / SKF=외철·내철) 자동 추론이 불가능하므로
+//   사람이 한 번 지정해 두는 방식이다.
+// ══════════════════════════════════
+let mmCode = null;   // 매핑 대상 생산일보 품번
+
+function openMesMap(code) {
+  mmCode = code;
+  document.getElementById('mm-code').textContent = code;
+  document.getElementById('mm-search').value = '';
+  document.getElementById('mm-list').innerHTML =
+    '<div class="mm-empty">부품번호나 부품명을 입력하세요</div>';
+  document.getElementById('mesmap-modal').style.display = 'flex';
+  document.body.classList.add('addtab-open');
+  setTimeout(() => document.getElementById('mm-search').focus(), 50);
+}
+
+function closeMesMap() {
+  mmCode = null;
+  document.getElementById('mesmap-modal').style.display = 'none';
+  document.body.classList.remove('addtab-open');
+}
+
+// 부품 검색 — 측정탭과 같은 partMatches(한/영 오타 보정) 사용, 그룹은 한 줄로 묶음
+function mmFilter(q) {
+  const box = document.getElementById('mm-list');
+  const kw = (q || '').trim().toLowerCase();
+  if (!kw) { box.innerHTML = '<div class="mm-empty">부품번호나 부품명을 입력하세요</div>'; return; }
+
+  const matched = allParts.filter(p => partMatches(p, kw));
+  const seen = new Set();
+  const items = [];
+  for (const p of matched) {
+    if (p.part_group) {
+      if (seen.has(p.part_group)) continue;
+      seen.add(p.part_group);
+      items.push({ isGroup: true, group: p.part_group, rep: p });
+    } else {
+      items.push({ isGroup: false, part: p });
+    }
+  }
+  if (!items.length) { box.innerHTML = '<div class="mm-empty">검색 결과 없음</div>'; return; }
+
+  box.innerHTML = items.slice(0, 15).map(it => it.isGroup
+    ? `<div class="mm-opt" onclick="mmPick(null, '${it.group.replace(/'/g, "\\'")}')">
+         <b>${it.group}</b><span class="mm-grp">그룹</span>
+         <span>${it.rep.part_name || ''}</span></div>`
+    : `<div class="mm-opt" onclick="mmPick(${it.part.id}, null)">
+         <b>${it.part.part_number}</b><span>${it.part.part_name || ''}</span></div>`
+  ).join('');
+}
+
+async function mmPick(partId, group) {
+  if (!mmCode) return;
+  try {
+    await sbFetch('qc_mes_item_map', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates',
+      body: { mes_item_code: mmCode, part_id: partId, part_group: group, is_skip: false, updated_at: new Date().toISOString() }
+    });
+    toast('매핑 저장됨');
+    pcItemMap = null;          // 매핑표 캐시 비우기 → 다음 조회 때 새로 읽음
+    pcCache = {};
+    closeMesMap();
+    loadProdCheck(true);
+  } catch (e) {
+    toast('저장 실패: ' + e.message);
+  }
+}
+
+async function mmSetSkip() {
+  if (!mmCode) return;
+  if (!confirm(`"${mmCode}" 을(를) 공정검사 대상에서 제외할까?\n\n생산 대조 목록에 더 이상 나오지 않습니다.`)) return;
+  try {
+    await sbFetch('qc_mes_item_map', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates',
+      body: { mes_item_code: mmCode, part_id: null, part_group: null, is_skip: true, updated_at: new Date().toISOString() }
+    });
+    toast('제외 처리됨');
+    pcItemMap = null;
+    pcCache = {};
+    closeMesMap();
+    loadProdCheck(true);
+  } catch (e) {
+    toast('저장 실패: ' + e.message);
+  }
 }
 
 // [v2.05] 탭 생성 시각 오버라이드 — 생산 대조에서 연 경우에만 채워진다
