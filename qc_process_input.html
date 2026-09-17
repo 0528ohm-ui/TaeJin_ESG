@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.17</title>
+<title>공정검사 입력 v2.18</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -643,7 +643,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.17</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.18</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -6343,6 +6343,16 @@ function buildMeasDetail(rows, idx, editMode) {
       <div><label>호기</label><input type="text" id="he-ho-${idx}" value="${insp.ho || ''}" inputmode="numeric"></div>
     </div>
     <div style="padding:8px 14px;border-bottom:1px solid #f1f5f9">
+      <label style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:3px;display:block">측정사유</label>
+      <select id="he-reason-${idx}"
+        style="width:100%;padding:7px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:17px;outline:none;background:#fff">
+        <option value="">선택 안 함</option>
+        ${reasons.map(r => `<option value="${r.label}" ${insp.reason === r.label ? 'selected' : ''}>${r.label}</option>`).join('')}
+        ${insp.reason && !reasons.some(r => r.label === insp.reason)
+          ? `<option value="${insp.reason}" selected>${insp.reason} (목록에 없음)</option>` : ''}
+      </select>
+    </div>
+    <div style="padding:8px 14px;border-bottom:1px solid #f1f5f9">
       <label style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:3px;display:block">비고</label>
       <input type="text" id="he-remark-${idx}" value="${(insp.remark||'').replace(/"/g,'&quot;')}"
         placeholder="특이사항…"
@@ -6506,6 +6516,7 @@ async function saveHistEdit(idx) {
   const newTime = document.getElementById(`he-time-${idx}`).value;
   const newHo = document.getElementById(`he-ho-${idx}`).value.trim();
   const newRemark = (document.getElementById(`he-remark-${idx}`)?.value || '').trim();
+  const newReason = (document.getElementById(`he-reason-${idx}`)?.value || '').trim();   // [v2.18]
 
   // x 칸 수 (세동이면 9 고정 — buildMeasTable과 동일 기준)
   const maxX = measMaxX(rows, insp.part);
@@ -6518,6 +6529,9 @@ async function saveHistEdit(idx) {
     if (newHo !== (insp.ho || '')) hdrPatch.ho = newHo || null;
     const oldRemark = (insp.remark || '').trim();
     if (newRemark !== oldRemark) hdrPatch.remark = newRemark || null;
+    // [v2.18] 측정사유 — 일별 뷰의 '사유' 행과 성적서 판정 근거에 쓰이므로 수정 가능해야 한다
+    const oldReason = (insp.reason || '').trim();
+    if (newReason !== oldReason) hdrPatch.reason = newReason || null;
 
     if (Object.keys(hdrPatch).length) {
       await sbFetch(`qc_shipping_inspection?id=eq.${insp.id}`, { method: 'PATCH', body: hdrPatch });
@@ -6526,6 +6540,7 @@ async function saveHistEdit(idx) {
       if ('inspection_time' in hdrPatch) insp.inspection_time = hdrPatch.inspection_time;
       if ('ho' in hdrPatch) insp.ho = hdrPatch.ho;
       if ('remark' in hdrPatch) insp.remark = hdrPatch.remark;
+      if ('reason' in hdrPatch) insp.reason = hdrPatch.reason;   // [v2.18]
     }
 
     // 2) measurement 각 행 PATCH (측정값 + 항목 메모)
