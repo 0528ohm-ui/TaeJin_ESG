@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.19</title>
+<title>공정검사 입력 v2.21</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,11 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.20] 일별 카드 [자세히] — 해당 부품 전체기간 건별로 이동 */
+.hist-detail-btn{font-size:13px;font-weight:700;color:#1e40af;background:#fff;border:1.5px solid #93c5fd;
+  border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-right:8px}
+.hist-detail-btn:active{background:#eff6ff}
+
 /* [v2.17] 품번 매핑 모달 */
 .mm-code{font-size:19px;font-weight:800;color:#1e293b;word-break:break-all;margin-bottom:4px}
 .mm-hint{font-size:13px;color:#94a3b8;margin-bottom:10px}
@@ -643,7 +648,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.19</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.21</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -5434,8 +5439,10 @@ function initHistView() {
   if (!fromEl.value || !toEl.value) {
     // [v2.11] 조회 전용(viewer)은 7일 + 건별이 기본.
     //   현장에서 "이 제품 최근 값이 뭐였나"를 보는 용도라 하루치·슬롯요약보다
-    //   최근 며칠의 검사 건을 그대로 보는 쪽이 맞다. 품질관리팀은 기존대로 오늘·일별.
-    setHistRange(isViewer() ? '7' : 'today', true);
+    //   최근 며칠의 검사 건을 그대로 보는 쪽이 맞다.
+    // [v2.20] 품질관리팀(editor)은 검사일 전체 + 일별이 기본 (종전: 오늘 + 일별).
+    //   특정 부품 건별은 일별 카드의 [자세히] 버튼으로 들어간다.
+    setHistRange(isViewer() ? '7' : 'all', true);
     if (isViewer() && histMode !== 'each') switchHistMode('each');
   }
   document.getElementById('hist-filter-area').style.display = 'block';
@@ -5539,6 +5546,20 @@ async function selectPartHist(id) {
   } catch(e) {
     toast('항목 로드 실패: ' + e.message);
   }
+}
+
+// [v2.20] 일별 카드 [자세히] → 그 부품만, 검사일 전체, 건별 보기
+//   모드를 먼저 바꿔 두고 selectPartHist 가 한 번만 조회·렌더하게 한다
+//   (switchHistMode 를 부르면 현재 목록을 건별로 한 번 더 그리게 됨).
+async function openHistDetail(partId) {
+  setHistRange('all', true);
+  histMode = 'each';
+  document.getElementById('hm-day-btn').classList.remove('sel');
+  document.getElementById('hm-each-btn').classList.add('sel');
+  document.getElementById('hm-hint').textContent = '검사 건별로 봅니다 · 수정·삭제 가능';
+  await selectPartHist(partId);
+  const top = document.getElementById('hist-selected-part');
+  if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function clearHistPart() {
@@ -5985,6 +6006,7 @@ function renderDayList(inspList) {
           ${molds.length ? `<span class="hist-chip" style="background:#ede9fe;color:#7c3aed">금형 ${molds.join(',')}</span>` : ''}
           ${lots.map(l => `<span class="hist-chip" style="background:#f1f5f9;color:#475569">📝 ${l}</span>`).join('')}
         </div>
+        ${g.part_id ? `<button class="hist-detail-btn" onclick="event.stopPropagation();openHistDetail(${g.part_id})">자세히</button>` : ''}
         <span class="hist-result ${resCls}">${res}</span>
         <span class="hist-expand-icon">▾</span>
       </div>
