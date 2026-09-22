@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.21</title>
+<title>공정검사 입력 v2.29</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,14 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.25] 연동 표 샘플 경계 */
+.linked-grid tr.smp-cut td{border-top:2px solid #86efac}
+
+/* [v2.23] 가공 샘플 수 선택 바 */
+.sample-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:10px 14px;margin-bottom:12px}
+.sample-bar-label{font-size:16px;font-weight:800;color:#166534}
+
 /* [v2.20] 일별 카드 [자세히] — 해당 부품 전체기간 건별로 이동 */
 .hist-detail-btn{font-size:13px;font-weight:700;color:#1e40af;background:#fff;border:1.5px solid #93c5fd;
   border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-right:8px}
@@ -648,7 +656,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.21</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.29</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -837,9 +845,9 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <button onclick="numTap('7')">7</button>
         <button onclick="numTap('8')">8</button>
         <button onclick="numTap('9')">9</button>
-        <button class="np-dot" onclick="numTap('.')">·</button>
-        <button onclick="numTap('0')">0</button>
         <button class="np-back" onclick="numBack()">⌫</button>
+        <button onclick="numTap('0')">0</button>
+        <button class="np-dot" onclick="numTap('.')">·</button>
       </div>
       <div class="numpad-footer">
         <button class="np-sign" onclick="numSign()">±</button>
@@ -1303,6 +1311,8 @@ let specInputs = {};
 let activeRules = [];   // [v1.17] 현재 탭의 입력 흐름 삽입 규칙
 let activeOrderSeq = null;  // [v1.89] 현재 탭의 절대 입력 순서(unit key 배열). 있으면 activeRules보다 우선
 let activeTransfer = false; // [v1.95] 현재 탭이 트랜스퍼 2개 측정인지
+let activeSample2 = false;  // [v2.22] 현재 탭이 가공 샘플 2개 측정인지
+let curTabRef = null;       // [v2.23] 샘플 수 선택이 탭 단위라 현재 탭 객체를 들고 있는다
 let activeGroupOrders = {};  // [v1.25] 연동 그룹 내 멤버 순서 { groupId: [specId, ...] }
 
 // ── PIN 입력 버퍼 ──
@@ -2110,11 +2120,36 @@ function switchProcMode(mode) {
 }
 
 // spec 배열 → inputs 객체 빌드
-function buildInputs(loadedSpecs, sedong = false, transfer = false) {
+// [v2.22] sample2 = 가공 샘플 2개 측정.
+//   외주 가공품은 샘플이 항상 2개 들어오므로 가공 탭은 치수 항목을 전부 포인트 2칸으로 만든다.
+//   최소/최대로 받으면 저장 시 크기순 정렬(fillMinMax)이 끼어 어느 샘플 값인지 섞이므로
+//   포인트 경로로 태워 입력 순서(샘플1=x1, 샘플2=x2)를 지킨다. 샘플 1만 넣어도 저장된다.
+// [v2.25] 샘플당 칸 수(sp) — 포인트 수 설정값은 실사용과 무관하게 들어가 있어서 믿지 않고 구조로 정한다.
+//   일반 항목 / 위치연동 기준(row)  → 1
+//   위치연동 연동 항목(col)         → 그 그룹의 기준 항목 개수 (위치 수)
+//   형상연동(grid)                  → 설정의 포인트 수 (1~5)
+//   vals 는 샘플 순서로 이어 붙인다: [샘플1 p1..p(sp), 샘플2 p1..p(sp)]
+function sampleSpOf(s, rowCnt) {
+  if (!s.link_group || s.link_role === 'row') return 1;
+  if (s.link_role === 'col') return Math.min(5, Math.max(1, rowCnt[s.link_group] || s.measure_points || 1));
+  return Math.min(5, Math.max(1, s.link_pts_m || s.measure_points || 1));   // [v2.26] 가공 전용 포인트 우선
+}
+
+function buildInputs(loadedSpecs, sedong = false, transfer = false, sample2 = false) {
   const inputs = {};
+  const rowCnt = {};
+  if (sample2) loadedSpecs.forEach(s => {
+    if (s.link_group && s.link_role === 'row') rowCnt[s.link_group] = (rowCnt[s.link_group] || 0) + 1;
+  });
   loadedSpecs.forEach(s => {
     if (s.is_visual) {
       inputs[s.id] = { type: 'visual', val: 'OK', note: '', noteFixed: '', prefilledVal: false };
+    } else if (sample2 && !s.calc_type) {
+      // [v2.27] 연동 안 된 최소/최대 항목은 샘플마다 최소·최대 2칸 (mmPer)
+      const mmPer = !s.link_group && !!s.is_min_max;
+      const sp = mmPer ? 2 : sampleSpOf(s, rowCnt);
+      inputs[s.id] = { type: 'points', sampleMode: true, mmPer, sp, vals: Array(sp * 2).fill(''),
+                       note: '', noteFixed: '', prefilled: Array(sp * 2).fill(false) };
     } else if (s.is_min_max && transfer) {
       // [v1.94] 트랜스퍼: 3차원만 2칸(1번/2번 제품), 나머지는 1칸으로 축소
       if (isPairSpec(s)) {
@@ -2191,7 +2226,7 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
     // [v1.67] 세동이라도 건별 저장(slot_no 있음)이면 x1~x5가 실측 원본 → 일반 제품과 동일 매핑
     if (sedong && lastInsp[0].slot_no != null) sedong = false;
     const lastRows = await sbAll('qc_shipping_measurement',
-      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note,note_fixed`);
+      `inspection_id=eq.${lastInsp[0].id}&select=spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,visual_result,note,note_fixed,input_count,input_count2`);
     const bySpec = {};
     lastRows.forEach(r => { bySpec[r.spec_id] = r; });
     loadedSpecs.forEach(s => {
@@ -2206,7 +2241,25 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
         return;
       }
       const xs = [r.x1, r.x2, r.x3, r.x4, r.x5, r.x6, r.x7, r.x8, r.x9, r.x10, r.x11, r.x12];
-      if (inp.type === 'minmax') {
+      if (inp.sampleMode) {
+        // [v2.25] 가공 샘플 — 새 형식(input_count2 있음)이면 x1~ / x6~ 에서 각각,
+        //   예전 기록이면 sp=1 은 x1·x2, sp>1 은 x1~ 을 두 샘플에 같이 채운다 (증감 시작점용).
+        const sp = inp.sp || 1;
+        const S = Math.max(1, Math.round(inp.vals.length / sp));
+        // [v2.27] 최소/최대 항목은 각 샘플 구간(x1~5 / x6~10)의 최소·최대
+        const mm = seg => { const v = seg.filter(x => x != null).map(parseFloat); return v.length ? [Math.min(...v), Math.max(...v)] : [null, null]; };
+        let g1, g2;
+        if (inp.mmPer) {
+          g1 = mm(xs.slice(0, 5));
+          g2 = r.input_count2 != null ? mm(xs.slice(5, 10)) : g1;
+        } else {
+          g1 = xs.slice(0, sp);
+          g2 = r.input_count2 != null ? xs.slice(5, 5 + sp) : (sp === 1 ? [xs[1]] : xs.slice(0, sp));
+        }
+        [g1, g2].slice(0, S).forEach((g, k) => g.forEach((v, q) => {
+          if (v != null) { inp.vals[k * sp + q] = String(v); inp.prefilled[k * sp + q] = true; }
+        }));
+      } else if (inp.type === 'minmax') {
         const nonNull = xs.filter(v => v != null);
         if (sedong) {
           // [v1.32] 세동: 슬롯당 1칸 저장 → 마지막 채워진 슬롯값 하나로 min·max 둘 다 prefill
@@ -2269,10 +2322,20 @@ async function loadVariant(part, ctx = {}) {
   );
   // [v1.56] 전체 기준 통일 표시번호 주입
   applyDispNo(loadedSpecs, await loadDispNoMap(part.id));
+  // [v2.26] 가공 탭은 가공 전용 연동(link_group_m / link_role_m)을 쓴다.
+  //   이 탭에서 불러온 spec 객체만 바꿔 끼우므로 프레스 탭·DB 에는 영향이 없다.
+  //   이후 렌더·입력칸·입력순서 로직은 전부 link_group/link_role 을 그대로 읽으면 된다.
+  if (procMode === 'machining') {
+    loadedSpecs.forEach(s => {
+      s.link_group = s.link_group_m || null;
+      s.link_role  = s.link_role_m  || null;
+    });
+  }
   // [v0.45] 세동이면 9시간대 모드 (포인트 기본 1칸)
   const sedong = isSedongPart(part);
   const transfer = isTransferCtx(part, ctx);   // [v1.94] 트랜스퍼 2개 측정 (설정에서 켠 경우만)
-  const inputs = buildInputs(loadedSpecs, sedong, transfer);
+  const sample2 = procMode === 'machining';     // [v2.22] 가공은 항상 샘플 2개
+  const inputs = buildInputs(loadedSpecs, sedong, transfer, sample2);
   // [v1.26] 세동도 직전 검사일 값 prefill 적용 — 매일 첫 측정 시 기본값 참조.
   //   (이전: 세동만 건너뜀 → 매일 처음엔 모든 값 수동 입력 필요해서 복구)
   let lastRemark = '';
@@ -2300,7 +2363,7 @@ async function loadVariant(part, ctx = {}) {
       }
     }
   } catch(e){}
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, insertRules, orderSeq, groupOrders,
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, sample2, insertRules, orderSeq, groupOrders,
            lastInsp: lastMeta.lastInsp || null };   // [v2.02]
 }
 
@@ -2753,6 +2816,7 @@ function renderLastInsp(v) {
 // 활성 variant의 specs/inputs를 포인터에 적용 + variant 토글 갱신
 function applyVariant(t) {
   const v = t.variants[t.activeVariant];
+  curTabRef = t;   // [v2.23]
   selectedPart = v.part;
   specs = v.specs;
   specInputs = v.inputs;
@@ -2767,6 +2831,7 @@ function applyVariant(t) {
     activeGroupOrders = Object.assign({}, activeGroupOrders, v.groupOrders);
   }
   activeTransfer = !!v.transfer;   // [v1.95] 트랜스퍼 탭 여부 (모드 전환·spec 반영에 영향)
+  activeSample2 = !!v.sample2;     // [v2.22] 가공 샘플 2개 탭 여부
 
   renderVariantToggle(t);
   renderLastInsp(v);   // [v2.02] 직전 검사 일시 뱃지
@@ -2927,6 +2992,71 @@ function renderTabBar() {
 // ══════════════════════════════════
 // spec 렌더링
 // ══════════════════════════════════
+// ══════════════════════════════════
+// [v2.23] 가공 샘플 수 선택 (1개 / 2개) — 탭 단위
+//   외주 가공품은 보통 2개가 오지만 1개만 올 때가 있다.
+//   1개로 바꾸면 모든 치수 항목이 1칸이 되어 "샘플 2만 넣었는데 샘플 1로 기록되는" 실수가 없어진다.
+//   그룹 부품(IW/OW)은 같은 탭의 variant 전부에 같이 적용.
+// ══════════════════════════════════
+function sampleBarHtml() {
+  if (!activeSample2 || !curTabRef) return '';
+  const n = curTabRef.sampleCount || 2;
+  return `<div class="sample-bar">
+    <span class="sample-bar-label">가공 샘플 수</span>
+    <div class="mode-toggle">
+      <button class="mt-btn ${n === 1 ? 'sel' : ''}" onclick="setSampleCount(1)">1개</button>
+      <button class="mt-btn ${n === 2 ? 'sel' : ''}" onclick="setSampleCount(2)">2개</button>
+    </div>
+  </div>`;
+}
+
+function setSampleCount(n) {
+  const t = curTabRef;
+  if (!t) return;
+  const cur = t.sampleCount || 2;
+  if (cur === n) return;
+
+  if (n === 1) {
+    // 샘플 2에 직접 넣은 값이 있으면 확인 (직전값 prefill 은 제외)
+    let lost = 0;
+    t.variants.forEach(v => v.specs.forEach(s => {
+      const inp = v.inputs[s.id];
+      if (!inp || !inp.sampleMode) return;
+      const sp = inp.sp || 1;
+      for (let i = sp; i < inp.vals.length; i++) {
+        if (inp.vals[i] !== '' && inp.vals[i] != null && !(inp.prefilled && inp.prefilled[i])) lost++;
+      }
+    }));
+    if (lost && !confirm(`샘플 2에 입력한 값 ${lost}개가 지워집니다. 1개로 바꿀까?`)) return;
+  }
+
+  t.sampleCount = n;
+  t.variants.forEach(v => v.specs.forEach(s => {
+    const inp = v.inputs[s.id];
+    if (!inp || !inp.sampleMode) return;
+    const sp = inp.sp || 1;
+    if (!Array.isArray(inp.prefilled)) inp.prefilled = inp.vals.map(() => false);
+    if (n === 1) {
+      // 샘플 2 의 직전값(prefill)만 보관 → 2개로 돌아올 때 되살린다.
+      //   직접 입력한 값은 위 확인창에서 지우기로 한 것이므로 보관하지 않는다.
+      inp._s2 = inp.vals.slice(sp, sp * 2).map((v, i) => inp.prefilled[sp + i] ? v : '');
+      inp._s2pf = inp.prefilled.slice(sp, sp * 2).map((pf, i) => !!pf && inp._s2[i] !== '');
+      inp.vals = inp.vals.slice(0, sp);
+      inp.prefilled = inp.prefilled.slice(0, sp);
+    } else {
+      const keep = Array.isArray(inp._s2) ? inp._s2 : [];
+      const keepPf = Array.isArray(inp._s2pf) ? inp._s2pf : [];
+      for (let i = 0; inp.vals.length < sp * 2; i++) {
+        inp.vals.push(keep[i] != null ? keep[i] : '');
+        inp.prefilled.push(!!keepPf[i]);
+      }
+      inp._s2 = null; inp._s2pf = null;
+    }
+  }));
+  renderSpecs();
+  persistDraft();
+}
+
 function renderSpecs() {
   closeAdjustPanel();   // [v0.38] 탭/variant 전환 시 이전 패널 참조 끊기
   recalcAll();          // [v1.98] 자동 계산 항목 초기값 맞춤
@@ -2942,7 +3072,7 @@ function renderSpecs() {
       html.push(renderSpecCard(s));
     }
   }
-  list.innerHTML = html.join('');
+  list.innerHTML = sampleBarHtml() + html.join('');   // [v2.23] 가공이면 맨 위에 샘플 수 선택
   updateSummary();
   // [v0.51] 모바일이면 동적 렌더된 입력칸도 inputmode=none (OS키보드 차단)
   if (isTouchDevice()) {
@@ -2979,9 +3109,21 @@ function renderLinkedCard(linkGroup) {
     members = [...savedOrder.map(id => members.find(s => s.id === id)).filter(Boolean),
                ...members.filter(s => !savedOrder.includes(s.id))];
   }
+  // [v2.25] 프레스 탭 보호 — 가공·프레스 공용(both) 항목을 가공에서 연동하면 프레스에서도 묶여 보인다.
+  //   프레스는 최소/최대 입력이라 연동 표(포인트 기준)와 구조가 안 맞아 화면이 깨졌다.
+  //   최소/최대 멤버가 섞이면 연동 없이 개별 카드로 그린다.
+  if (!activeSample2 && members.some(m => specInputs[m.id] && specInputs[m.id].type === 'minmax')) {
+    return members.map(m => renderSpecCard(m)).join('');
+  }
   const isGrid = members.some(s => s.link_role === 'grid');
   if (isGrid) return renderGridCard(linkGroup, members);
   return renderRowColCard(linkGroup, members);
+}
+
+// [v2.25] 샘플 모드 칸 라벨 — sp=1 이면 '샘플 1', 그 이상이면 '샘플1-2'
+function sampleLabel(i, sp) {
+  const k = Math.floor(i / sp) + 1, p = (i % sp) + 1;
+  return sp === 1 ? `샘플 ${k}` : `샘플${k}-${p}`;
 }
 
 // [v1.43] 연동 카드 하단 항목별 액션 행 (메모·관리도). toggleNote/setNote/openSpcFor 재사용.
@@ -3093,9 +3235,13 @@ function renderGridCard(linkGroup, members) {
   const headerCols = [`<th style="text-align:left">포인트</th>`];
   cols.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${dno(c)}</span><br>${c.item_name}</th>`));
 
+  const smp = !!(specInputs[cols[0].id] && specInputs[cols[0].id].sampleMode);   // [v2.25]
+  const smpSp = smp ? (specInputs[cols[0].id].sp || 1) : 1;
   let bodyRows = '';
   for (let i = 0; i < N; i++) {
-    let cells = `<td style="text-align:left;font-size:14px;color:#64748b">${i+1}</td>`;
+    const lbl = smp ? sampleLabel(i, smpSp) : (i + 1);
+    const cut = smp && i > 0 && i % smpSp === 0 ? ' class="smp-cut"' : '';
+    let cells = `<td style="text-align:left;font-size:14px;color:#64748b">${lbl}</td>`;
     cols.forEach(cs => {
       const cInp = specInputs[cs.id];
       const cVal = cInp.vals[i] ?? '';
@@ -3103,7 +3249,7 @@ function renderGridCard(linkGroup, members) {
       cells += `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${cs.id}-${i}"
         value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${i},this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
     });
-    bodyRows += `<tr>${cells}</tr>`;
+    bodyRows += `<tr${cut}>${cells}</tr>`;
   }
 
   const specLines = cols.map(c => `${c.item_name}: ${c.spec_text || ''}`);
@@ -3138,6 +3284,59 @@ function renderRowColCard(linkGroup, members) {
   const rowNos = rowSpecs.map(r=>`No.${dno(r)}`).join('~');
   const headerCols = [`<th style="text-align:left">위치</th>`, `<th><span style="font-size:13px;color:#a78bfa;font-weight:600">${rowNos}</span><br>${rowName}</th>`];
   colSpecs.forEach(c => headerCols.push(`<th><span style="font-size:13px;color:#a78bfa;font-weight:600">No.${dno(c)}</span><br>${c.item_name}</th>`));
+
+  // [v2.25] 가공 샘플 모드 — 행 = 샘플 × 위치.
+  //   기준 항목은 샘플당 1칸(vals[k]), 연동 항목은 샘플당 위치 수만큼(vals[k*sp + i]).
+  const smpRow = rowSpecs[0] && specInputs[rowSpecs[0].id] && specInputs[rowSpecs[0].id].sampleMode;
+  if (smpRow) {
+    headerCols[0] = `<th style="text-align:left">샘플·위치</th>`;
+    const S = specInputs[rowSpecs[0].id].vals.length;   // 기준 항목 sp=1 → 칸 수 = 샘플 수
+    let rows = '';
+    for (let k = 0; k < S; k++) {
+      for (let i = 0; i < N; i++) {
+        const rs = rowSpecs[i];
+        const rInp = specInputs[rs.id];
+        const rVal = rInp.vals[k] ?? '';
+        const rCls = getValClass(parseFloat(rVal), rs.lsl, rs.usl);
+        const posLabel = (rs.item_name.match(/\[(.*?)\]/) || [])[1] || `${i+1}`;
+        let cells = `<td style="text-align:left;font-size:14px;color:#64748b"><b>샘플${k+1}</b> ${posLabel}</td>`;
+        cells += `<td><input class="pt-inp ${rCls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${rs.id}-${k}"
+          value="${rVal}" placeholder="—" oninput="setPt(${rs.id},${k},this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`;
+        colSpecs.forEach(cs => {
+          const cInp = specInputs[cs.id];
+          const csp = cInp.sp || N;
+          const ci = k * csp + i;
+          const cVal = i < csp ? (cInp.vals[ci] ?? '') : '';
+          const cCls = getValClass(parseFloat(cVal), cs.lsl, cs.usl);
+          cells += i < csp
+            ? `<td><input class="pt-inp ${cCls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${cs.id}-${ci}"
+                value="${cVal}" placeholder="—" oninput="setPt(${cs.id},${ci},this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)" style="width:100%;box-sizing:border-box"></td>`
+            : `<td></td>`;
+        });
+        rows += `<tr${k > 0 && i === 0 ? ' class="smp-cut"' : ''}>${cells}</tr>`;
+      }
+    }
+    const specLinesS = [];
+    if (rowSpecs[0]) specLinesS.push(`${rowName}: ${rowSpecs[0].spec_text || ''}`);
+    colSpecs.forEach(c => specLinesS.push(`${c.item_name}: ${c.spec_text || ''}`));
+    return `
+    <div class="spec-card linked-card">
+      <div class="spec-hdr">
+        <div class="spec-no" style="background:#7c3aed">🔗</div>
+        <div class="spec-info">
+          <div class="spec-name"><span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">${rowNos}</span> ${rowName} ＋ ${colSpecs.map(c=>`<span style="font-size:13px;background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-weight:700">No.${dno(c)}</span> ${c.item_name}`).join(', ')} <span style="font-size:13px;color:#7c3aed;font-weight:700">연동</span></div>
+          <div class="spec-text">${specLinesS.join(' / ')}</div>
+        </div>
+      </div>
+      <div class="linked-grid-wrap">
+        <table class="linked-grid">
+          <thead><tr>${headerCols.join('')}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${linkedActions(members)}
+    </div>`;
+  }
 
   // 각 행 렌더
   let bodyRows = '';
@@ -3212,7 +3411,7 @@ function renderSpecCard(s) {
     // [v1.98] 자동 계산 항목은 모드·칸수를 바꿀 수 없다 (계산 결과 1칸 고정)
     const isCalc = !!(s.calc_type && s.calc_src_item_no != null);
     const srcSpec = isCalc ? specs.find(x => x.item_no === s.calc_src_item_no) : null;
-    ctrlHtml = isCalc ? `
+    ctrlHtml = inp.sampleMode ? '' : isCalc ? `
       <div class="calc-bar">
         <span class="calc-badge">⚙ 자동 계산</span>
         <span class="calc-desc">No.${srcSpec ? dno(srcSpec) : s.calc_src_item_no} ${srcSpec ? srcSpec.item_name : ''} 의 최대−최소</span>
@@ -3250,7 +3449,8 @@ function renderSpecCard(s) {
         ${lsuStr}`;
     } else {
       const n = inp.vals.length;
-      const cols = Math.min(n, 5);   // 한 줄 최대 5칸, 초과 시 자동 줄바꿈
+      // [v2.25] 샘플 모드는 한 줄에 한 샘플(sp칸). sp=1 이면 샘플1·샘플2가 한 줄에 나란히
+      const cols = inp.sampleMode ? ((inp.sp || 1) === 1 ? n : (inp.sp || 1)) : Math.min(n, 5);   // 한 줄 최대 5칸, 초과 시 자동 줄바꿈
       const cells = inp.vals.map((v, i) => {
         const cls = getValClass(parseFloat(v), s.lsl, s.usl);
         // [v1.98] 계산 항목은 직접 입력 불가 — 소스 값이 바뀌면 자동으로 채워진다
@@ -3262,7 +3462,7 @@ function renderSpecCard(s) {
           </div>`;
         }
         return `<div class="pt-cell">
-          <span class="pt-label">X${i+1}</span>
+          <span class="pt-label">${inp.sampleMode ? (inp.mmPer ? `샘플${Math.floor(i/2)+1} ${i % 2 ? '최대' : '최소'}` : sampleLabel(i, inp.sp || 1)) : 'X' + (i+1)}</span>
           <input class="pt-inp ${cls}" type="text" inputmode="decimal" data-mobile-none="1" id="pt-${s.id}-${i}"
             value="${v}" placeholder="—"
             oninput="setPt(${s.id},${i},this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)">
@@ -3528,15 +3728,33 @@ function openInput(el) {
   const npOpen = document.getElementById('numpad-panel').classList.contains('open');
   const apOpen = document.getElementById('adj-panel').classList.contains('open');
   if (activeAdjEl === el && (npOpen || apOpen)) return;
-  if (inputMode === 'adjust') openAdjustPanel(el);
-  else openNumpad(el);
+  // [v2.29] 기본 패널 고정 — 각도는 숫자패드, 나머지는 증감.
+  //   (v0.51~ 는 마지막에 쓴 방식을 기억했는데, 한 번 숫자패드로 바꾸면 외경까지 계속 숫자패드로 떠서 폐지)
+  //   각도는 1~3° 씩 차이가 나서 0.05 증감보다 직접 입력이 빠르다.
+  if (isAngleInput(el)) openNumpad(el);
+  else openAdjustPanel(el);
+}
+
+// [v2.28] 입력칸 → 항목이 각도(°)인지
+//   '직각도'는 이름에 '각도'가 들어가지만 Max 0.05 같은 기하공차라 제외 (증감이 맞음).
+//   이름에 '각도'가 있거나(면취각도 포함) 규격에 '°' 가 있으면 각도로 본다.
+function isAngleInput(el) {
+  const m = String((el && el.id) || '').match(/^(?:pt|mm-min|mm-max)-(\d+)/);
+  if (!m) return false;
+  const sp = (specs || []).find(x => x.id === Number(m[1]));
+  if (!sp) return false;
+  const name = sp.item_name || '';
+  if (/직각도/.test(name)) return false;
+  return /각도/.test(name) || /°/.test(sp.spec_text || '');
 }
 
 // 숫자패드 ↔ 증감 전환 (현재 입력칸 유지). 선택은 기억됨.
 function switchInputMode() {
   const el = activeAdjEl;
-  inputMode = (inputMode === 'numpad') ? 'adjust' : 'numpad';
-  localStorage.setItem('QC_INPUT_MODE', inputMode);
+  // [v2.28] 기억된 값이 아니라 지금 열린 패널 기준으로 뒤집는다.
+  //   (각도 칸은 기억된 방식이 증감이어도 숫자패드가 떠 있을 수 있어서)
+  const npNow = document.getElementById('numpad-panel').classList.contains('open');
+  inputMode = npNow ? 'adjust' : 'numpad';   // [v2.29] 지금 칸에서만 전환 — 저장하지 않음(다음 칸은 다시 기본 규칙)
   if (!el) { closeNumpad(); closeAdjustPanel(); return; }
   if (inputMode === 'numpad') openNumpad(el);
   else openAdjustPanel(el);
@@ -4113,7 +4331,7 @@ function switchMode(id, mode) {
   refreshCard(id);
   // [v1.95] 트랜스퍼 탭은 spec을 건드리지 않는다.
   //   화면에서만 칸을 바꾼 것인데 DB에 반영하면 같은 부품의 48호기까지 따라 바뀐다.
-  if (!activeTransfer) persistSpecCfg(id);   // [v0.37] 모드 변경 즉시 spec 반영
+  if (!activeTransfer && !activeSample2) persistSpecCfg(id);   // [v0.37] 모드 변경 즉시 spec 반영
 }
 
 // 칸 수 조절 (1~10)
@@ -4125,7 +4343,7 @@ function changeCount(id, delta) {
   if (delta > 0) inp.vals.push('');
   else inp.vals.pop();
   refreshCard(id);
-  if (!activeTransfer) persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 ([v1.95] 트랜스퍼 제외)
+  if (!activeTransfer && !activeSample2) persistSpecCfg(id);   // [v0.37] 칸수 변경 즉시 spec 반영 ([v1.95] 트랜스퍼·[v2.22] 샘플 제외)
   persistDraft();       // [v1.31] 칸수 변경 → 드래프트 갱신
 }
 
@@ -5070,9 +5288,11 @@ async function saveAll() {
           spec_text: s.spec_text,
           visual_result: null,
           x1:null, x2:null, x3:null, x4:null, x5:null,
+          x6:null, x7:null, x8:null, x9:null, x10:null,   // [v2.25] 샘플 2 (가공). 모든 행 키 동일 유지(PGRST102)
           // [v1.66] 실제로 입력한 개수(산포 전). 건별 이력에서 실측만 구분해 보여주기 위한 표시용 메타.
           //   저장되는 x1~x5 값 자체는 종전과 동일 → 성적서·웹훅·트리거 무영향.
           input_count: null,
+          input_count2: null,                              // [v2.25] 샘플 2 실측 개수
           note: inp.note && inp.note.trim() ? inp.note.trim() : null,
           note_fixed: inp.noteFixed && inp.noteFixed.trim() ? inp.noteFixed.trim() : null   // [v1.93]
         };
@@ -5088,6 +5308,29 @@ async function saveAll() {
             pts.forEach((val, i) => { row[`x${i+1}`] = val; });
             row.input_count = inp.pairMode ? -3 : -2;   // -2 최소/최대 · -3 트랜스퍼 2개 제품
           }
+        } else if (inp.sampleMode) {
+          // [v2.25] 가공 샘플 — 샘플1 → x1~x5, 샘플2 → x6~x10. 성적서 1줄=샘플1, 2줄=샘플2.
+          //   샘플2 가 비면 x6~x10 을 비워 둬서 성적서가 기존처럼 2줄을 만든다.
+          const sp = inp.sp || 1;
+          const s1 = inp.vals.slice(0, sp), s2 = inp.vals.slice(sp, sp * 2);
+          const nums = a => a.filter(x => x !== '' && x != null && !isNaN(parseFloat(x))).map(parseFloat);
+          // 샘플 한 덩어리 저장 → [값 5개, input_count]
+          //   [v2.27] mmPer(최소/최대 항목)이고 두 값이 다 있으면 프레스와 같은 최소/최대 저장(-2).
+          //   한 값만 있으면 포인트 1개로 저장.
+          const pack = (blk) => {
+            const v = nums(blk);
+            if (!v.length) return [null, null];
+            if (inp.mmPer && v.length >= 2) {
+              const mn = Math.min(...v), mx = Math.max(...v);
+              return [fillMinMax(mn, mx, 5), -2];
+            }
+            return [fillTo5(blk, s.lsl, s.usl, 5), v.length];
+          };
+          const [f1, c1] = pack(s1), [f2, c2] = pack(s2);
+          if (f1) f1.forEach((val, i) => { if (val != null) row[`x${i+1}`] = val; });
+          if (f2) f2.forEach((val, i) => { if (val != null) row[`x${i+6}`] = val; });
+          row.input_count = c1;
+          row.input_count2 = c2;
         } else {
           // [v1.54] 저장은 항상 5개 고정. 입력 화면은 measure_points칸(1~12)이지만
           //         이력/엑셀/구글시트가 5칸 포맷이므로 저장은 fillTo5로 5개 산포.
@@ -5103,7 +5346,7 @@ async function saveAll() {
       // 3. 칸 수 / 모드 변경분을 spec 에 반영
       //   [v1.94] 트랜스퍼 탭은 제외. 화면에서만 칸을 줄인 것이라 spec을 고치면
       //   같은 부품의 다른 설비·금형(48호기 등)까지 min/max가 풀려버린다.
-      for (const s of (v.transfer ? [] : v.specs)) {
+      for (const s of ((v.transfer || v.sample2) ? [] : v.specs)) {   // [v2.22] 샘플 2칸은 화면 전용
         const inp = v.inputs[s.id];
         if (s.is_visual) continue;
         let patch = null;
@@ -6338,7 +6581,7 @@ async function toggleHistCard(idx) {
 
   // 측정값 로드 (id 포함)
   try {
-    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count`);
+    const rows = await sbFetch(`qc_shipping_measurement?inspection_id=eq.${insp.id}&order=item_no&select=id,item_no,item_name,inspection_method,spec_text,visual_result,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10,x11,x12,result,note,input_count,input_count2`);
     // [v1.56] 표시번호 주입 + 표시순서(sort_order 기준)로 재정렬
     if (insp.part_id) {
       const dmap = await loadDispNoMap(insp.part_id);
@@ -6429,8 +6672,29 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
   //   종전엔 원본 저장 위치(X1·X5, X1·X4 등)에 흩어져 나와 두 값을 한눈에 못 봤음.
   //   ※ 열 수(maxX)는 줄이지 않는다. 같은 카드에 4·5포인트 항목이 섞이면 잘리기 때문.
   //   세동 9시간대 펼침은 시간대 자체가 열 의미라 당기지 않음.
+  // [v2.25] 가공 샘플 기록(input_count2 가 하나라도 있음) — 열 = 샘플1 A칸 + 샘플2 B칸
+  const smpView = !sedongWide && rows.some(r => r.input_count2 != null);
+  // [v2.27] 샘플 구간 값 — ic=-2 면 그 구간의 최소·최대, 양수면 앞에서 ic개
+  const smpSeg = (r, base, ic) => {
+    if (ic === -2) {
+      const v = []; for (let i = 1; i <= 5; i++) if (r[`x${base + i}`] != null) v.push(parseFloat(r[`x${base + i}`]));
+      if (!v.length) return [];
+      const mn = Math.min(...v), mx = Math.max(...v);
+      return mn === mx ? [mn] : [mn, mx];
+    }
+    const out = []; for (let i = 1; i <= (ic > 0 ? ic : 0); i++) out.push(r[`x${base + i}`]);
+    return out;
+  };
+  const smpA = smpView ? Math.max(1, ...rows.map(r => smpSeg(r, 0, r.input_count).length)) : 0;
+  const smpB = smpView ? Math.max(1, ...rows.map(r => smpSeg(r, 5, r.input_count2).length)) : 0;
   const packed = (!editMode && !sedongWide) ? rows.map(r => {
     if (r.visual_result != null) return null;              // 외관은 colspan 처리
+    if (smpView) {
+      const a = smpSeg(r, 0, r.input_count), b = smpSeg(r, 5, r.input_count2);
+      while (a.length < smpA) a.push(null);
+      while (b.length < smpB) b.push(null);
+      return a.concat(b);
+    }
     const ic = r.input_count;
     const vals = [];
     if (ic === -2 || ic === -3) {   // [v1.94] -3 = 트랜스퍼 2개 제품
@@ -6451,9 +6715,16 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
   let html = '<div class="hist-meas-scroll">';
   if (sedongWide) html += '<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 9시간대 순회검사 (8~17시)</div>';
   else if (sedongSlotMode) html += `<div style="padding:6px 10px;font-size:14px;color:#0e7490;font-weight:700">🕘 세동 ${Number(insp.slot_no) === 0 ? '<b>셋업(초품)</b> 실측' : `순회검사 — ${sedongSlotLabel(insp.slot_no)} 타임 실측`}</div>`;
+  // [v2.25] 샘플 보기: 열 수를 샘플1+샘플2 칸 수로 바꾼다. 수정 모드는 원본 위치(x1~x10) 그대로
+  const colN = (smpView && !editMode) ? smpA + smpB : maxX;
   html += '<table class="hist-meas-tbl"><thead><tr><th>No</th><th class="sticky-item">항목</th>';
-  for (let i = 1; i <= maxX; i++) {
-    const label = sedongWide ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
+  for (let i = 1; i <= colN; i++) {
+    let label = sedongWide ? `${SEDONG_SLOTS[i - 1]}시` : `X${i}`;   // [v0.48] 세동: 8시~17시
+    if (smpView && !editMode) {
+      label = i <= smpA ? (smpA === 1 ? '샘플 1' : `샘플1-${i}`) : (smpB === 1 ? '샘플 2' : `샘플2-${i - smpA}`);
+    } else if (smpView && editMode) {
+      label = i <= 5 ? `S1-${i}` : `S2-${i - 5}`;                   // 원본 위치: x1~5=샘플1, x6~10=샘플2
+    }
     html += `<th>${label}</th>`;
   }
   html += '<th>판정</th><th>메모</th></tr></thead><tbody>';
@@ -6476,7 +6747,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
             <option value="NG"${r.visual_result === 'NG' ? ' selected' : ''}>NG</option>
           </select></td>`;
       } else {
-        html += `<td colspan="${maxX}" style="text-align:center;color:#64748b;font-size:14px">${r.visual_result}</td>`;
+        html += `<td colspan="${colN}" style="text-align:center;color:#64748b;font-size:14px">${r.visual_result}</td>`;
       }
     } else {
       // [v1.66] 건별은 실제 입력분만 표시.
@@ -6484,7 +6755,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
       //   null(이전 데이터)은 정보가 없으므로 종전대로 전부 표시.
       const cells = packed ? packed[ri] : null;   // [v1.72] 앞으로 당겨 담은 값
 
-      for (let i = 1; i <= maxX; i++) {
+      for (let i = 1; i <= colN; i++) {
         if (editMode) {
           const v = r[`x${i}`];   // 수정 모드는 항상 원본 슬롯 위치 유지 (저장 매핑 보존)
           html += `<td><input class="edit-inp" type="text" inputmode="decimal" id="he-x-${idx}-${ri}-${i}" value="${v != null ? fmtNum(v) : ''}"></td>`;
@@ -7811,12 +8082,33 @@ let cfgGroupOrders = {};        // [v1.25] 연동 그룹 멤버 순서 { groupId
 
 // 해당 탭에서 입력 대상이 되는 spec (입력 화면과 동일 필터)
 function specsForProc(proc) {
-  return cfgSpecs.filter(s => {
+  const list = cfgSpecs.filter(s => {
     const pt = s.process_type || 'press';
     return proc === 'machining' ? (pt === 'machining' || pt === 'both')
                                 : (pt === 'press' || pt === 'both');
   });
+  // [v2.26] 가공은 가공 전용 연동으로 본다 — 원본(cfgSpecs)은 건드리지 않게 사본으로
+  if (proc === 'machining') {
+    return list.map(s => Object.assign({}, s, { link_group: s.link_group_m || null, link_role: s.link_role_m || null }));
+  }
+  return list;
 }
+
+// [v2.26] 공정 필터만 (사본 X) — 연동 관리는 원본 객체를 PATCH 후 갱신해야 해서
+function specsForProcRaw(proc) {
+  return cfgSpecs.filter(s => {
+    const pt = s.process_type || 'press';
+    if (pt === 'archived') return false;
+    return proc === 'machining' ? (pt === 'machining' || pt === 'both')
+                                : (pt === 'press' || pt === 'both');
+  });
+}
+
+// [v2.26] 연동 그룹 관리 — 공정 선택. 프레스/가공 연동은 서로 다른 컬럼에 저장된다.
+let cfgLinkProc = 'press';
+const lgOf = s => cfgLinkProc === 'machining' ? s.link_group_m : s.link_group;
+const lrOf = s => cfgLinkProc === 'machining' ? s.link_role_m  : s.link_role;
+function setLinkProc(p) { cfgLinkProc = p; renderCfgSpecs(); }
 
 // spec 목록 → 표시단위(unit). 연동그룹=한 덩어리(행 수=대표 멤버 measure_points)
 // 한 spec의 실제 입력칸(행) 수
@@ -8198,12 +8490,11 @@ async function saveRules() {
 // ── 연동 그룹 관리 ──
 function renderLinkManager() {
   if (!cfgPart) return '';
-  // 현재 부품의 연동 그룹 수집
+  // 현재 부품의 연동 그룹 수집 — [v2.26] 선택한 공정의 항목·연동 컬럼만
   const groups = {};
-  cfgSpecs.forEach(s => {
-    if (s.link_group) {
-      (groups[s.link_group] = groups[s.link_group] || []).push(s);
-    }
+  specsForProcRaw(cfgLinkProc).forEach(s => {
+    const g = lgOf(s);
+    if (g) (groups[g] = groups[g] || []).push(s);
   });
   const groupKeys = Object.keys(groups);
 
@@ -8218,8 +8509,10 @@ function renderLinkManager() {
       const mem = saved && saved.length
         ? [...saved.map(id=>base.find(s=>s.id===id)).filter(Boolean), ...base.filter(s=>!saved.includes(s.id))]
         : base;
-      const isGrid = mem.some(s => s.link_role === 'grid');
+      const isGrid = mem.some(s => lrOf(s) === 'grid');
       const ptn = isGrid ? '형상형' : '외경형';
+      const ptsNote = (isGrid && cfgLinkProc === 'machining' && mem[0].link_pts_m)
+        ? ` · 샘플당 ${mem[0].link_pts_m}포인트` : '';
       const memberRows = mem.map((s, i) => `
         <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #ede9fe">
           <span style="flex:1;font-size:16px;color:#5b21b6">No.${dno(s)} ${s.item_name}</span>
@@ -8230,7 +8523,7 @@ function renderLinkManager() {
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
           <div style="flex:1">
             <span style="font-size:13px;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700">${ptn}</span>
-            <span style="font-size:16px;color:#5b21b6;margin-left:6px">${mem.length}개 항목 · 입력 순서</span>
+            <span style="font-size:16px;color:#5b21b6;margin-left:6px">${mem.length}개 항목${ptsNote} · 입력 순서</span>
           </div>
           <button onclick="unlinkGroup('${gk.replace(/'/g,"\\'")}')" style="border:none;background:#fee2e2;color:#dc2626;padding:5px 10px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer">연동 해제</button>
         </div>
@@ -8242,7 +8535,14 @@ function renderLinkManager() {
   return `
     <div style="background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:14px;margin:0 12px 12px">
       <div style="font-size:17px;font-weight:700;color:#1e293b;margin-bottom:4px">🔗 연동 그룹 관리</div>
-      <div style="font-size:14px;color:#94a3b8;margin-bottom:10px">한 번에 측정되는 항목들을 묶어서 입력 화면에서 그리드로 표시</div>
+      <div style="font-size:14px;color:#94a3b8;margin-bottom:8px">한 번에 측정되는 항목들을 묶어서 입력 화면에서 그리드로 표시</div>
+      <div class="mode-toggle" style="margin-bottom:10px">
+        <button class="mt-btn ${cfgLinkProc === 'press' ? 'sel' : ''}" onclick="setLinkProc('press')">🔩 프레스</button>
+        <button class="mt-btn ${cfgLinkProc === 'machining' ? 'sel' : ''}" onclick="setLinkProc('machining')">⚙️ 가공</button>
+      </div>
+      <div style="font-size:13px;color:#64748b;margin-bottom:8px">${cfgLinkProc === 'machining'
+        ? '가공 연동 — 프레스와 따로 저장됩니다. 공용 항목을 묶어도 프레스 화면은 그대로입니다.'
+        : '프레스 연동 — 가공과 따로 저장됩니다.'}</div>
       ${groupsHtml}
       <button onclick="openLinkCreator()" style="width:100%;border:1.5px dashed #7c3aed;background:#faf5ff;color:#7c3aed;padding:10px;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px">＋ 새 연동 만들기</button>
       <div id="link-creator" style="display:none;margin-top:10px;padding:12px;background:#faf5ff;border:1px solid #ddd6fe;border-radius:8px"></div>
@@ -8252,8 +8552,8 @@ function renderLinkManager() {
 // 연동 만들기 패널 열기
 function openLinkCreator() {
   const panel = document.getElementById('link-creator');
-  // 아직 연동 안 된 항목 + 외관 제외
-  const avail = cfgSpecs.filter(s => !s.link_group && !s.is_visual);
+  // 아직 연동 안 된 항목 + 외관 제외 — [v2.26] 선택한 공정 기준
+  const avail = specsForProcRaw(cfgLinkProc).filter(s => !lgOf(s) && !s.is_visual);
   if (avail.length < 2) {
     toast('연동 가능한 항목이 2개 이상 필요합니다');
     return;
@@ -8267,7 +8567,7 @@ function openLinkCreator() {
           <input type="checkbox" class="link-chk" value="${s.id}" style="width:16px;height:16px">
           <span style="font-weight:700;color:#7c3aed">No.${dno(s)}</span>
           <span>${s.item_name}</span>
-          <span style="color:#94a3b8;font-size:14px">(${s.measure_points||0}P)</span>
+          ${cfgLinkProc === 'machining' ? '' : `<span style="color:#94a3b8;font-size:14px">(${s.measure_points||0}P)</span>`}
         </label>`).join('')}
     </div>
     <div style="font-size:16px;font-weight:700;color:#5b21b6;margin-bottom:6px">연동 방식</div>
@@ -8281,6 +8581,12 @@ function openLinkCreator() {
         <span><b>외경형</b> — 항목 여러 개(각 1포인트)가 기준, 1개 항목이 따라붙음<br><span style="color:#94a3b8">예: 외경 4항목 + 진원도 4포인트</span></span>
       </label>
     </div>
+    ${cfgLinkProc === 'machining' ? `
+    <div id="link-pts-opt" style="margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
+      <div style="font-size:14px;color:#5b21b6;margin-bottom:6px">형상형 — 샘플 1개당 포인트 수</div>
+      <input id="link-pts-m" class="inp" type="number" min="1" max="5" value="4" style="font-size:16px;width:90px">
+      <div style="font-size:13px;color:#94a3b8;margin-top:4px">외경형은 기준 항목 수만큼 자동으로 정해집니다</div>
+    </div>` : ''}
     <div id="link-rowcol-opt" style="display:none;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px">
       <div style="font-size:14px;color:#5b21b6;margin-bottom:6px">따라붙는 항목(연동) 1개 선택:</div>
       <select id="link-col-sel" class="inp" style="font-size:16px"></select>
@@ -8314,7 +8620,7 @@ function updateColSelector() {
   const sel = document.getElementById('link-col-sel');
   const opts = checked.map(id => {
     const s = cfgSpecs.find(x => x.id === id);
-    return `<option value="${id}">No.${dno(s)} ${s.item_name} (${s.measure_points||0}P)</option>`;
+    return `<option value="${id}">No.${dno(s)} ${s.item_name}${cfgLinkProc === 'machining' ? '' : ` (${s.measure_points||0}P)`}</option>`;
   });
   sel.innerHTML = opts.join('');
 }
@@ -8330,6 +8636,35 @@ async function createLinkGroup() {
   }
   const pattern = document.querySelector('input[name="link-pattern"]:checked').value;
   const groupId = 'grp_' + Date.now().toString(36);
+
+  // [v2.26] 가공 연동 — 가공 전용 컬럼에만 기록. 공용 measure_points 는 절대 건드리지 않는다.
+  if (cfgLinkProc === 'machining') {
+    try {
+      if (pattern === 'grid') {
+        const pts = Math.min(5, Math.max(1, parseInt(document.getElementById('link-pts-m').value) || 4));
+        for (const id of checked) {
+          const s = cfgSpecs.find(x => x.id === id);
+          const patch = { link_group_m: groupId, link_role_m: 'grid', link_pts_m: pts };
+          await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch });
+          Object.assign(s, patch);
+        }
+      } else {
+        const colId = Number(document.getElementById('link-col-sel').value);
+        for (const id of checked) {
+          const s = cfgSpecs.find(x => x.id === id);
+          const patch = { link_group_m: groupId, link_role_m: id === colId ? 'col' : 'row', link_pts_m: null };
+          await sbFetch(`qc_part_spec?id=eq.${id}`, { method: 'PATCH', body: patch });
+          Object.assign(s, patch);
+        }
+      }
+      toast('✅ 가공 연동 생성됨');
+      renderCfgSpecs();
+    } catch(e) {
+      savedEl.textContent = '생성 실패: ' + e.message;
+      savedEl.style.color = '#dc2626';
+    }
+    return;
+  }
 
   try {
     if (pattern === 'grid') {
@@ -8371,7 +8706,7 @@ async function createLinkGroup() {
 async function moveGroupMember(groupKey, specId, dir) {
   if (!cfgPart) { toast('설정 탭에서 부품을 먼저 선택하세요'); return; }
   // 현재 순서 가져오기
-  const base = cfgSpecs.filter(s => s.link_group === groupKey).sort((a,b)=>a.item_no-b.item_no);
+  const base = cfgSpecs.filter(s => s.link_group === groupKey || s.link_group_m === groupKey).sort((a,b)=>a.item_no-b.item_no);   // [v2.26]
   const saved = cfgGroupOrders[groupKey];
   let order = saved && saved.length
     ? [...saved.map(id=>base.find(s=>s.id===id)).filter(Boolean), ...base.filter(s=>!saved.includes(s.id))]
@@ -8388,7 +8723,8 @@ async function moveGroupMember(groupKey, specId, dir) {
   //   renderCfgSpecs 안에서 cfgGroupOrders를 DB(빈값)로 다시 읽어 덮어쓰므로,
   //   여기서 먼저 스냅샷을 떠야 방금 바꾼 순서가 날아가지 않음.
   const srcSpecs = (cfgSpecs && cfgSpecs.length) ? cfgSpecs : (specs || []);
-  const myGroupKeys = new Set(srcSpecs.filter(s => s.link_group).map(s => s.link_group));
+  const myGroupKeys = new Set();   // [v2.26] 프레스·가공 연동 키 둘 다 (키는 grp_ 고유값이라 섞이지 않음)
+  srcSpecs.forEach(s => { if (s.link_group) myGroupKeys.add(s.link_group); if (s.link_group_m) myGroupKeys.add(s.link_group_m); });
   myGroupKeys.add(groupKey);
   const myOrders = {};
   for (const k of Object.keys(cfgGroupOrders)) {
@@ -8430,10 +8766,13 @@ async function moveGroupMember(groupKey, specId, dir) {
 async function unlinkGroup(groupId) {
   if (!confirm('이 연동 그룹을 해제할까요?\n(항목 자체는 유지, 묶음만 풀림)')) return;
   try {
-    const members = cfgSpecs.filter(s => s.link_group === groupId);
+    // [v2.26] 선택한 공정의 연동만 푼다
+    const m = cfgLinkProc === 'machining';
+    const members = cfgSpecs.filter(s => (m ? s.link_group_m : s.link_group) === groupId);
+    const patch = m ? { link_group_m: null, link_role_m: null, link_pts_m: null } : { link_group: null, link_role: null };
     for (const s of members) {
-      await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: { link_group: null, link_role: null } });
-      s.link_group = null; s.link_role = null;
+      await sbFetch(`qc_part_spec?id=eq.${s.id}`, { method: 'PATCH', body: patch });
+      Object.assign(s, patch);
     }
     toast('연동 해제됨');
     renderCfgSpecs();
