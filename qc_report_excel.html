@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.46 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.47 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.46</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.47</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -480,6 +480,7 @@ async function reload(){
     
     // 출하일 드롭다운
     const sel = document.getElementById('dateSel');
+    const prevDate = sel.value;   // [v0.47] 다시 불러와도 고른 출하일 유지
     sel.innerHTML = '<option value="">날짜를 선택하세요</option>';
     _allShipDates.forEach(({date, count, qty}) => {
       const opt = document.createElement('option');
@@ -487,6 +488,11 @@ async function reload(){
       opt.textContent = `${date}  ·  ${count}건  ·  ${qty.toLocaleString()}개`;
       sel.appendChild(opt);
     });
+    // [v0.47] 종전엔 목록만 새로 만들고 선택값은 빈칸, 아래 부품 목록은 그대로 남아
+    //   '출하일 없이 생성'이 가능했다 → 성적서 날짜가 오늘로, 파일명이 xlsx.xlsx 로 나옴.
+    //   같은 날짜가 아직 있으면 다시 선택, 없으면 목록도 비운다.
+    if (prevDate && _allShipDates.some(d => d.date === prevDate)) sel.value = prevDate;
+    setTimeout(onDateChange, 0);
     
     setStatus(`✅ 출하일 ${_allShipDates.length}개 / 출하건수 ${ships.length}건 / 부품 ${parts.length}개 / 프레스검사 ${insps.length}건 / 가공검사 ${machInsps.length}건 / spec ${allSpecs.length}건`, '#86efac');
     document.getElementById('dateCard').style.display='block';
@@ -1538,7 +1544,10 @@ async function generateXlsx(){
   const selected = _shipItems.filter(x => x.checked);
   if(selected.length === 0){alert('1개 이상 선택하세요');return}
   
-  const shipDate = document.getElementById('dateSel').value;
+  // [v0.47] 출하일 칸이 비어 있으면 선택한 출하 건의 출하일로 (성적서 날짜·파일명에 쓰임)
+  let shipDate = document.getElementById('dateSel').value;
+  if (!shipDate) shipDate = (selected[0] && selected[0].shipment && selected[0].shipment.reg_date) || '';
+  if (!shipDate) { alert('출하일을 선택하세요'); return; }
   const qaResp = document.getElementById('qaResp').value.trim();
   const inspector = document.getElementById('inspector').value.trim();   // [v0.9] 검사자 input
   const company = document.getElementById('companySel').value;           // [v0.21] 회사 양식 선택
