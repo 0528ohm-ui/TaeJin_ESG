@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.29</title>
+<title>공정검사 입력 v2.34</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,10 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.34] 가공 입력 순서 카드 — 샘플 표시 */
+.dq-smp{display:inline-block;font-size:12px;font-weight:800;color:#166534;background:#dcfce7;border-radius:5px;padding:1px 6px;margin-right:6px}
+.dq-card.dq-s2 .dq-smp{color:#1d4ed8;background:#dbeafe}
+
 /* [v2.25] 연동 표 샘플 경계 */
 .linked-grid tr.smp-cut td{border-top:2px solid #86efac}
 
@@ -656,7 +660,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.29</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.34</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1313,6 +1317,7 @@ let activeOrderSeq = null;  // [v1.89] 현재 탭의 절대 입력 순서(unit k
 let activeTransfer = false; // [v1.95] 현재 탭이 트랜스퍼 2개 측정인지
 let activeSample2 = false;  // [v2.22] 현재 탭이 가공 샘플 2개 측정인지
 let curTabRef = null;       // [v2.23] 샘플 수 선택이 탭 단위라 현재 탭 객체를 들고 있는다
+let activeSampleMajor = false; // [v2.33] 가공 샘플 입력 순서 — true 면 샘플1 전체 → 샘플2 전체
 let activeGroupOrders = {};  // [v1.25] 연동 그룹 내 멤버 순서 { groupId: [specId, ...] }
 
 // ── PIN 입력 버퍼 ──
@@ -2129,6 +2134,15 @@ function switchProcMode(mode) {
 //   위치연동 연동 항목(col)         → 그 그룹의 기준 항목 개수 (위치 수)
 //   형상연동(grid)                  → 설정의 포인트 수 (1~5)
 //   vals 는 샘플 순서로 이어 붙인다: [샘플1 p1..p(sp), 샘플2 p1..p(sp)]
+// [v2.31] 가공 탭 입력 방식 — 공용이든 가공 전용이든 is_min_max_m 하나로 정한다.
+//   아직 안 정한 항목(null)은 v2.30 까지 보이던 그대로: 가공 전용 = 기존 입력 방식, 공용 = 1칸.
+//   프레스는 이 값을 전혀 보지 않는다.
+function machMM(s) {
+  if (s.is_min_max_m === true)  return true;
+  if (s.is_min_max_m === false) return false;
+  return s.process_type === 'both' ? false : !!s.is_min_max;
+}
+
 function sampleSpOf(s, rowCnt) {
   if (!s.link_group || s.link_role === 'row') return 1;
   if (s.link_role === 'col') return Math.min(5, Math.max(1, rowCnt[s.link_group] || s.measure_points || 1));
@@ -2146,7 +2160,10 @@ function buildInputs(loadedSpecs, sedong = false, transfer = false, sample2 = fa
       inputs[s.id] = { type: 'visual', val: 'OK', note: '', noteFixed: '', prefilledVal: false };
     } else if (sample2 && !s.calc_type) {
       // [v2.27] 연동 안 된 최소/최대 항목은 샘플마다 최소·최대 2칸 (mmPer)
-      const mmPer = !s.link_group && !!s.is_min_max;
+      // [v2.30] 공용(both) 항목은 프레스 설정(is_min_max)을 따르지 않고 가공 전용 값(is_min_max_m)을 본다.
+      //   기본(null) = 샘플당 1칸 — 가공 샘플은 대개 한 번 재서 값이 하나.
+      const mmSetting = machMM(s);   // [v2.31] 가공 입력 방식 (공용·가공전용 공통)
+      const mmPer = !s.link_group && mmSetting;
       const sp = mmPer ? 2 : sampleSpOf(s, rowCnt);
       inputs[s.id] = { type: 'points', sampleMode: true, mmPer, sp, vals: Array(sp * 2).fill(''),
                        note: '', noteFixed: '', prefilled: Array(sp * 2).fill(false) };
@@ -2350,11 +2367,13 @@ async function loadVariant(part, ctx = {}) {
   let insertRules = [];
   let orderSeq = null;   // [v1.89] 드래그로 정한 절대 순서 (있으면 insert_rules보다 우선)
   let groupOrders = {};  // [v2.01] 이 부품의 연동그룹 멤버 순서 — variant 에 붙여서 탭마다 독립 보관
+  let sampleMajor = false;   // [v2.33] 가공 샘플 입력 순서
   try {
     // [v1.27] insert_rules + group_orders 함께 로드. group_orders는 activeGroupOrders에 머지
     //   (이게 없어서 껐다 켜면 측정 탭 연동 순서가 원본으로 원복되던 버그)
-    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules,group_orders,order_seq`);
+    const rr = await sbAll('qc_input_order', `part_id=eq.${part.id}&process_type=eq.${procMode}&select=insert_rules,group_orders,order_seq,sample_major`);
     if (rr.length) {
+      sampleMajor = rr[0].sample_major === true;   // [v2.33]
       if (Array.isArray(rr[0].insert_rules)) insertRules = rr[0].insert_rules;
       if (Array.isArray(rr[0].order_seq) && rr[0].order_seq.length) orderSeq = rr[0].order_seq;
       if (rr[0].group_orders && typeof rr[0].group_orders === 'object') {
@@ -2363,7 +2382,7 @@ async function loadVariant(part, ctx = {}) {
       }
     }
   } catch(e){}
-  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, sample2, insertRules, orderSeq, groupOrders,
+  return { part, specs: loadedSpecs, inputs, procMode, lastRemark, sedong, transfer, sample2, sampleMajor, insertRules, orderSeq, groupOrders,
            lastInsp: lastMeta.lastInsp || null };   // [v2.02]
 }
 
@@ -2832,6 +2851,7 @@ function applyVariant(t) {
   }
   activeTransfer = !!v.transfer;   // [v1.95] 트랜스퍼 탭 여부 (모드 전환·spec 반영에 영향)
   activeSample2 = !!v.sample2;     // [v2.22] 가공 샘플 2개 탭 여부
+  activeSampleMajor = !!v.sampleMajor;   // [v2.33]
 
   renderVariantToggle(t);
   renderLastInsp(v);   // [v2.02] 직전 검사 일시 뱃지
@@ -3903,7 +3923,47 @@ function numBack() {
 //   규칙 없으면 DOM 순서 그대로 반환.
 // [v1.23] is_visual 항목(외관)은 pt-inp가 없어 anchor 탐색에서 누락됨 →
 //   vt-ok-{id} 버튼을 anchor 마커로 seq에 포함시키고, 최종 반환 시엔 제거.
+// [v2.33] 가공 샘플별 순서 — 기존 순서(항목·연동·드래그 순서)를 그대로 둔 채
+//   샘플 번호로만 안정 정렬해서 샘플1 칸 전부 → 샘플2 칸 전부.
+//   칸의 샘플 번호 = 칸 번호 ÷ 샘플당 칸 수(sp). 외경형 연동의 진원도(샘플당 위치 수)도 같은 식.
 function orderedInputs() {
+  // [v2.34] 가공 — 설정에서 '항목 × 샘플' 카드로 저장한 순서(키 '항목키#샘플번호')를 그대로 따른다.
+  //   같은 카드 안(연동 표의 행 등)은 화면 순서 유지.
+  if (activeSample2 && Array.isArray(activeOrderSeq) && activeOrderSeq.some(k => String(k).includes('#'))) {
+    const els = Array.from(document.querySelectorAll('#specs-list input.pt-inp, #specs-list button[id^="vt-ok-"]'));
+    const specById = {}; specs.forEach(x => { specById[x.id] = x; });
+    const rank = {}; activeOrderSeq.forEach((k, i) => { rank[k] = i; });
+    const TAIL = activeOrderSeq.length + 1000;
+    const rankOf = el => {
+      const m = String(el.id).match(/^pt-(\d+)-(\d+)$/) || String(el.id).match(/^vt-ok-(\d+)$/);
+      if (!m) return TAIL;
+      const sp = specById[Number(m[1])];
+      if (!sp) return TAIL;
+      const uk = sp.link_group ? 'g:' + sp.link_group : 's:' + sp.item_no;
+      if (m[2] == null) return rank[uk] ?? rank[uk + '#1'] ?? TAIL;          // 외관
+      const inp = specInputs[sp.id];
+      const k = Math.floor(Number(m[2]) / ((inp && inp.sp) || 1)) + 1;
+      return rank[uk + '#' + k] ?? rank[uk] ?? TAIL;
+    };
+    const pos = new Map(els.map((el, i) => [el, i]));
+    return els.slice()
+      .sort((a, b) => (rankOf(a) - rankOf(b)) || (pos.get(a) - pos.get(b)))
+      .filter(el => el.classList.contains('pt-inp'));
+  }
+  const base = _orderedInputsBase();
+  if (!activeSample2 || !activeSampleMajor) return base;
+  const smpOf = el => {
+    const m = String(el.id).match(/^pt-(\d+)-(\d+)$/);
+    if (!m) return 0;
+    const inp = specInputs[Number(m[1])];
+    if (!inp || !inp.sampleMode) return 0;
+    return Math.floor(Number(m[2]) / (inp.sp || 1));
+  };
+  const pos = new Map(base.map((el, i) => [el, i]));
+  return base.slice().sort((a, b) => (smpOf(a) - smpOf(b)) || (pos.get(a) - pos.get(b)));
+}
+
+function _orderedInputsBase() {
   const ptInps = Array.from(document.querySelectorAll('#specs-list input.pt-inp'));
 
   // [v1.89] 절대 순서(order_seq)가 있으면 그걸로 정렬. 끼우기 규칙보다 우선.
@@ -8003,12 +8063,28 @@ async function renderCfgSpecs() {
               <option value="both" ${s.process_type==='both'?'selected':''}>both</option>
               <option value="archived" ${s.process_type==='archived'?'selected':''}>archived (폐지)</option>
             </select></div>
-          <div class="cfg-field"><label>입력 방식</label>
+          <div class="cfg-field" style="${s.process_type === 'machining' ? 'display:none' : ''}"><label>입력 방식${s.process_type === 'both' ? ' <span style="font-weight:400;color:#94a3b8">(프레스)</span>' : ''}</label>
             <select id="cfgf-mm-${s.id}" ${s.is_visual?'disabled':''}>
               <option value="0" ${!s.is_min_max?'selected':''}>포인트 입력</option>
               <option value="1" ${s.is_min_max?'selected':''}>최소/최대</option>
             </select></div>
         </div>
+        ${((s.process_type === 'both' || s.process_type === 'machining') && !s.is_visual) ? `
+        <!-- [v2.31] 가공 입력 방식 — 공용·가공 전용 공통. 프레스는 위 '입력 방식' 그대로 -->
+        <div class="cfg-row2">
+          <div class="cfg-field"><label>가공 입력 방식</label>
+            ${s.link_group_m ? `
+            <div style="padding:8px 10px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;font-size:15px;color:#5b21b6;font-weight:600">
+              🔗 ${s.link_role_m === 'grid' ? `형상연동 · 샘플당 ${s.link_pts_m || s.measure_points || 1}포인트`
+                  : s.link_role_m === 'col' ? '외경형 연동 · 기준 항목 수만큼' : '외경형 연동 기준 · 샘플당 1칸'}
+            </div>` : `
+            <select id="cfgf-mmm-${s.id}">
+              <option value="0" ${!machMM(s)?'selected':''}>샘플당 1칸</option>
+              <option value="1" ${machMM(s)?'selected':''}>샘플당 최소/최대</option>
+            </select>`}</div>
+          <div class="cfg-field" style="font-size:13px;color:#94a3b8;align-self:end;padding-bottom:6px">
+            ${s.link_group_m ? '연동 설정을 따릅니다 (연동 해제 시 선택 가능)' : '가공 탭에만 적용됩니다'}</div>
+        </div>` : ''}
         <!-- [v1.99] 자동 계산 — 다른 항목의 측정값에서 값을 만들어 넣는다 -->
         <div class="cfg-row2">
           <div class="cfg-field"><label>자동 계산</label>
@@ -8154,6 +8230,34 @@ function rowLabel(unit, rowIdx) {
 
 function setOrderProc(proc) { cfgOrderProc = proc; renderInputOrder(); }
 
+// [v2.34] 가공 빠른 정렬 — 항목 순서(각 항목이 처음 나오는 순서)는 유지한 채
+//   항목별: 항목마다 샘플1 → 샘플2 / 샘플별: 샘플1 전부 → 샘플2 전부.
+//   카드만 재배치하고 저장은 [순서 저장]으로. 이후 드래그로 섞어도 된다.
+let cfgSampleMajor = false;   // v2.33 호환용 (예전 저장본을 처음 펼칠 때만 참고)
+function presetSeq(sampleMajor) {
+  const cur = cfgOrderSeq['machining'] || [];
+  const unitOrder = [], seen = new Set(), vis = new Set();
+  cur.forEach(k => {
+    const [uk, n] = String(k).split('#');
+    if (!n) vis.add(uk);
+    if (!seen.has(uk)) { seen.add(uk); unitOrder.push(uk); }
+  });
+  const out = [];
+  if (sampleMajor) {
+    unitOrder.forEach(uk => out.push(vis.has(uk) ? uk : `${uk}#1`));   // 외관은 샘플1 흐름 안 제자리
+    unitOrder.forEach(uk => { if (!vis.has(uk)) out.push(`${uk}#2`); });
+  } else {
+    unitOrder.forEach(uk => { if (vis.has(uk)) out.push(uk); else out.push(`${uk}#1`, `${uk}#2`); });
+  }
+  return out;
+}
+function applySamplePreset(sampleMajor) {
+  cfgOrderSeq['machining'] = presetSeq(sampleMajor);
+  renderInputOrder();
+  const el = document.getElementById('cfg-order-saved');
+  if (el) { el.style.color = '#b45309'; el.textContent = '정렬됨 — [순서 저장]을 눌러야 반영됩니다'; }
+}
+
 async function renderInputOrder() {
   const card = document.getElementById('cfg-order-card');
   if (!cfgPart) { card.style.display='none'; return; }
@@ -8167,8 +8271,10 @@ async function renderInputOrder() {
     cfgGroupOrders = {};  // [v1.29] 부품 바뀌면 연동순서 메모리도 초기화 (이전 부품 키 잔재 제거)
     cfgOrderSeq = {};     // [v1.89] 절대 순서도 부품 단위 캐시
     try {
-      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules,order_seq`);
+      const rows = await sbAll('qc_input_order', `part_id=eq.${cfgPart.id}&select=process_type,insert_rules,order_seq,sample_major`);
+      cfgSampleMajor = false;
       rows.forEach(r => {
+        if (r.process_type === 'machining') cfgSampleMajor = r.sample_major === true;   // [v2.33]
         cfgRules[r.process_type] = Array.isArray(r.insert_rules) ? r.insert_rules : [];
         if (Array.isArray(r.order_seq) && r.order_seq.length) cfgOrderSeq[r.process_type] = r.order_seq.slice();
       });
@@ -8200,10 +8306,30 @@ async function renderInputOrder() {
     flow.forEach(f => { if (!seen.has(f.key)) { seen.add(f.key); seq.push(f.key); } });
     cfgOrderSeq[cfgOrderProc] = seq;
   }
+  const isMach = cfgOrderProc === 'machining';
+  // [v2.34] 가공 — 카드를 '항목 × 샘플'로 쪼갠다 (키: 항목키#1, 항목키#2 / 외관은 샘플 구분 없음)
+  //   예전 저장본(항목 키만)은 항목별(샘플1→2)로 펼쳐서 시작.
+  const cardList = [];
+  if (isMach) {
+    units.forEach(u => {
+      const rep = u.members ? u.members[0] : u.spec;
+      if (u.type === 'single' && rep && rep.is_visual) cardList.push({ key: u.key, u, k: 0 });
+      else [1, 2].forEach(k => cardList.push({ key: `${u.key}#${k}`, u, k }));
+    });
+    if (!seq.some(k => String(k).includes('#'))) {
+      const cm = {}; cardList.forEach(c => { cm[c.key] = c; });
+      const exp = [];
+      seq.forEach(uk => { if (cm[uk]) exp.push(uk); else [1, 2].forEach(k => { if (cm[`${uk}#${k}`]) exp.push(`${uk}#${k}`); }); });
+      seq = exp;
+      cfgOrderSeq[cfgOrderProc] = seq;
+    }
+  }
   // 순서 배열 정리 — 사라진 항목 제거, 새로 생긴 항목은 뒤에 추가(새 항목 표시용으로 기록)
-  const byKey = {}; units.forEach(u => { byKey[u.key] = u; });
+  const byKey = {};
+  if (isMach) cardList.forEach(c => { byKey[c.key] = c; });
+  else units.forEach(u => { byKey[u.key] = u; });
   const known = new Set(seq.filter(k => byKey[k]));
-  const added = units.filter(u => !known.has(u.key)).map(u => u.key);
+  const added = (isMach ? cardList : units).filter(u => !known.has(u.key)).map(u => u.key);
   seq = seq.filter(k => byKey[k]).concat(added);
   cfgOrderSeq[cfgOrderProc] = seq;
   cfgOrderNew = new Set(added);
@@ -8212,26 +8338,55 @@ async function renderInputOrder() {
 
   // ── 미리보기(실제 칸 흐름) ──
   const flowTokens = [];
-  ordered.forEach(u => {
-    for (let r = 0; r < u.rows; r++)
-      flowTokens.push(`${u.label}${u.rows > 1 ? ' ' + rowLabel(u, r) : ''}`);
-  });
+  if (isMach) {
+    // [v2.34] 가공 — 카드(항목 × 샘플) 순서 그대로
+    ordered.forEach(c => {
+      const rep = c.u.members ? c.u.members[0] : c.u.spec;
+      if (c.k === 0) flowTokens.push(c.u.label);
+      else if (c.u.type === 'single' && machMM(rep)) flowTokens.push(`${c.u.label} 샘플${c.k} 최소`, `${c.u.label} 샘플${c.k} 최대`);
+      else flowTokens.push(`${c.u.label} 샘플${c.k}`);
+    });
+  } else {
+    ordered.forEach(u => {
+      for (let r = 0; r < u.rows; r++)
+        flowTokens.push(`${u.label}${u.rows > 1 ? ' ' + rowLabel(u, r) : ''}`);
+    });
+  }
+  const presetOf = () => {
+    if (!isMach) return '';
+    const a = presetSeq(false), b = presetSeq(true), cur = seq.join('|');
+    return cur === a.join('|') ? 'item' : cur === b.join('|') ? 'sample' : 'custom';
+  };
+  const pst = presetOf();
+  const sampleOrderHtml = isMach ? `
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap">
+      <span style="font-size:14px;font-weight:700;color:#475569">빠른 정렬</span>
+      <div class="mode-toggle">
+        <button class="mt-btn ${pst === 'item' ? 'sel' : ''}" onclick="applySamplePreset(false)">항목별</button>
+        <button class="mt-btn ${pst === 'sample' ? 'sel' : ''}" onclick="applySamplePreset(true)">샘플별</button>
+      </div>
+      <span style="font-size:13px;color:#94a3b8">${pst === 'custom' ? '직접 정한 순서' : '정렬 후 카드를 끌어서 다듬고 [순서 저장]'}</span>
+    </div>` : '';
   const previewHtml = `<div style="font-size:14px;color:#64748b;margin:2px 0 10px;line-height:1.7">
     ${flowTokens.map(t => `<span style="display:inline-block;background:#f1f5f9;border-radius:5px;padding:1px 7px;margin:1px 3px 1px 0">${t}</span>`).join('→ ')}
   </div>`;
 
   // ── 드래그 카드 목록 ──
-  const cardsHtml = ordered.map((u, i) => {
+  const cardsHtml = ordered.map((c, i) => {
+    const u = isMach ? c.u : c;                       // [v2.34] 가공은 카드 = 항목 × 샘플
+    const smpTag = (isMach && c.k) ? `<span class="dq-smp">샘플${c.k}</span>` : '';
     const rep = u.members ? u.members[0] : u.spec;
-    const cnt = u.type === 'single' && rep && rep.is_min_max ? '최소/최대 2칸'
-              : u.rows > 1 ? `${u.rows}칸` : '1칸';
-    return `<div class="dq-card" draggable="true" data-key="${u.key}" data-idx="${i}"
+    const cnt = isMach
+      ? (u.type === 'group' ? '연동' : (rep && rep.is_visual) ? '1칸' : machMM(rep) ? '샘플당 최소/최대' : '샘플당 1칸')   // [v2.33]
+      : (u.type === 'single' && rep && rep.is_min_max ? '최소/최대 2칸'
+              : u.rows > 1 ? `${u.rows}칸` : '1칸');
+    return `<div class="dq-card${(isMach && c.k === 2) ? ' dq-s2' : ''}" draggable="true" data-key="${isMach ? c.key : u.key}" data-idx="${i}"
         ondragstart="dqDragStart(event)" ondragover="dqDragOver(event)"
         ondrop="dqDrop(event)" ondragend="dqDragEnd(event)" ondragleave="dqDragLeave(event)">
       <span class="dq-handle">⠿</span>
       <span class="dq-num">${i + 1}</span>
       <div class="dq-body">
-        <div class="dq-label">${u.type === 'group' ? '<span class="dq-grp">연동</span>' : ''}${u.label}${cfgOrderNew.has(u.key) ? '<span class="dq-new">새 항목</span>' : ''}</div>
+        <div class="dq-label">${smpTag}${u.type === 'group' ? '<span class="dq-grp">연동</span>' : ''}${u.label}${cfgOrderNew.has(isMach ? c.key : u.key) ? '<span class="dq-new">새 항목</span>' : ''}</div>
         <div class="dq-sub">${u.nos} · ${cnt}</div>
       </div>
       <div class="dq-btns">
@@ -8248,7 +8403,8 @@ async function renderInputOrder() {
     </div>` : '';
 
   document.getElementById('cfg-order-list').innerHTML =
-    `<div style="font-size:14px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
+    sampleOrderHtml
+    + `<div style="font-size:14px;font-weight:700;color:#475569;margin-bottom:2px">입력 흐름 미리보기</div>`
     + previewHtml
     + legacyWarn
     + `<div style="font-size:14px;color:#94a3b8;margin-bottom:6px">카드를 끌어서 순서를 바꾸세요 (▲▼ 버튼도 가능)</div>`
@@ -8345,6 +8501,14 @@ async function saveOrderSeq() {
       updated_at: new Date().toISOString()
     };
     await upsertInputOrder(payload);
+    // [v2.34] 가공은 열려 있는 탭에도 바로 적용 (다시 열지 않아도 '다음' 순서가 바뀜)
+    if (cfgOrderProc === 'machining') {
+      (tabs || []).forEach(t => (t.variants || []).forEach(v => {
+        if (v.part && v.part.id === cfgPart.id && v.sample2) { v.orderSeq = payload.order_seq.slice(); v.insertRules = []; }
+      }));
+      if (activeSample2 && selectedPart && selectedPart.id === cfgPart.id) { activeOrderSeq = payload.order_seq.slice(); activeRules = []; }
+      persistDraft();
+    }
     cfgRules[cfgOrderProc] = [];
     cfgOrderNew = new Set();
     renderInputOrder();
@@ -9017,6 +9181,9 @@ async function saveCfgSpec(id) {
       process_type:   document.getElementById(`cfgf-ptype-${id}`).value,
       is_min_max:     document.getElementById(`cfgf-mm-${id}`).value === '1'
     };
+    // [v2.30] 공용 항목이면 가공 입력 방식도 저장
+    const mmmEl = document.getElementById(`cfgf-mmm-${id}`);
+    if (mmmEl) patch.is_min_max_m = mmmEl.value === '1';
     // [v2.00] 폐지(archived) 전환 처리
     //   규격 변경으로 항목이 빠져도 spec 을 지우면 과거 measurement 의 판정 근거가 사라진다.
     //   → 삭제 대신 archived. 입력 화면 필터가 press/both 만 읽으므로 자동으로 안 뜬다.
