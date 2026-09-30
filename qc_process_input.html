@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.34</title>
+<title>공정검사 입력 v2.35</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -108,7 +108,17 @@ body.role-viewer .hist-edit-btn{display:none !important}
 .inp{width:100%;padding:12px 14px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:20px;outline:none;transition:border-color .15s}
 .inp:focus{border-color:#3b82f6}
 label{display:block;font-size:16px;font-weight:600;color:#64748b;margin-bottom:5px}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* [v2.35] minmax(0,1fr) — 1fr 은 내용물 최소폭 밑으로 안 줄어서, 폰에서 시간 입력칸이 카드 밖으로 밀려
+   페이지 전체가 옆으로 늘어났다 */
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.row2 > *{min-width:0}
+/* 폰 브라우저가 date/time 입력칸에 강제하는 최소폭 해제 */
+input[type="date"].inp,input[type="time"].inp{min-width:0;max-width:100%;box-sizing:border-box}
+/* 안전장치 — 어디서든 가로로 삐져나와도 페이지가 옆으로 밀리지 않게 (clip 은 sticky 헤더를 깨지 않음) */
+html,body{overflow-x:clip}
+@media (max-width:440px){
+  input[type="date"].inp,input[type="time"].inp{font-size:17px;padding:12px 8px}
+}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:18px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
@@ -660,7 +670,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.34</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.35</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
