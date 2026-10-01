@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.38</title>
+<title>공정검사 입력 v2.39</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.38</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.39</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2303,9 +2303,20 @@ async function fillDefaultsFromHistory(part, loadedSpecs, inputs, sedong = false
     const baseQs = `part_id=eq.${part.id}&order=inspection_date.desc,inspection_time.desc.nullsfirst`
                  + `&limit=1&select=id,remark,slot_no,inspection_date,inspection_time,ho,mold_no`;
 
+    // [v2.39] 같은 공정의 기록에서 찾는다.
+    //   종전엔 공정 구분 없이 '가장 최근 검사'를 가져와서, 가공 탭인데 더 최근의 프레스 검사를 집으면
+    //   공용 항목만 값이 있고 가공 전용 항목은 비었다. (예: 116080-ST0 — 4/6 프레스가 3/30 가공보다 최근)
+    //   공정 값이 비어 있는 예전 기록(대부분 프레스 임포트분)은 프레스로 본다.
+    //   그 공정 기록이 하나도 없으면 종전처럼 공정 구분 없이.
+    const procQ = procMode === 'machining'
+      ? '&process_type=eq.machining'
+      : '&or=(process_type.eq.press,process_type.is.null)';
+
     let lastInsp = [];
     let exact = false;   // [v2.02] 설비+금형까지 일치하는 이력인지
-    if (narrow) { lastInsp = await sbAll('qc_shipping_inspection', baseQs + narrow); exact = !!lastInsp.length; }
+    if (narrow) { lastInsp = await sbAll('qc_shipping_inspection', baseQs + procQ + narrow); exact = !!lastInsp.length; }
+    if (!lastInsp.length) lastInsp = await sbAll('qc_shipping_inspection', baseQs + procQ);
+    if (!lastInsp.length && narrow) { lastInsp = await sbAll('qc_shipping_inspection', baseQs + narrow); exact = !!lastInsp.length; }
     if (!lastInsp.length) lastInsp = await sbAll('qc_shipping_inspection', baseQs);
     if (!lastInsp.length) return '';
     // [v2.02] 직전 검사 일시 — 화면 헤더에 표시
