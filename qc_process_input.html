@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.35</title>
+<title>공정검사 입력 v2.38</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -18,6 +18,24 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 .badge{background:#3b82f6;color:#fff;font-size:13px;padding:2px 7px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px}
 
 .card{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* [v2.36] 도면 변경 모달 */
+.sr-open-btn{width:100%;padding:11px;font-size:16px;font-weight:700;color:#7c2d12;background:#ffedd5;border:1.5px solid #fdba74;border-radius:10px;cursor:pointer}
+.sr-row1{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:8px}
+.sr-lbl{font-size:13px;font-weight:700;color:#64748b}
+.sr-hint{font-size:13px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.sr-table-wrap{overflow-x:auto;max-height:55vh;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px}
+.sr-table{width:100%;border-collapse:collapse;font-size:14px}
+.sr-table th{position:sticky;top:0;background:#f8fafc;color:#64748b;font-weight:700;padding:6px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.sr-table td{padding:4px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.sr-table input[type=text],.sr-table input[type=number],.sr-table select{width:100%;min-width:60px;padding:6px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:14px}
+.sr-table tr.sr-changed td{background:#fff7ed}
+.sr-table tr.sr-retired td{background:#fef2f2;opacity:.6}
+.sr-table tr.sr-retired input[type=text],.sr-table tr.sr-retired input[type=number]{text-decoration:line-through}
+.sr-table tr.sr-new td{background:#f0fdf4}
+.sr-add-btn{width:100%;margin-top:8px;padding:9px;font-size:15px;font-weight:600;color:#166534;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;cursor:pointer}
+.sr-apply-btn{width:100%;margin-top:10px;padding:13px;font-size:17px;font-weight:800;color:#fff;background:#c2410c;border:none;border-radius:10px;cursor:pointer}
+.sr-apply-btn:disabled{background:#94a3b8}
+
 /* [v2.34] 가공 입력 순서 카드 — 샘플 표시 */
 .dq-smp{display:inline-block;font-size:12px;font-weight:800;color:#166534;background:#dcfce7;border-radius:5px;padding:1px 6px;margin-right:6px}
 .dq-card.dq-s2 .dq-smp{color:#1d4ed8;background:#dbeafe}
@@ -670,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.35</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.38</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -765,7 +783,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="row2" style="margin-bottom:10px">
         <div>
           <label>검사일</label>
-          <input class="inp" id="insp-date" type="date" onchange="persistDraft()">
+          <input class="inp" id="insp-date" type="date" onchange="onInspDateChange()">
         </div>
         <div>
           <label>검사시간</label>
@@ -911,6 +929,40 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 
     <div id="main-loading" class="loading" style="display:none">항목 불러오는 중…</div>
   </div><!-- /measure-screen -->
+
+  <!-- [v2.36] 도면 변경(스펙 개정) 모달 -->
+  <div class="addtab-ov" id="sr-modal" style="display:none" onclick="if(event.target===this)closeSpecRevise()">
+    <div class="addtab-box" style="max-width:760px">
+      <div class="addtab-head">
+        <span>📐 도면 변경 (스펙 개정)</span>
+        <button class="addtab-x" onclick="closeSpecRevise()">✕</button>
+      </div>
+      <div class="addtab-slot">
+        <div class="card" style="margin:0">
+          <div class="sr-row1">
+            <div><label class="sr-lbl">변경일 (이 날짜 검사부터 새 규격)</label>
+              <input class="inp" id="sr-date" type="date"></div>
+            <div><label class="sr-lbl">새 도면 이미지 (바뀐 경우만)</label>
+              <input id="sr-file" type="file" accept="image/*" style="font-size:14px;margin-top:8px"
+                     onchange="if(this.files[0]) srSetFile(this.files[0], this.files[0].name)">
+              <div style="font-size:13px;color:#2563eb;margin-top:4px">💡 캡처 후 Ctrl+V로 바로 붙여넣기 가능</div></div>
+          </div>
+          <div id="sr-preview" style="display:none;margin-bottom:8px;padding:8px;border:1.5px solid #fdba74;border-radius:8px;background:#fff7ed">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:14px;font-weight:700;color:#9a3412">새 도면 · <span id="sr-preview-name"></span></span>
+              <button onclick="srSetFile(null)" style="border:none;background:none;color:#dc2626;font-size:14px;font-weight:700;cursor:pointer">✕ 빼기</button>
+            </div>
+            <img id="sr-preview-img" style="max-width:100%;max-height:220px;display:block;margin:0 auto;border-radius:6px">
+          </div>
+          <div class="sr-hint">바뀐 칸만 고치세요. 고친 항목은 옛 규격이 변경일 전날까지 보존되고, 과거 기록·성적서는 옛 규격으로 나갑니다.</div>
+          <div class="sr-table-wrap"><table class="sr-table" id="sr-table"></table></div>
+          <button class="sr-add-btn" onclick="srAddRow()">＋ 새 항목 추가</button>
+          <div id="sr-msg" style="font-size:14px;margin-top:8px"></div>
+          <button class="sr-apply-btn" id="sr-apply" onclick="applySpecRevise()">개정 적용</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- [v2.17] 생산일보 품번 ↔ 부품 매핑 모달 -->
   <div class="addtab-ov" id="mesmap-modal" style="display:none" onclick="if(event.target===this)closeMesMap()">
@@ -1122,6 +1174,9 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
         <span class="cfg-fold-arrow">▾</span>
       </div>
       <div class="cfg-fold-body">
+      <!-- [v2.36] 도면이 바뀌어 규격이 달라질 때 — 과거 기록·성적서는 옛 규격·옛 도면 유지 -->
+      <button class="sr-open-btn" onclick="openSpecRevise()">📐 도면 변경 (스펙 개정)</button>
+      <div style="font-size:13px;color:#94a3b8;margin:4px 0 12px">도면이 바뀌어 규격·항목이 달라졌을 때 사용. 아래 [도면 이미지 업로드]는 같은 도면 교체용입니다.</div>
       <div id="cfg-drawing-empty" style="display:none">
         <div style="text-align:center;padding:24px;border:2px dashed #cbd5e1;border-radius:10px;color:#94a3b8">
           <div style="font-size:36px;margin-bottom:8px">📂</div>
@@ -1749,12 +1804,23 @@ async function pcOpenTab(group, partId, ho) {
 // ══════════════════════════════════
 const dispNoCache = {};   // { part_id: { item_no: disp_no } }
 
+// [v2.36] 스펙 개정 — 항목 행이 그 날짜에 유효한지. [valid_from, valid_to)
+function ymdLocal(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function specValidOn(s, ymd) {
+  return (!s.valid_from || s.valid_from <= ymd) && (!s.valid_to || s.valid_to > ymd);
+}
+
 async function loadDispNoMap(partId) {
   if (dispNoCache[partId]) return dispNoCache[partId];
   const all = await sbAll('qc_part_spec',
-    `part_id=eq.${partId}&order=sort_order&select=item_no,sort_order`);
+    `part_id=eq.${partId}&order=sort_order&select=item_no,sort_order,valid_from,valid_to`);
+  // [v2.36] 개정으로 같은 번호 행이 둘(옛·새)이 되면 번호가 밀린다 → 오늘 유효한 행만 센다
+  const today = ymdLocal();
   const map = {};
-  all.forEach((s, i) => { map[s.item_no] = i; });
+  all.filter(s => specValidOn(s, today)).forEach((s, i) => { map[s.item_no] = i; });
   dispNoCache[partId] = map;
   return map;
 }
@@ -2343,10 +2409,12 @@ async function loadVariant(part, ctx = {}) {
   const typeFilter = procMode === 'machining'
     ? `process_type=in.("machining","both")`
     : `process_type=in.("press","both")`;
-  const loadedSpecs = await sbAll(
+  // [v2.36] 탭의 검사일에 유효한 버전만 (생산 대조로 지난 날짜 탭을 열면 그날 규격으로)
+  const onDate = ctx.onDate || (pcOverride && pcOverride.date) || ymdLocal();   // [v2.38] 날짜 변경 시 ctx.onDate
+  const loadedSpecs = (await sbAll(
     'qc_part_spec',
     `part_id=eq.${part.id}&${typeFilter}&order=sort_order&select=*`
-  );
+  )).filter(s => specValidOn(s, onDate));
   // [v1.56] 전체 기준 통일 표시번호 주입
   applyDispNo(loadedSpecs, await loadDispNoMap(part.id));
   // [v2.26] 가공 탭은 가공 전용 연동(link_group_m / link_role_m)을 쓴다.
@@ -2632,6 +2700,71 @@ async function confirmAddTab() {
 }
 
 // 현재 탭의 검사정보 input 값 + 스크롤 위치를 탭 상태에 보관
+// ══════════════════════════════════
+// [v2.38] 검사일을 바꾸면 그 날짜의 규격 버전으로 항목을 다시 불러온다
+//   도면 변경(v2.36) 이전 날짜로 바꿨는데 화면이 새 규격이면, 성적서에서 그날 유효했던 항목이 빈 줄로 나간다.
+//   버전이 같으면 아무것도 안 함. 다르면 다시 불러오고, 입력값은 같은 번호 항목에 옮긴다.
+// ══════════════════════════════════
+let _dateReloading = false;
+async function onInspDateChange() {
+  persistDraft();
+  if (_dateReloading) return;
+  const t = tabs[activeTabIdx];
+  const d = document.getElementById('insp-date').value;
+  if (!t || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+
+  // 이 날짜에 유효한 항목 id 가 지금 탭과 같은지
+  const typeFilter = procMode === 'machining' ? `process_type=in.("machining","both")` : `process_type=in.("press","both")`;
+  let differs = false;
+  try {
+    for (const v of t.variants) {
+      const all = await sbAll('qc_part_spec', `part_id=eq.${v.part.id}&${typeFilter}&select=id,valid_from,valid_to`);
+      const want = all.filter(x => specValidOn(x, d)).map(x => x.id).sort().join(',');
+      const have = v.specs.map(x => x.id).sort().join(',');
+      if (want !== have) { differs = true; break; }
+    }
+  } catch (e) { return; }
+  if (!differs) return;
+
+  const hasInput = t.variants.some(v => variantHasInput(v));
+  if (hasInput && !confirm(`${d} 은(는) 규격이 다른 날짜입니다 (도면 변경 전·후).\n그날 규격으로 항목을 다시 불러옵니다.\n\n입력한 값은 같은 번호 항목에 옮겨지고, 그날 없는 항목의 값은 빠집니다.`)) return;
+
+  _dateReloading = true;
+  try {
+    stashActiveTab();
+    const ctx = { equip: t.equip, moldNo: t.moldNo, onDate: d };
+    for (let i = 0; i < t.variants.length; i++) {
+      const ov = t.variants[i];
+      const nv = await loadVariant(ov.part, ctx);
+      // 탭이 샘플 1개 상태면 새 칸도 1개로 맞춘 뒤 옮긴다
+      if ((t.sampleCount || 2) === 1) {
+        Object.values(nv.inputs).forEach(inp => {
+          if (inp && inp.sampleMode) { const sp = inp.sp || 1; inp.vals = inp.vals.slice(0, sp); inp.prefilled = (inp.prefilled || []).slice(0, sp); }
+        });
+      }
+      // 같은 번호 항목의 입력을 그대로 옮김 (칸 구조가 같을 때만)
+      nv.specs.forEach(ns => {
+        const os = ov.specs.find(x => x.item_no === ns.item_no);
+        if (!os) return;
+        const oi = ov.inputs[os.id], ni = nv.inputs[ns.id];
+        if (!oi || !ni || oi.type !== ni.type) return;
+        if (Array.isArray(oi.vals) && Array.isArray(ni.vals) && oi.vals.length !== ni.vals.length) return;
+        nv.inputs[ns.id] = oi;
+      });
+      // 탭에 붙은 화면 상태는 유지
+      nv.scrollY = ov.scrollY;
+      t.variants[i] = nv;
+    }
+    switchTab(activeTabIdx);
+    persistDraft();
+    toast(`📐 ${d} 규격으로 항목을 다시 불러왔습니다`);
+  } catch (e) {
+    toast('항목 다시 불러오기 실패: ' + e.message);
+  } finally {
+    _dateReloading = false;
+  }
+}
+
 function stashActiveTab() {
   if (activeTabIdx < 0 || !tabs[activeTabIdx]) return;
   const t = tabs[activeTabIdx];
@@ -7544,7 +7677,8 @@ async function selectPartCfg(id) {
   document.getElementById('cfg-order-card').style.display = 'block';
   try {
     // 설정 탭은 전체 spec (process_type 구분 없이)
-    cfgSpecs = await sbAll('qc_part_spec', `part_id=eq.${id}&order=sort_order`);
+    cfgSpecs = (await sbAll('qc_part_spec', `part_id=eq.${id}&order=sort_order`))
+      .filter(s => specValidOn(s, ymdLocal()));   // [v2.36] 개정으로 종료된 옛 버전은 숨김
     applyDispNo(cfgSpecs, await loadDispNoMap(id));   // [v1.56]
     renderCfgSpecs();
     renderCfgDrawing();   // 도면 관리 카드 렌더
@@ -7846,6 +7980,9 @@ document.addEventListener('paste', e => {
         e.preventDefault();
         // 붙여넣은 이미지는 png로 처리
         const file = new File([blob], `paste.png`, { type: blob.type || 'image/png' });
+        // [v2.37] 도면 변경 모달이 열려 있으면 '새 도면'으로 받는다.
+        //   (종전엔 모달에서 붙여넣어도 여기서 바로 도면을 덮어써서 옛 도면이 보관되지 않았음)
+        if (document.getElementById('sr-modal')?.style.display === 'flex') { srSetFile(file, '붙여넣은 이미지'); return; }
         uploadDrawing(file);
         toast('📋 클립보드 이미지 업로드 중…');
       }
@@ -7952,7 +8089,9 @@ async function saveErasedDrawing() {
 async function clearAllMarkers() {
   if (!confirm('이 부품의 모든 마커를 삭제할까요?')) return;
   try {
-    await sbFetch(`qc_part_spec?part_id=eq.${cfgPart.id}`, { method: 'PATCH', body: { marker_x: null, marker_y: null } });
+    // [v2.36] 현재 버전 항목만 — 옛 버전 마커는 과거 성적서에 쓰이므로 건드리지 않는다
+    const ids = cfgSpecs.map(x => x.id);
+    if (ids.length) await sbFetch(`qc_part_spec?id=in.(${ids.join(',')})`, { method: 'PATCH', body: { marker_x: null, marker_y: null } });
     cfgSpecs.forEach(s => { s.marker_x = null; s.marker_y = null; });
     renderMarkerChips();
     renderMarkers();
@@ -8952,6 +9091,164 @@ async function unlinkGroup(groupId) {
     renderCfgSpecs();
   } catch(e) {
     toast('해제 실패: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════
+// [v2.36] 도면 변경 (스펙 개정)
+//   스펙을 덮어쓰지 않는다. 바뀐 항목은 옛 행에 종료일(valid_to)을 찍고 같은 번호로 새 행을 만든다.
+//   과거 측정값은 옛 행에 그대로 연결 → 이력 수정·재판정·성적서가 옛 규격으로 나간다.
+//   실제 처리는 DB 함수 qc_revise_specs (한 트랜잭션).
+//   새 도면이 있으면 옛 도면을 날짜 붙은 파일로 보관(qc_drawing_history)한 뒤 업로드.
+// ══════════════════════════════════
+let srRows = [];   // [{orig, id, item_name, spec_text, lsl, usl, retire, isNew, inspection_method, process_type}]
+let srFile = null;  // [v2.37] 새 도면 — 파일 선택 또는 붙여넣기
+
+function srSetFile(file, name) {
+  srFile = file || null;
+  const box = document.getElementById('sr-preview');
+  const img = document.getElementById('sr-preview-img');
+  if (img.dataset.url) { URL.revokeObjectURL(img.dataset.url); img.dataset.url = ''; }
+  if (!srFile) {
+    box.style.display = 'none';
+    document.getElementById('sr-file').value = '';
+    return;
+  }
+  const url = URL.createObjectURL(srFile);
+  img.src = url; img.dataset.url = url;
+  document.getElementById('sr-preview-name').textContent = name || srFile.name;
+  box.style.display = '';
+}
+
+function openSpecRevise() {
+  if (!guardEditor()) return;
+  if (!cfgPart) return;
+  srRows = cfgSpecs.map(x => ({
+    orig: x, id: x.id, item_no: x.item_no, item_name: x.item_name || '', spec_text: x.spec_text || '',
+    lsl: x.lsl == null ? '' : String(x.lsl), usl: x.usl == null ? '' : String(x.usl),
+    is_visual: !!x.is_visual, retire: false, isNew: false
+  }));
+  document.getElementById('sr-date').value = ymdLocal();
+  document.getElementById('sr-file').value = '';
+  srSetFile(null);
+  document.getElementById('sr-msg').textContent = '';
+  srRender();
+  document.getElementById('sr-modal').style.display = 'flex';
+  document.body.classList.add('addtab-open');
+}
+function closeSpecRevise() {
+  document.getElementById('sr-modal').style.display = 'none';
+  document.body.classList.remove('addtab-open');
+}
+function srChanged(r) {
+  if (r.isNew || r.retire) return false;
+  const o = r.orig, n = v => (v === '' || v == null) ? null : Number(v);
+  return r.item_name !== (o.item_name || '') || r.spec_text !== (o.spec_text || '')
+      || n(r.lsl) !== (o.lsl == null ? null : Number(o.lsl)) || n(r.usl) !== (o.usl == null ? null : Number(o.usl));
+}
+function srRender() {
+  const esc = v => String(v ?? '').replace(/"/g, '&quot;');
+  const rows = srRows.map((r, i) => {
+    const cls = r.isNew ? 'sr-new' : r.retire ? 'sr-retired' : srChanged(r) ? 'sr-changed' : '';
+    const dis = r.retire ? 'disabled' : '';
+    return `<tr class="${cls}">
+      <td style="text-align:center;color:#64748b">${r.isNew ? '새' : r.item_no}</td>
+      <td><input type="text" value="${esc(r.item_name)}" ${dis} oninput="srSet(${i},'item_name',this.value)"></td>
+      <td><input type="text" value="${esc(r.spec_text)}" ${dis} oninput="srSet(${i},'spec_text',this.value)"></td>
+      <td><input type="number" step="any" value="${esc(r.lsl)}" ${dis || (r.is_visual ? 'disabled' : '')} oninput="srSet(${i},'lsl',this.value)"></td>
+      <td><input type="number" step="any" value="${esc(r.usl)}" ${dis || (r.is_visual ? 'disabled' : '')} oninput="srSet(${i},'usl',this.value)"></td>
+      <td style="text-align:center">${r.isNew
+        ? `<select onchange="srSet(${i},'process_type',this.value)" style="min-width:80px">
+             <option value="press" ${r.process_type==='press'?'selected':''}>press</option>
+             <option value="machining" ${r.process_type==='machining'?'selected':''}>machining</option>
+             <option value="both" ${r.process_type==='both'?'selected':''}>both</option></select>`
+        : `<label style="white-space:nowrap;font-size:13px"><input type="checkbox" ${r.retire ? 'checked' : ''} onchange="srSet(${i},'retire',this.checked)"> 폐지</label>`}</td>
+      ${r.isNew ? `<td><input type="text" placeholder="측정기" value="${esc(r.inspection_method)}" oninput="srSet(${i},'inspection_method',this.value)"></td>
+                   <td><button onclick="srRows.splice(${i},1);srRender()" style="border:none;background:none;color:#dc2626;font-size:16px;cursor:pointer">✕</button></td>`
+                : '<td colspan="2"></td>'}
+    </tr>`;
+  }).join('');
+  document.getElementById('sr-table').innerHTML = `<thead><tr>
+    <th>No</th><th>항목명</th><th>규격</th><th>LSL</th><th>USL</th><th>폐지/공정</th><th colspan="2"></th></tr></thead><tbody>${rows}</tbody>`;
+}
+function srSet(i, k, v) {
+  srRows[i][k] = v;
+  // 칸을 고칠 때마다 다시 그리면 입력 포커스가 끊기므로 색 표시만 갱신
+  if (k === 'retire' || k === 'process_type') { srRender(); return; }
+  const tr = document.querySelectorAll('#sr-table tbody tr')[i];
+  if (tr && !srRows[i].isNew) tr.className = srRows[i].retire ? 'sr-retired' : srChanged(srRows[i]) ? 'sr-changed' : '';
+}
+function srAddRow() {
+  srRows.push({ isNew: true, item_name: '', spec_text: '', lsl: '', usl: '', process_type: cfgOrderProc === 'machining' ? 'machining' : 'press', inspection_method: '' });
+  srRender();
+}
+
+async function applySpecRevise() {
+  const d = document.getElementById('sr-date').value;
+  const file = srFile;   // [v2.37] 파일 선택·붙여넣기 공통
+  const msg = document.getElementById('sr-msg');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { msg.style.color = '#dc2626'; msg.textContent = '변경일을 입력하세요'; return; }
+
+  const num = v => (v === '' || v == null) ? null : Number(v);
+  const changes = [];
+  srRows.forEach(r => {
+    if (r.isNew) return;
+    if (r.retire) changes.push({ id: r.id, retire: true });
+    else if (srChanged(r)) changes.push({ id: r.id, item_name: r.item_name, spec_text: r.spec_text, lsl: num(r.lsl), usl: num(r.usl) });
+  });
+  const adds = srRows.filter(r => r.isNew && r.item_name.trim()).map(r => ({
+    item_name: r.item_name.trim(), spec_text: r.spec_text, lsl: r.lsl, usl: r.usl,
+    inspection_method: r.inspection_method || '', process_type: r.process_type || 'press', is_min_max: false
+  }));
+  if (!changes.length && !adds.length && !file) { msg.style.color = '#dc2626'; msg.textContent = '바뀐 내용이 없습니다'; return; }
+
+  const nRev = changes.filter(c => !c.retire).length, nRet = changes.filter(c => c.retire).length;
+  if (!confirm(`${cfgPart.part_number} 도면 변경을 적용합니다.\n\n`
+      + `변경일: ${d} (이날 검사부터 새 규격)\n`
+      + `· 규격 변경 ${nRev}건 · 폐지 ${nRet}건 · 추가 ${adds.length}건${file ? '\n· 새 도면 이미지' : ''}\n\n`
+      + `${d} 이전 기록과 성적서는 옛 규격·옛 도면으로 유지됩니다.`)) return;
+
+  const btn = document.getElementById('sr-apply');
+  btn.disabled = true; btn.textContent = '적용 중…'; msg.textContent = '';
+  try {
+    // 1) 새 도면이면 옛 도면을 먼저 보관 (실패해도 아직 아무것도 안 바뀐 상태)
+    if (file && cfgPart.drawing_path) {
+      const oldUrl = `${sbUrl}/storage/v1/object/public/qc-drawings/${cfgPart.drawing_path}?t=${Date.now()}`;
+      const blob = await (await fetch(oldUrl)).blob();
+      const ext = (cfgPart.drawing_path.split('.').pop() || 'png').toLowerCase();
+      const archPath = safeDrawingKey(cfgPart, ext).replace(/\.[^.]+$/, '') + `_until_${d.replace(/-/g, '')}_${Date.now()}.${ext}`;
+      const up = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${archPath}`, {
+        method: 'POST', headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'x-upsert': 'true' }, body: blob });
+      if (!up.ok) throw new Error('옛 도면 보관 실패: ' + up.status);
+      await sbFetch('qc_drawing_history', { method: 'POST', prefer: 'return=minimal',
+        body: { part_id: cfgPart.id, drawing_path: archPath, valid_to: d, note: '도면 변경' } });
+    }
+    // 2) 스펙 개정 (한 트랜잭션)
+    let res = null;
+    if (changes.length || adds.length) {
+      res = await sbFetch('rpc/qc_revise_specs', { method: 'POST',
+        body: { p_part_id: cfgPart.id, p_date: d, p_changes: changes, p_adds: adds } });
+    }
+    // 3) 새 도면 업로드 (기존 업로드 경로)
+    if (file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const path = safeDrawingKey(cfgPart, ext);
+      const up = await fetch(`${sbUrl}/storage/v1/object/qc-drawings/${path}`, {
+        method: 'POST', headers: { 'apikey': sbKey, 'Authorization': `Bearer ${sbKey}`, 'x-upsert': 'true' }, body: file });
+      if (!up.ok) throw new Error('새 도면 업로드 실패: ' + up.status + ' — 규격 개정은 적용됨. [도면 이미지 업로드]로 다시 올리세요');
+      await sbFetch(`qc_part?id=eq.${cfgPart.id}`, { method: 'PATCH', body: { drawing_path: path } });
+      cfgPart.drawing_path = path;
+      const ap = allParts.find(x => x.id === cfgPart.id); if (ap) ap.drawing_path = path;
+    }
+    delete dispNoCache[cfgPart.id];
+    closeSpecRevise();
+    toast(`✅ 도면 변경 적용 — 변경 ${res?.revised ?? 0} · 폐지 ${res?.retired ?? 0} · 추가 ${res?.added ?? 0}`
+          + (file ? ' · 새 도면이면 마커 위치를 확인하세요' : ''));
+    await selectPartCfg(cfgPart.id);   // 설정 화면 새로 읽기
+  } catch (e) {
+    msg.style.color = '#dc2626'; msg.textContent = '실패: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '개정 적용';
   }
 }
 

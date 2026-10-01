@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.47 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.48 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.47</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.48</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -441,7 +441,7 @@ async function reload(){
     
     // 6) [v0.6] 모든 spec 캐시 (process_type 포함) — [v0.7] 페이지네이션으로 1000건 제한 우회
     setStatus('⏳ qc_part_spec 조회 중...');
-    const allSpecs = await sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y&order=item_no.asc,sort_order.asc');
+    const allSpecs = await sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y,valid_from,valid_to&order=item_no.asc,sort_order.asc');
     _specsByPartId = {};
     const machSpecIds = new Set();   // process_type이 machining|both인 spec id 모음
     allSpecs.forEach(s => {
@@ -1385,6 +1385,44 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
   return warnings;
 }
 
+// ══════════════════════════════════
+// [v0.48] 도면 변경(스펙 개정) 대응 — 과거 LOT 은 그 시점 규격·도면·마커로
+//   입력 페이지 v2.36 이 항목을 [valid_from, valid_to) 버전으로 나눠 저장한다.
+// ══════════════════════════════════
+function specValidOn(s, ymd){
+  return (!s.valid_from || s.valid_from <= ymd) && (!s.valid_to || s.valid_to > ymd);
+}
+
+// 성적서에 쓸 항목 행 — 같은 번호가 여러 버전이면
+//   ① 이 검사에 측정값이 실제로 붙은 행 (= 그 값을 판정한 규격)
+//   ② 없으면 검사일에 유효한 행
+function specsForReport(partSpecs, refDate, measList){
+  const used = new Set((measList || []).map(m => m.spec_id).filter(Boolean));
+  const byNo = {};
+  partSpecs.forEach(sp => { (byNo[sp.item_no] = byNo[sp.item_no] || []).push(sp); });
+  const out = [];
+  Object.values(byNo).forEach(list => {
+    const withMeas = list.filter(sp => used.has(sp.id));
+    if(withMeas.length){ out.push(...withMeas); return; }
+    const valid = list.filter(sp => specValidOn(sp, refDate));
+    if(valid.length){ out.push(...valid); return; }
+    // 어느 버전에도 안 걸리면(그날 폐지된 항목 등) 넣지 않는다
+  });
+  return out;
+}
+
+// 그 날짜의 도면 — refDate 이후에 종료된 옛 도면 중 가장 이른 것, 없으면 현재 도면
+const _drawHistCache = {};
+async function drawingPathOn(part, refDate){
+  if(!_drawHistCache[part.id]){
+    try{
+      _drawHistCache[part.id] = await sbReq(`/rest/v1/qc_drawing_history?part_id=eq.${part.id}&select=drawing_path,valid_to&order=valid_to.asc`);
+    }catch(e){ _drawHistCache[part.id] = []; }
+  }
+  const h = (_drawHistCache[part.id] || []).find(r => r.valid_to > refDate);
+  return h ? h.drawing_path : part.drawing_path;
+}
+
 async function fetchDrawing(path){
   if(!path) return null;
   try{
@@ -1628,7 +1666,10 @@ async function generateXlsx(){
       }
       
       // [v0.6] spec + shipping + machining 머지 (process_type 따라 출처 결정)
-      const partSpecs = _specsByPartId[full.part_id] || [];
+      // [v0.48] 검사일 기준 버전 — 측정값이 붙은 행 우선
+      const refDate = full.inspection_date || shipDate;
+      const partSpecs = specsForReport(_specsByPartId[full.part_id] || [], refDate,
+                                       [...(full.measurements || []), ...(machMeas || [])]);
       const {merged, stats} = mergeMeasurements(partSpecs, full.measurements || [], machMeas);
       full.measurements = merged;
       
@@ -1662,17 +1703,19 @@ async function generateXlsx(){
         allWarnings.push({ sheet: name, items: sheetWarnings });
       }
       
-      // 도면
-      if(part && part.drawing_path){
-        const buf = await fetchDrawing(part.drawing_path);
+      // 도면 — [v0.48] 검사일 기준 도면
+      const drawPath = part ? await drawingPathOn(part, refDate) : null;
+      if(drawPath && drawPath !== part.drawing_path) log(`    📐 ${refDate} 기준 옛 도면 사용`, 'ok');
+      if(part && drawPath){
+        const buf = await fetchDrawing(drawPath);
         if(buf){
           try{
-            const ext = (part.drawing_path.match(/\.(\w+)$/) || [,'png'])[1].toLowerCase();
+            const ext = (drawPath.match(/\.(\w+)$/) || [,'png'])[1].toLowerCase();
             const imgExt = (ext === 'jpg' || ext === 'jpeg') ? 'jpeg' : 'png';
 
             // [v0.28] 측정위치 마커 합성 — 성공 시 합성본(PNG) 사용, 실패 시 원본
             let useBuf = buf, useExt = imgExt;
-            const specs = _specsByPartId[part.id] || [];
+            const specs = partSpecs;   // [v0.48] 위에서 고른 그 날짜 버전 항목의 마커만
             const markers = specs
               .filter(s => s.marker_x != null && s.marker_y != null)
               .map(s => ({ no: s.item_no, x: s.marker_x, y: s.marker_y }));
