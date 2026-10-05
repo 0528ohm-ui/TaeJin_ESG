@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.39</title>
+<title>공정검사 입력 v2.40</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.39</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.40</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -4080,7 +4080,14 @@ function numBack() {
 // [v2.33] 가공 샘플별 순서 — 기존 순서(항목·연동·드래그 순서)를 그대로 둔 채
 //   샘플 번호로만 안정 정렬해서 샘플1 칸 전부 → 샘플2 칸 전부.
 //   칸의 샘플 번호 = 칸 번호 ÷ 샘플당 칸 수(sp). 외경형 연동의 진원도(샘플당 위치 수)도 같은 식.
+// [v2.40] '다음' 후보에서 자동 계산 칸(calc-inp, readonly) 제외.
+//   비어 있는 계산 칸이 다음 후보로 잡히면 focus 만 옮기고 숫자패드·증감 패널을 열 수 없어
+//   '다음'이 눌리지 않는 것처럼 멈췄다 (B171000-0014 비드높이 편차, B171000-0009 편차 2종).
 function orderedInputs() {
+  return _orderedInputsRaw().filter(el => !el.classList.contains('calc-inp'));
+}
+
+function _orderedInputsRaw() {
   // [v2.34] 가공 — 설정에서 '항목 × 샘플' 카드로 저장한 순서(키 '항목키#샘플번호')를 그대로 따른다.
   //   같은 카드 안(연동 표의 행 등)은 화면 순서 유지.
   if (activeSample2 && Array.isArray(activeOrderSeq) && activeOrderSeq.some(k => String(k).includes('#'))) {
