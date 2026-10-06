@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.40</title>
+<title>공정검사 입력 v2.41</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.40</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.41</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -6948,7 +6948,7 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
     }
     html += `<th>${label}</th>`;
   }
-  html += '<th>판정</th><th>메모</th></tr></thead><tbody>';
+  html += '<th>메모</th><th>판정</th></tr></thead><tbody>';   // [v2.41] 메모를 판정 앞으로 (폰에서 바로 보이게)
 
   rows.forEach((r, ri) => {
     const isVis = r.visual_result != null;
@@ -6989,14 +6989,14 @@ function buildMeasTable(rows, idx, editMode, part, insp) {
         }
       }
     }
-    html += `<td class="${resCls}">${res}</td>`;
-    // 메모 (수정모드: 텍스트 입력, 보기모드: 표시)
+    // 메모 (수정모드: 텍스트 입력, 보기모드: 표시) — [v2.41] 판정 앞
     const noteVal = r.note || '';
     if (editMode) {
       html += `<td><input class="edit-inp" type="text" id="he-note-${idx}-${ri}" value="${noteVal.replace(/"/g,'&quot;')}" placeholder="메모…" style="width:90px"></td>`;
     } else {
       html += `<td style="font-size:14px;color:#f59e0b;min-width:60px">${noteVal ? `📝 ${noteVal}` : ''}</td>`;
     }
+    html += `<td class="${resCls}">${res}</td>`;
     html += `</tr>`;
   });
 
