@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.41</title>
+<title>공정검사 입력 v2.42</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.41</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.42</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -6069,6 +6069,14 @@ async function loadHistData() {
     let qs = `inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,part_id,inspection_date,inspection_time,ho,mold_no,reason,remark,inspector,result,process_type,slot_no`;
     if (histPart) qs = `part_id=eq.${histPart.id}&` + qs;
     histInspections = await sbAll('qc_shipping_inspection', qs);
+
+    // [v2.42] 조회 전용 계정은 로그인 직후 이력조회로 바로 넘어와서 부품 목록 로드보다 먼저 여기 도착한다.
+    //   그러면 부품 정보를 못 붙여 건별 카드에 부품번호가 빠졌다 → 비어 있으면 여기서 불러온다.
+    if (!allParts || !allParts.length) {
+      try {
+        allParts = await sbAll('qc_part', 'select=id,part_number,part_name,material,customer,drawing_path,part_group,part_variant,mold_count&order=part_number');
+      } catch (e) {}
+    }
 
     // 각 inspection에 부품 정보 부착 (부품명 표시 + 세동 9시간대 판정용)
     const partMap = {};
