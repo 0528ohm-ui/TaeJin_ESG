@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.48 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.49 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.48</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.49</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -430,10 +430,14 @@ async function reload(){
     // 4) 모든 검사 로드 — part_id별 최신1건(_lastInspByPartId) + 전체배열(_allInspByPartId)
     //   [v0.24] 생산일 기준 매칭을 위해 부품별 전체 프레스검사 목록이 필요 (최신1건만으론 부족)
     setStatus('⏳ qc_shipping_inspection 조회 중...');
-    const insps = await sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark&order=inspection_date.desc,id.desc');
+    const insps = await sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark,process_type&order=inspection_date.desc,id.desc');
     _lastInspByPartId = {};
     _allInspByPartId = {};
-    insps.forEach(i => {
+    // [v0.49] 프레스 매칭 목록에서 가공검사(process_type='machining') 제외.
+    //   같은 날 프레스+가공 검사가 둘 다 있으면 id desc 순서상 가공건이 먼저 잡혀
+    //   프레스 전용 항목(외경·진원도·Burr 등)이 빈칸으로 나오던 버그 (1858-619 8/11).
+    //   null(임포트본 등)은 프레스로 취급. 가공검사 식별은 아래에서 insps 전체로 따로 함.
+    insps.filter(i => i.process_type !== 'machining').forEach(i => {
       if(!_lastInspByPartId[i.part_id]) _lastInspByPartId[i.part_id] = i;
       if(!_allInspByPartId[i.part_id]) _allInspByPartId[i.part_id] = [];
       _allInspByPartId[i.part_id].push(i);   // inspection_date desc 순 유지
