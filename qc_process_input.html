@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.42</title>
+<title>공정검사 입력 v2.43</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.42</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.43</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1534,7 +1534,9 @@ async function loadProdCheck(force) {
   document.getElementById('pc-body').innerHTML = '';
   try {
     // 매핑표는 한 번만 로드
-    if (!pcMachMap) {
+    // [v2.43] 매핑 저장 후 pcItemMap 만 null 로 비우므로 둘 중 하나라도 없으면 다시 읽는다
+    //   (예전엔 pcMachMap 만 봐서 재조회가 건너뛰어지고 null 참조 에러가 났음)
+    if (!pcMachMap || !pcItemMap) {
       const [mm, im] = await Promise.all([
         sbAll('qc_mes_machine_map', 'select=machine_code,ho,machine_name'),
         sbAll('qc_mes_item_map', 'select=mes_item_code,part_id,part_group,is_skip')
