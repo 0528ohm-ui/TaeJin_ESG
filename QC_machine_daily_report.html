@@ -673,8 +673,8 @@
   function copyFw(id){ const t=document.getElementById(id).textContent||''; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){alert('복사되었습니다.');},function(){_fwFallbackCopy(t);}); } else { _fwFallbackCopy(t); } }
   function _fwFallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); alert('복사되었습니다.'); }catch(e){ alert('복사 실패 — 길게 눌러 직접 복사하세요.'); } document.body.removeChild(ta); }
   // ===== 설정 =====
-  const SUPABASE_URL = 'https://trhjeongphtendkounig.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_B6mrGhmPO7XrCzVijyDlhA_Jo-Mhnyk';
+  const SUPABASE_URL = 'https://omngtyewdaqpphnzeate.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_9j2YkkL-7ul1TrhH-NjVdQ_vWDG2-1D';
   const TABLE = 'shot_count';
   const BASELINE_TABLE = 'daily_baseline';
   const POLL_MS = 10000;
