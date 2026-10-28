@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.43</title>
+<title>공정검사 입력 v2.44</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.43</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.44</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1461,11 +1461,12 @@ async function sbAll(path, params = '') {
 // [v2.04] 생산 대조 — 생산일보(과장님 프로젝트)와 공정검사 이력을 맞춰본다
 //   목적: 다음날 입력할 때 "뭘 넣고 뭘 안 넣었는지" 헷갈리는 걸 막기
 //   과장님 DB는 읽기 전용으로만 접근한다. 쓰기 금지.
+//   [v2.44] 과장님 생산일보(daily_production)가 SmartFactory 로 통합됨 → 주소·키 변경 (표·컬럼 동일)
 //   품번 접미어 의미가 계열마다 달라(BDA=금형호기 / SKF=외철·내철) 문자열 추론이 불가능해서
 //   qc_mes_item_map / qc_mes_machine_map 표로 매핑한다.
 // ══════════════════════════════════
-const MES_URL = 'https://ebthltdmxpzlkfwvdloz.supabase.co';
-const MES_KEY = 'sb_publishable_ZSgcZapb7cTgFezGmOV_ow_9MT15SnS';
+const MES_URL = 'https://omngtyewdaqpphnzeate.supabase.co';
+const MES_KEY = 'sb_publishable_9j2YkkL-7ul1TrhH-NjVdQ_vWDG2-1D';
 
 let pcMachMap = null;      // { '001': {ho, machine_name} }
 let pcItemMap = null;      // { 'IW/OW-BDA-1179-3': {part_id, part_group, is_skip} }
