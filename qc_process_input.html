@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.44</title>
+<title>공정검사 입력 v2.45</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.44</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.45</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2642,24 +2642,31 @@ function cancelPending() {
 }
 
 // [추가] 버튼 → 탭 생성
+// [v2.45] 폰에서 "항목 로드 실패: Cannot read properties of null (reading 'isGroup')" 수정.
+//   항목을 불러오는(await) 동안 pendingSel 이 비워지면 탭 만들 때 터졌다.
+//   (폰 키보드 Enter + [추가] 버튼처럼 두 번 불리면 먼저 끝난 쪽이 cancelPending 으로 비움.
+//    폰은 통신이 느려 그 틈이 길어서 PC에선 안 보였음)
+//   → 시작할 때 선택값을 sel 로 복사해 끝까지 그걸 쓰고, 진행 중엔 재진입을 막는다.
+let _addTabBusy = false;
 async function confirmAddTab() {
-  if (!pendingSel) return;
+  if (!pendingSel || _addTabBusy) return;
+  const sel = pendingSel;
   // 가공 모드는 설비호기 없음, 프레스만 pending-equip 읽기
   const equip = procMode === 'machining' ? '' : document.getElementById('pending-equip').value.trim();
-  const moldNo = pendingSel.moldNo;
+  const moldNo = sel.moldNo;
 
   // 금형 2벌 이상인데 금형호기 선택 안 했으면 막기 (프레스 모드만)
-  if (procMode === 'press' && pendingSel.moldCount >= 2 && !moldNo) {
+  if (procMode === 'press' && sel.moldCount >= 2 && !moldNo) {
     toast('금형호기를 선택하세요');
     return;
   }
 
   // 설비호기 직전값을 부품별로 저장 (다음에 같은 부품 추가 시 기본값)
-  if (equip !== '') setLastHo(pendingSel.label, equip, moldNo);   // [v1.96] 금형별로 기억
+  if (equip !== '') setLastHo(sel.label, equip, moldNo);   // [v1.96] 금형별로 기억
 
   // 같은 부품+같은 금형호기+같은 설비호기+같은 공정모드 탭 중복 체크
   const dupIdx = tabs.findIndex(t =>
-    t.label === pendingSel.label && (t.moldNo || '') === moldNo
+    t.label === sel.label && (t.moldNo || '') === moldNo
     && (t.equip || '') === equip && (t.procMode || 'press') === procMode
   );
   if (dupIdx >= 0) {
@@ -2669,17 +2676,18 @@ async function confirmAddTab() {
     return;
   }
 
+  _addTabBusy = true;
   document.getElementById('main-loading').style.display = 'block';
   // [v2.01] 전역 초기화 제거. 예전엔 여기서 {} 로 비웠는데, 열려있던 다른 탭의
   //   그룹 순서까지 같이 날아가는 게 이 버그의 원인이었다.
   //   이제 순서는 variant.groupOrders 가 들고 있고 applyVariant 가 다시 얹는다.
   try {
     let variants;
-    if (pendingSel.isGroup) {
+    if (sel.isGroup) {
       variants = [];
-      for (const part of pendingSel.parts) variants.push(await loadVariant(part, { equip, moldNo }));
+      for (const part of sel.parts) variants.push(await loadVariant(part, { equip, moldNo }));
     } else {
-      variants = [await loadVariant(pendingSel.part, { equip, moldNo })];
+      variants = [await loadVariant(sel.part, { equip, moldNo })];
     }
     // [v2.05] 생산 대조에서 열면 그날 날짜·시각으로 만든다 (없으면 지금 시각)
     const now = pcOverride ? new Date(`${pcOverride.date}T${pcOverride.time}:00`) : new Date();
@@ -2688,11 +2696,11 @@ async function confirmAddTab() {
     const sedong = !!variants[0]?.sedong;
     const slot = sedong ? sedongSlotIdx(now) : null;
     tabs.push({
-      isGroup: pendingSel.isGroup,
-      label: pendingSel.label,
+      isGroup: sel.isGroup,
+      label: sel.label,
       moldNo,                     // 금형호기 (1호기/2호기, 탭에 박힘)
       equip,                      // 설비호기 (36/45)
-      moldCount: pendingSel.moldCount,
+      moldCount: sel.moldCount,
       procMode,                   // 'press' | 'machining'
       sedong,                     // [v0.45] 세동 9시간대 모드 여부
       slot,                       // [v0.45] 입력 시간대 슬롯 1~9 (세동만)
@@ -2710,6 +2718,8 @@ async function confirmAddTab() {
   } catch(e) {
     document.getElementById('main-loading').style.display = 'none';
     toast('항목 로드 실패: ' + e.message);
+  } finally {
+    _addTabBusy = false;
   }
 }
 
