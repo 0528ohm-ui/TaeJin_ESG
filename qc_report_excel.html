@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.50 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.51 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.50</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.51</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -238,6 +238,9 @@ async function sbReq(url){
 
 // [v0.7] 페이지네이션 자동 처리 — PostgREST max-rows(기본 1000) 제한 우회
 //   path 에 limit/offset 포함하지 말 것 (자동으로 추가됨)
+//   [v0.51] order 는 반드시 겹치지 않는 값(id 등)으로 끝낼 것.
+//   item_no 처럼 겹치는 값만으로 정렬하면 페이지 경계에서 같은 행이 두 번 오거나 빠진다
+//   (spec 2,372건 → 3페이지. 1888-0005-01 진원도가 성적서에 두 줄로 나온 원인).
 async function sbReqAll(path, pageSize = 1000){
   let all = [];
   let offset = 0;
@@ -418,7 +421,7 @@ async function reload(){
       sbReqAll('/rest/v1/qc_part_alias?select=alias,part_number')
         .catch(e => { console.warn('alias 로드 실패(무시):', e.message); return []; }),
       sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark,process_type&order=inspection_date.desc,id.desc'),
-      sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y,valid_from,valid_to&order=item_no.asc,sort_order.asc')
+      sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y,valid_from,valid_to&order=item_no.asc,sort_order.asc,id.asc')
     ]);
 
     // 3) qc_part 모두
@@ -469,7 +472,7 @@ async function reload(){
     const allMeas = [];
     for (let k = 0; k < machIdList.length; k += 200) {   // spec이 늘어도 URL이 너무 길어지지 않게 200개씩
       const ids = machIdList.slice(k, k + 200).join(',');
-      allMeas.push(...await sbReqAll(`/rest/v1/qc_shipping_measurement?spec_id=in.(${ids})&select=inspection_id,spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10`));
+      allMeas.push(...await sbReqAll(`/rest/v1/qc_shipping_measurement?spec_id=in.(${ids})&select=inspection_id,spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10&order=id.asc`));
     }
     const inspHasMach = new Set();   // 순수 가공 spec을 '실측값과 함께' 포함하는 inspection_id
     allMeas.forEach(m => {
