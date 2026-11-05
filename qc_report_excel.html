@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.49 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.50 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.49</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.50</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -411,26 +411,26 @@ async function reload(){
       .sort((a,b) => b[0].localeCompare(a[0]))
       .map(([d, info]) => ({date:d, count:info.count, qty:info.qty}));
     
+    // [v0.50] 3)·3-1)·4)·6) 은 서로 기다릴 필요가 없어 한꺼번에 요청한다 (예전엔 하나씩 차례로).
+    setStatus('⏳ QC 데이터 조회 중 (부품·별칭·검사·spec)...');
+    const [parts, aliases, insps, allSpecs] = await Promise.all([
+      sbReqAll('/rest/v1/qc_part?select=*&order=part_number'),
+      sbReqAll('/rest/v1/qc_part_alias?select=alias,part_number')
+        .catch(e => { console.warn('alias 로드 실패(무시):', e.message); return []; }),
+      sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark,process_type&order=inspection_date.desc,id.desc'),
+      sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y,valid_from,valid_to&order=item_no.asc,sort_order.asc')
+    ]);
+
     // 3) qc_part 모두
-    setStatus('⏳ qc_part 조회 중...');
-    const parts = await sbReqAll('/rest/v1/qc_part?select=*&order=part_number');
     _allParts = {};
     parts.forEach(p => _allParts[p.part_number] = p);
 
     // 3-1) 부품번호 별칭(alias) 로드 — 출하번호 ≠ qc_part 번호 매핑
-    setStatus('⏳ qc_part_alias 조회 중...');
     _partAlias = {};
-    try {
-      const aliases = await sbReqAll('/rest/v1/qc_part_alias?select=alias,part_number');
-      aliases.forEach(a => _partAlias[a.alias] = a.part_number);
-    } catch(e) {
-      console.warn('alias 로드 실패(무시):', e.message);
-    }
+    aliases.forEach(a => _partAlias[a.alias] = a.part_number);
     
     // 4) 모든 검사 로드 — part_id별 최신1건(_lastInspByPartId) + 전체배열(_allInspByPartId)
     //   [v0.24] 생산일 기준 매칭을 위해 부품별 전체 프레스검사 목록이 필요 (최신1건만으론 부족)
-    setStatus('⏳ qc_shipping_inspection 조회 중...');
-    const insps = await sbReqAll('/rest/v1/qc_shipping_inspection?select=id,part_id,inspection_date,result,inspector,lot_no,remark,process_type&order=inspection_date.desc,id.desc');
     _lastInspByPartId = {};
     _allInspByPartId = {};
     // [v0.49] 프레스 매칭 목록에서 가공검사(process_type='machining') 제외.
@@ -444,8 +444,6 @@ async function reload(){
     });
     
     // 6) [v0.6] 모든 spec 캐시 (process_type 포함) — [v0.7] 페이지네이션으로 1000건 제한 우회
-    setStatus('⏳ qc_part_spec 조회 중...');
-    const allSpecs = await sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,inspection_method,spec_text,is_visual,process_type,sort_order,measure_zone,lsl,usl,marker_x,marker_y,valid_from,valid_to&order=item_no.asc,sort_order.asc');
     _specsByPartId = {};
     const machSpecIds = new Set();   // process_type이 machining|both인 spec id 모음
     allSpecs.forEach(s => {
@@ -463,8 +461,16 @@ async function reload(){
     const machOnlySpecIds = new Set();   // process_type === 'machining' 인 spec id만
     allSpecs.forEach(s => { if(s.process_type === 'machining') machOnlySpecIds.add(s.id); });
 
+    // [v0.50] 로딩이 점점 길어지던 원인. 예전엔 측정값 테이블 전체(2026-11 기준 6.3만 건, 월 7천 건씩 증가)를
+    //   1000건씩 차례로 60번 넘게 받은 뒤 그중 가공 spec 행(수백 건)만 골라 썼다.
+    //   → 처음부터 가공 spec 행만 요청한다. 판정 로직(실측값 있는 행만 인정)은 그대로.
     setStatus('⏳ 가공검사 식별 중 (measurement 조회)...');
-    const allMeas = await sbReqAll('/rest/v1/qc_shipping_measurement?select=inspection_id,spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10');
+    const machIdList = [...machOnlySpecIds];
+    const allMeas = [];
+    for (let k = 0; k < machIdList.length; k += 200) {   // spec이 늘어도 URL이 너무 길어지지 않게 200개씩
+      const ids = machIdList.slice(k, k + 200).join(',');
+      allMeas.push(...await sbReqAll(`/rest/v1/qc_shipping_measurement?spec_id=in.(${ids})&select=inspection_id,spec_id,x1,x2,x3,x4,x5,x6,x7,x8,x9,x10`));
+    }
     const inspHasMach = new Set();   // 순수 가공 spec을 '실측값과 함께' 포함하는 inspection_id
     allMeas.forEach(m => {
       if(!m.spec_id || !machOnlySpecIds.has(m.spec_id)) return;
