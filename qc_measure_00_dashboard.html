@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>측정기 종합현황 v1.14</title>
+<title>측정기 종합현황 v1.15</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
 <style>
   :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--border:#475569;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--ng:#ef4444;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
@@ -940,6 +940,14 @@ async function upsertEqLog(eqName, period, items){
   }
 }
 
+// [v1.15] 일괄 저장이 느리던 원인: 측정기 12대를 한 대씩 차례로 저장(대당 조회+저장 2~3회 왕복).
+//   백필 4일이면 왕복 100번 가까이 순서대로 → 약 18초.
+//   측정기끼리는 서로 다른 행이라 동시에 저장해도 겹치지 않음 → 12대를 동시에 처리한다.
+//   (같은 측정기의 날짜 순서는 그대로 차례로)
+function eachEqParallel(fn){
+  return Promise.all(EQUIPMENTS.map((eq, i) => fn(eq, i)));
+}
+
 async function runBulk(period, backfillDays, backfillBuckets){
   backfillDays = backfillDays || [];
   backfillBuckets = backfillBuckets || [];
@@ -958,14 +966,13 @@ async function runBulk(period, backfillDays, backfillBuckets){
     const inspector = getCurrentInspector();
     for(const date of backfillDays){
       const time = randomWorkTime();
-      for(let i=0; i<EQUIPMENTS.length; i++){
-        const eq = EQUIPMENTS[i];
+      await eachEqParallel(async (eq, i) => {
         const cached = __allStatusCache[i];
         let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
         if(!items || items.length===0){
           try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
         }
-        if(!items || items.length === 0) continue;
+        if(!items || items.length === 0) return;
         try{
           await backfillEqLog(eq.name, date, time, items, inspector);
           backfillOk++;
@@ -973,7 +980,7 @@ async function runBulk(period, backfillDays, backfillBuckets){
           backfillFail++;
           console.error('백필 실패', eq.name, date, e);
         }
-      }
+      });
     }
   }
 
@@ -983,14 +990,13 @@ async function runBulk(period, backfillDays, backfillBuckets){
     const today = todayKST();
     const bucketFn = (period===7) ? weekBucket : monthBucket;
     const excludeBucket = bucketFn(today);
-    for(let i=0; i<EQUIPMENTS.length; i++){
-      const eq = EQUIPMENTS[i];
+    await eachEqParallel(async (eq, i) => {
       const cached = __allStatusCache[i];
       let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
       if(!items || items.length===0){
         try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
       }
-      if(!items || items.length === 0) continue;
+      if(!items || items.length === 0) return;
 
       // 장비별로 실제 기록 재조회 (대표장비와 다를 수 있어 안전하게 개별 확인)
       // 이미 그 주/달에 해당 주기 기록이 있으면 제외 → 같은 주에 두 날짜로 중복 기록 방지
@@ -1007,18 +1013,17 @@ async function runBulk(period, backfillDays, backfillBuckets){
           console.error('주간/월간 백필 실패', eq.name, date, e);
         }
       }
-    }
+    });
   }
 
   // 2) 오늘 일괄저장 (기존 로직)
-  for(let i=0; i<EQUIPMENTS.length; i++){
-    const eq = EQUIPMENTS[i];
+  await eachEqParallel(async (eq, i) => {
     const cached = __allStatusCache[i];
     let items = (cached && cached.items && cached.items.length) ? cached.items : (DEFAULT_CHECKLIST_DB[eq.name]||[]);
     if(!items || items.length===0){
       try{ items = await getEqItems(eq.name); }catch(e){ items = []; }
     }
-    if(!items || items.length===0){ skipEq++; continue; }
+    if(!items || items.length===0){ skipEq++; return; }
 
     try{
       const r = await upsertEqLog(eq.name, period, items);
@@ -1028,7 +1033,7 @@ async function runBulk(period, backfillDays, backfillBuckets){
       console.error(eq.name, e);
       errors.push(eq.name+': '+e.message);
     }
-  }
+  });
 
   if(btn){
     btn.disabled = false;
