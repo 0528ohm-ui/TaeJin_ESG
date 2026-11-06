@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.45</title>
+<title>공정검사 입력 v2.46</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -688,7 +688,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.45</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.46</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -4774,13 +4774,43 @@ function sedongRepFromRow(r) {
   return parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(dp));
 }
 
+// [v2.46] 같은 설비호기에서 금형(부품)이 바뀐 날 — 옛 부품의 빈 시간대를 어디까지 채울지.
+//   예) 43호기 JF → 15:32 SV 초품. 종전엔 JF 일별 표가 15~17시까지 채워져 JF가 계속 돈 것처럼 보였음.
+//   금형 교체에 평균 3시간 → 새 부품 초품 시각 3시간 전부터는 옛 부품이 안 돌았다고 보고 채우지 않는다.
+//   단, 그 뒤에 옛 부품 실측이 있으면 그 시각까지는 돌았던 것이므로 거기까지는 채운다.
+//   반환: 이 시각(분) 이후 시간대는 채우지 않음 / null = 해당 없음
+const MOLD_CHANGE_MIN = 180;
+function _hmToMin(t) {
+  const m = String(t || '').match(/(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+function moldChangeCutMin(insps, setupPool) {
+  if (!insps || !insps.length || !setupPool || !setupPool.length) return null;
+  const date = insps[0].inspection_date, partId = insps[0].part_id;
+  const hos = [...new Set(insps.map(i => i.ho).filter(v => v != null && v !== '').map(String))];
+  if (hos.length !== 1) return null;   // 설비호기를 모르면(또는 섞이면) 판단하지 않음
+  const times = insps.map(i => _hmToMin(i.inspection_time)).filter(v => v != null);
+  if (!times.length) return null;
+  const first = Math.min(...times), last = Math.max(...times);
+  let change = null;
+  setupPool.forEach(s => {
+    if (s.inspection_date !== date || String(s.ho ?? '') !== hos[0] || s.part_id === partId) return;
+    if (!(Number(s.slot_no) === 0 || s.reason === '초품')) return;
+    const m = _hmToMin(s.inspection_time);
+    if (m == null || m <= first) return;   // 이 부품보다 먼저 올라온 금형이면 교체 대상 아님
+    if (change == null || m < change) change = m;
+  });
+  if (change == null) return null;
+  return Math.max(change - MOLD_CHANGE_MIN, last);
+}
+
 // 하루치 inspection들 → 항목(spec)별 9슬롯 재구성
 //   반환: { [spec_id]: { …측정행메타, slots:[9], real:[9] } }  ※ slots는 빈칸 채움 완료
 //   limBySpec: { [spec_id]: {lsl, usl} } (없으면 spec_text 파싱 폴백)
 // [v1.76] slots 배열은 10칸. index 0 = 셋업, 1~9 = 8~17시.
 //   셋업(slot_no=0)은 사유 '초품' 검사이며, 그 시각 이전 시간대는 채우지 않는다
 //   (15시에 셋업한 날 8~14시 순회검사가 있었던 것처럼 보이면 안 되므로).
-function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec) {
+function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec, cutMin) {
   const bySpec = {};
   let setupMin = null;                    // 셋업 검사 시각(분)
 
@@ -4834,6 +4864,11 @@ function buildSedongDaySlots(insps, measBy, partId, dateStr, limBySpec) {
     const d = new Date(2000, 0, 1, Math.floor(setupMin / 60), setupMin % 60);
     const setupSlot = sedongSlotIdx(d);
     for (let n = 1; n <= setupSlot; n++) skip.add(n);
+  }
+  // [v2.46] 금형 교체 — cutMin 이 속한 시간대 다음부터 비움 (실측 칸은 그대로 남음)
+  if (cutMin != null) {
+    const cutSlot = sedongSlotIdx(new Date(2000, 0, 1, Math.floor(cutMin / 60), cutMin % 60));
+    for (let n = cutSlot + 1; n <= 9; n++) skip.add(n);
   }
 
   // [v1.79] 외관·게이지: 숫자 항목을 채운 시간대는 함께 OK로 채운다.
@@ -5072,7 +5107,7 @@ async function sendToGoogleSheet(baseDateStr){
 
     // 1) 7일치 inspection 조회
     const insps = await sbAll('qc_shipping_inspection',
-      `inspection_date=gte.${fromStr}&inspection_date=lte.${baseDateStr}&select=id,part_id,inspection_date,slot_no&order=inspection_date.asc,id.asc`);
+      `inspection_date=gte.${fromStr}&inspection_date=lte.${baseDateStr}&select=id,part_id,inspection_date,slot_no,inspection_time,ho,reason&order=inspection_date.asc,id.asc`);   // [v2.46] 시각·호기·사유 추가
     if(!insps.length) return;
 
     const inspIds = insps.map(i=>i.id);
@@ -5151,7 +5186,8 @@ async function sendToGoogleSheet(baseDateStr){
       const dateYmd = (b.date || '').replace(/-/g,'');
       if(dateYmd.length!==8) continue;
 
-      const bySpec = buildSedongDaySlots(b.insps, b.measBy, b.part.id, b.date, limBySpec);
+      const bySpec = buildSedongDaySlots(b.insps, b.measBy, b.part.id, b.date, limBySpec,
+                                         moldChangeCutMin(b.insps, insps));   // [v2.46]
       const items = Object.values(bySpec).sort((a,b2) => (a.item_no ?? 0) - (b2.item_no ?? 0));
 
       for(const it of items){
@@ -6082,6 +6118,13 @@ async function loadHistData() {
     let qs = `inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}&order=inspection_date.desc,inspection_time.desc.nullsfirst&select=id,part_id,inspection_date,inspection_time,ho,mold_no,reason,remark,inspector,result,process_type,slot_no`;
     if (histPart) qs = `part_id=eq.${histPart.id}&` + qs;
     histInspections = await sbAll('qc_shipping_inspection', qs);
+    // [v2.46] 금형 교체 판단용 — 기간 내 모든 부품의 초품(셋업) 검사
+    try {
+      histSetups = await sbAll('qc_shipping_inspection',
+        `inspection_date=gte.${dateFrom}&inspection_date=lte.${dateTo}`
+        + `&or=(reason.eq.${encodeURIComponent('초품')},slot_no.eq.0)`
+        + `&select=part_id,inspection_date,inspection_time,ho,reason,slot_no&order=id.asc`);
+    } catch (e) { histSetups = []; }
 
     // [v2.42] 조회 전용 계정은 로그인 직후 이력조회로 바로 넘어와서 부품 목록 로드보다 먼저 여기 도착한다.
     //   그러면 부품 정보를 못 붙여 건별 카드에 부품번호가 빠졌다 → 비어 있으면 여기서 불러온다.
@@ -6157,6 +6200,7 @@ function applyHistFilter() {
 //   · 4건 이상이면 초과분은 중=최솟값, 종=최댓값으로 갱신
 //   · 슬롯이 비면 마지막 검사의 x2·x3 등 저장된 실측값으로 채움(새로 만들어내지 않음)
 // ══════════════════════════════════
+let histSetups = [];           // [v2.46] 이력 기간 내 초품(셋업) 검사 — 금형 교체 판단용
 let specLimCache = {};         // [v1.67] part_id → { spec_id: {lsl, usl} } (세동 빈 슬롯 채움용)
 let histMode = 'day';          // 'day' | 'each'
 let dayGroups = [];            // 일별 그룹 배열
@@ -6559,7 +6603,7 @@ async function toggleDayCard(gi) {
 // [v1.63] 빈 슬롯의 표시용 시간 산출
 //   슬롯별 시간 구간(초 08~12 / 중 12~16 / 종 16~19) 안에서,
 //   앞뒤 실측 시각과 겹치지 않게 배치
-function fillSlotTimes(slot, seedBase) {
+function fillSlotTimes(slot, seedBase, cutMin) {
   const toMin = t => { if (!t) return null; const [h,m] = String(t).split(':'); return (+h)*60 + (+m||0); };
   const toStr = v => `${String(Math.floor(v/60)).padStart(2,'0')}:${String(Math.round(v%60)).padStart(2,'0')}`;
   // [v1.74] 종 구간 상한을 18:30으로 조정(종전 19:00).
@@ -6592,6 +6636,7 @@ function fillSlotTimes(slot, seedBase) {
     if (prev != null && prev >= lo) lo = prev + MIN_GAP;
     if (next != null && next <= hi) hi = next - MIN_GAP;
     if (floor != null && lo < floor + MIN_GAP) lo = floor + MIN_GAP;
+    if (cutMin != null && hi > cutMin) hi = cutMin;   // [v2.46] 금형 교체 이후엔 만들지 않음
 
     // [v1.74] 구간이 확보되지 않으면 비움
     if (hi - lo < MIN_ROOM) { out[k] = null; return; }
@@ -6614,7 +6659,8 @@ function fillSlotTimes(slot, seedBase) {
 //   신구조(건별 저장)든 구구조(하루 1행)든 buildSedongDaySlots가 9칸으로 재구성.
 //   빈 시간대는 결정론적 난수로 채움 → 몇 번을 다시 열어도 같은 값.
 function buildDaySedongTable(g, measBy) {
-  const bySpec = buildSedongDaySlots(g.insps, measBy, g.part_id, g.date, specLimCache[g.part_id]);
+  const bySpec = buildSedongDaySlots(g.insps, measBy, g.part_id, g.date, specLimCache[g.part_id],
+                                     moldChangeCutMin(g.insps, histSetups));   // [v2.46]
 
   let items = Object.values(bySpec);
   const dmap = dispNoCache[g.part_id];
@@ -6677,7 +6723,8 @@ function buildDayTable(g, measBy) {
   else items.sort((a, b) => (a.item_no ?? 0) - (b.item_no ?? 0));
 
   // 슬롯 메타 (시간·사유·로트)
-  const fillTimes = fillSlotTimes(slot, `${g.part_id}|${g.date}`);   // [v1.74] 결정론 시드
+  const fillTimes = fillSlotTimes(slot, `${g.part_id}|${g.date}`,
+                                  moldChangeCutMin(g.insps, histSetups));   // [v1.74] 결정론 시드 / [v2.46] 금형 교체
 
   // [v2.14] 자동 채운 슬롯의 소재로트(remark) — 시간상 가장 가까운 실측 검사의 로트를 쓴다.
   //   값(measurement)은 donor 우선순위 [종,중,초,셋업] 로 빌려오지만, 로트는 그 순서를 따르면 안 된다.
