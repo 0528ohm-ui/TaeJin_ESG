@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.51 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.52 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.51</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.52</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -135,6 +135,14 @@
     <div class="fg" style="margin-top:10px">
       <label>검사자 <span style="color:#64748b;font-weight:400">(이름에 맞는 사인 자동 삽입: 오 윤 정 / 오 현 민 / 김 상 기)</span></label>
       <input type="text" id="inspector" value="오 윤 정">
+    </div>
+    <!-- [v0.52] 성적서 종류: 정기검사는 같은 양식에 제목·수신처·제조구분만 바꾸고 수량/LOT No는 비움 -->
+    <div class="fg" style="margin-top:10px">
+      <label>성적서 종류 <span style="color:#64748b;font-weight:400">(정기검사: 제목·수신처·제조구분 변경, 수량/LOT No 비움)</span></label>
+      <select id="reportType">
+        <option value="ship">출하검사 성적서</option>
+        <option value="periodic">정기검사 성적서</option>
+      </select>
     </div>
   </div>
 
@@ -1143,8 +1151,10 @@ function genFakeRow(existing, lsl, usl, specText){
   return out;
 }
 
-function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, signOhId, company){
+function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, signOhId, company, reportType){
   const p = full.part || {};
+  // [v0.52] 정기검사 모드 — 2025-05 우창산업 정기검사 성적서 원본 기준
+  const isPeriodic = reportType === 'periodic';
   const s = item.shipment;
   // [v0.20] 보기-눈금선 끄기 (성적서 깔끔하게). 기존 view 속성은 보존.
   ws.views = (ws.views && ws.views.length ? ws.views : [{}]).map(v => ({ ...v, showGridLines: false }));
@@ -1227,6 +1237,17 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
     } catch(e){ /* 로트 표기 실패는 성적서 생성 막지 않음 */ }
   }
   // SKF/우창산업/일진글로벌은 템플릿 값 그대로 사용 (덮어쓰지 않음)
+
+  // [v0.52] 정기검사 양식 차이 (원본 정기검사 성적서와 셀 단위 비교 결과)
+  //   K2 제목 / V9 수신처 / H12 기종 '-' / P13·V13 제조구분 체크박스
+  //   수량(LOT 크기·출하량)·LOT No 는 아래 LOT 처리부에서 비움
+  if(isPeriodic){
+    ws.getCell('K2').value = '     정 기 검 사 성 적 서 ';
+    if(company !== '부강스프링') ws.getCell('V9').value = '한국 SKF씰㈜';
+    if(!p.model) ws.getCell('H12').value = '-';
+    ws.getCell('P13').value = '제  조  구  분';
+    ws.getCell('V13').value = '□자급제,  □사급제,  □기타';
+  }
   
   // [v0.9] 사인 이미지 자동 삽입
   //   J7,J8 = 이름 자리. N7,N8 = (인) 자리.
@@ -1265,6 +1286,11 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
   // LOT No → [v0.19] 발행 식별용: 날짜(YYMMDD)-시분초(HHMMSS), 예: 260617-131255
   //   [v0.46] 날짜 부분은 출하일, 시분초는 발행 시각
   //   V11:X11 / V12:X12 가 따로 병합돼 있어 한 줄에 다 안 들어감 → 두 줄을 V11:X12 한 칸으로 합쳐 공간 확보.
+  if(isPeriodic){
+    // [v0.52] 정기검사: 납입 LOT 개념 없음 → LOT No·LOT 크기·출하량 비움, LOT No 칸 병합은 템플릿(2칸) 그대로
+    ws.getCell('V11').value = null;
+    ws.getCell('V12').value = null;
+  } else {
   try { ws.unMergeCells('V11:X11'); } catch(e) {}
   try { ws.unMergeCells('V12:X12'); } catch(e) {}
   ws.getCell('V12').value = null;   // 템플릿 더미 시각값(예:142055) 제거
@@ -1276,6 +1302,7 @@ function fillSheet(ws, full, item, qaResp, inspector, shippingDate, signKangId, 
   if(s.box_count && s.box_size) ws.getCell('Y11').value = parseInt(s.box_count) * parseInt(s.box_size);
   // 출하량 = qty
   if(s.qty) ws.getCell('AB11').value = parseInt(s.qty);
+  }
   
   // 측정값
   const meas = full.measurements || [];
@@ -1602,6 +1629,7 @@ async function generateXlsx(){
   const qaResp = document.getElementById('qaResp').value.trim();
   const inspector = document.getElementById('inspector').value.trim();   // [v0.9] 검사자 input
   const company = document.getElementById('companySel').value;           // [v0.21] 회사 양식 선택
+  const reportType = document.getElementById('reportType').value;        // [v0.52] 출하검사/정기검사
   
   const btn = document.getElementById('genBtn');
   btn.disabled = true;
@@ -1711,7 +1739,7 @@ async function generateXlsx(){
       // [v0.21] 검사자 이름(공백 제거)에 맞는 도장 선택, 없으면 오윤정 도장 fallback
       const inspectorKey = (inspector || '').replace(/\s/g, '');
       const inspectorSignId = inspectorSignMap[inspectorKey] ?? signOhId;
-      const sheetWarnings = fillSheet(ws, full, item, qaResp, inspector, shipDate, signKangId, inspectorSignId, company);
+      const sheetWarnings = fillSheet(ws, full, item, qaResp, inspector, shipDate, signKangId, inspectorSignId, company, reportType);
       if(sheetWarnings && sheetWarnings.length){
         allWarnings.push({ sheet: name, items: sheetWarnings });
       }
@@ -1808,7 +1836,7 @@ async function generateXlsx(){
     const out = await wb.xlsx.writeBuffer();
     const blob = new Blob([out], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     
-    const fname = shipDate.replace(/-/g,'') + '.xlsx';
+    const fname = shipDate.replace(/-/g,'') + (reportType === 'periodic' ? '_정기검사' : '') + '.xlsx';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = fname; a.click();
