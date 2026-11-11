@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.52 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.53 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.52</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.53</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -88,6 +88,14 @@
         <option value="우창산업">우창산업</option>
         <option value="부강스프링">부강스프링</option>
         <option value="일진글로벌">일진글로벌</option>
+      </select>
+    </div>
+    <!-- [v0.52] 성적서 종류 / [v0.53] 정기검사는 출하일과 무관하게 품목을 직접 골라 뽑음 -->
+    <div class="fg" style="margin-bottom:10px">
+      <label>성적서 종류 <span style="color:#64748b;font-weight:400">(정기검사: 출하이력과 무관하게 품목 직접 선택, 수량/LOT No 비움)</span></label>
+      <select id="reportType" onchange="onReportTypeChange()">
+        <option value="ship">출하검사 성적서</option>
+        <option value="periodic">정기검사 성적서</option>
       </select>
     </div>
     <button type="button" class="btn btn-primary" onclick="reload()">🔌 출하이력 불러오기</button>
@@ -119,9 +127,14 @@
 
   <!-- 2. 출하일 선택 -->
   <div class="card" id="dateCard" style="display:none">
-    <div class="card-title">📅 출하일 선택</div>
+    <div class="card-title" id="dateCardTitle">📅 출하일 선택</div>
     <div class="row-2">
-      <div class="fg">
+      <!-- [v0.53] 정기검사용 성적서 일자 (출하일 대신 표시) -->
+      <div class="fg" id="periodDateFg" style="display:none">
+        <label>성적서 일자 (DATE·검사일)</label>
+        <input type="date" id="periodDate">
+      </div>
+      <div class="fg" id="shipDateFg">
         <label>출하일</label>
         <select id="dateSel" onchange="onDateChange()">
           <option value="">날짜를 선택하세요</option>
@@ -136,19 +149,21 @@
       <label>검사자 <span style="color:#64748b;font-weight:400">(이름에 맞는 사인 자동 삽입: 오 윤 정 / 오 현 민 / 김 상 기)</span></label>
       <input type="text" id="inspector" value="오 윤 정">
     </div>
-    <!-- [v0.52] 성적서 종류: 정기검사는 같은 양식에 제목·수신처·제조구분만 바꾸고 수량/LOT No는 비움 -->
-    <div class="fg" style="margin-top:10px">
-      <label>성적서 종류 <span style="color:#64748b;font-weight:400">(정기검사: 제목·수신처·제조구분 변경, 수량/LOT No 비움)</span></label>
-      <select id="reportType">
-        <option value="ship">출하검사 성적서</option>
-        <option value="periodic">정기검사 성적서</option>
-      </select>
-    </div>
   </div>
 
   <!-- 3. 출하 부품 -->
   <div class="card" id="listCard" style="display:none">
-    <div class="card-title">📦 출하 부품 (자동 조회됨)</div>
+    <div class="card-title" id="listTitle">📦 출하 부품 (자동 조회됨)</div>
+
+    <!-- [v0.53] 정기검사: 전체 품목에서 검색·체크 -->
+    <div id="periodTools" style="display:none;margin-bottom:10px">
+      <div class="fg" style="margin-bottom:8px"><input type="text" id="periodSearch" placeholder="품번·품명·기종 검색 (예: 1960, ACTIVE)" oninput="renderShipList()"></div>
+      <div class="toolbar" style="margin-bottom:0">
+        <button onclick="periodCheckShipped()">📦 최근 90일 출하품목 체크</button>
+        <button onclick="periodToggleOnlyChecked()" id="periodOnlyBtn">선택한 것만 보기</button>
+      </div>
+      <div class="small" style="color:#64748b;margin-top:6px">각 품목의 가장 최근 프레스·가공 검사로 작성. 체크한 품목은 회사별로 기억됨.</div>
+    </div>
     
     <div id="stats" class="stats" style="display:none"></div>
     
@@ -207,6 +222,7 @@ function getSbUrl(){ return QC_URL; }
 function getSbKey(){ return QC_KEY; }
 
 window.addEventListener('DOMContentLoaded', () => {
+  onReportTypeChange();   // [v0.53] 새로고침 시 브라우저가 기억한 성적서 종류에 맞춰 화면 전환
   reload();
 });
 
@@ -513,7 +529,7 @@ async function reload(){
     //   '출하일 없이 생성'이 가능했다 → 성적서 날짜가 오늘로, 파일명이 xlsx.xlsx 로 나옴.
     //   같은 날짜가 아직 있으면 다시 선택, 없으면 목록도 비운다.
     if (prevDate && _allShipDates.some(d => d.date === prevDate)) sel.value = prevDate;
-    setTimeout(onDateChange, 0);
+    setTimeout(refreshList, 0);   // [v0.53] 정기검사 모드면 품목 목록
     
     setStatus(`✅ 출하일 ${_allShipDates.length}개 / 출하건수 ${ships.length}건 / 부품 ${parts.length}개 / 프레스검사 ${insps.length}건 / 가공검사 ${machInsps.length}건 / spec ${allSpecs.length}건`, '#86efac');
     document.getElementById('dateCard').style.display='block';
@@ -543,7 +559,100 @@ function onCompanyChange(){
   }
 }
 
+// ===== [v0.53] 정기검사 모드 =====
+//   출하검사: 출하일 → 그날 출하행 → 생산일(LOT) 기준 검사 매칭
+//   정기검사: qc_part 전체에서 품목 직접 체크 → 품목별 가장 최근 프레스·가공 검사 사용
+//   ※ qc_part.customer 는 실제 고객사와 안 맞는 경우가 많아(우창 품목 대부분 'SKF Seal') 회사로 거르지 않음.
+//     대신 '최근 90일 출하품목 체크'로 선택한 회사의 출하 품목을 한 번에 체크.
+let _periodOnlyChecked = false;
+function isPeriodic(){ return document.getElementById('reportType').value === 'periodic'; }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _periodKey(){ return 'QC_PERIODIC_SEL_' + document.getElementById('companySel').value; }
+function loadPeriodicSel(){ try{ return new Set(JSON.parse(localStorage.getItem(_periodKey()) || '[]')); }catch(e){ return new Set(); } }
+function savePeriodicSel(){
+  if(!isPeriodic()) return;
+  try{ localStorage.setItem(_periodKey(), JSON.stringify(_shipItems.filter(x => x.checked).map(x => x.part.part_number))); }catch(e){}
+}
+
+function onReportTypeChange(){
+  const per = isPeriodic();
+  document.getElementById('shipDateFg').style.display = per ? 'none' : '';
+  document.getElementById('periodDateFg').style.display = per ? '' : 'none';
+  document.getElementById('periodTools').style.display = per ? 'block' : 'none';
+  document.getElementById('dateCardTitle').textContent = per ? '📅 성적서 일자' : '📅 출하일 선택';
+  document.getElementById('listTitle').textContent = per ? '📦 정기검사 품목 선택' : '📦 출하 부품 (자동 조회됨)';
+  const pd = document.getElementById('periodDate');
+  if(!pd.value) pd.value = todayStr();
+  // 데이터를 이미 불러온 상태면 목록만 다시 구성 (재조회 없음)
+  if(document.getElementById('dateCard').style.display === 'block') refreshList();
+}
+
+function refreshList(){
+  if(isPeriodic()) buildPeriodicItems();
+  else onDateChange();
+}
+
+function buildPeriodicItems(){
+  const saved = loadPeriodicSel();
+  const date = document.getElementById('periodDate').value || todayStr();
+  _shipItems = Object.values(_allParts)
+    .filter(p => p.is_active !== false && p.customer !== 'TEST')
+    .sort((a, b) => String(a.part_number).localeCompare(String(b.part_number)))
+    .map(p => {
+      const insp = (_allInspByPartId[p.id] || [])[0] || null;       // 가장 최근 프레스검사 (desc 정렬)
+      const machInsp = (_machInspByPartId[p.id] || [])[0] || null;  // 가장 최근 가공검사
+      return {
+        shipment: { reg_date: date, part_no: p.part_number, qty: null, lot_no: '' },  // 수량·LOT 없음
+        part: p, matchHow: '정확', matchedNo: p.part_number,
+        insp, machInsp,
+        hasInspection: !!insp, hasDrawing: !!p.drawing_path, hasMachining: !!machInsp,
+        checked: !!insp && saved.has(p.part_number)
+      };
+    });
+  renderShipList();
+}
+
+// 정기검사 검색 필터
+function _periodVisible(it){
+  if(!isPeriodic()) return true;
+  if(_periodOnlyChecked && !it.checked) return false;
+  const q = (document.getElementById('periodSearch').value || '').trim().toLowerCase();
+  if(!q) return true;
+  const p = it.part || {};
+  return [p.part_number, p.part_number_kr, p.part_name, p.model].some(v => String(v || '').toLowerCase().includes(q));
+}
+
+// 선택한 회사의 최근 90일 출하 품목 일괄 체크 (중복 품목은 1개로)
+function periodCheckShipped(){
+  const ids = new Set();
+  const miss = new Set();
+  (_allShipments || []).forEach(s => {
+    const r = resolvePart(s.part_no);
+    if(r.part) ids.add(r.part.id); else miss.add(s.part_no);
+  });
+  let n = 0, noInsp = [];
+  _shipItems.forEach(it => {
+    if(ids.has(it.part.id)){
+      if(it.hasInspection){ if(!it.checked) n++; it.checked = true; }
+      else noInsp.push(it.part.part_number);
+    }
+  });
+  savePeriodicSel();
+  renderShipList();
+  let msg = `출하품목 ${ids.size}종 중 ${n}개 새로 체크`;
+  if(noInsp.length) msg += `\n검사 데이터 없음: ${noInsp.join(', ')}`;
+  if(miss.size) msg += `\nqc_part 매칭 실패(출하검사 모드에서 매핑 필요): ${[...miss].join(', ')}`;
+  alert(msg);
+}
+
+function periodToggleOnlyChecked(){
+  _periodOnlyChecked = !_periodOnlyChecked;
+  document.getElementById('periodOnlyBtn').textContent = _periodOnlyChecked ? '전체 보기' : '선택한 것만 보기';
+  renderShipList();
+}
+
 function onDateChange(){
+  if(isPeriodic()) return;   // [v0.53] 정기검사 모드에선 출하일 무관
   const date = document.getElementById('dateSel').value;
   if(!date){
     _shipItems = [];
@@ -590,7 +699,7 @@ function onDateChange(){
 function renderShipList(){
   const list = document.getElementById('shipList');
   if(_shipItems.length === 0){
-    list.innerHTML = '<div class="empty-list">선택한 날짜에 출하 데이터가 없습니다</div>';
+    list.innerHTML = isPeriodic() ? '<div class="empty-list">품목 데이터가 없습니다</div>' : '<div class="empty-list">선택한 날짜에 출하 데이터가 없습니다</div>';
     document.getElementById('stats').style.display='none';
     updateSelCount();
     return;
@@ -618,7 +727,7 @@ function renderShipList(){
   document.getElementById('stats').style.display='flex';
   const ngCount = _shipItems.filter(x => x.insp && String(x.insp.result || '').toUpperCase().includes('NG')).length;
   document.getElementById('stats').innerHTML = `
-    <div class="stat"><div class="stat-num">${total}</div><div class="stat-lbl">전체 출하</div></div>
+    <div class="stat"><div class="stat-num">${total}</div><div class="stat-lbl">${isPeriodic()?'전체 품목':'전체 출하'}</div></div>
     <div class="stat"><div class="stat-num ok">${withDraw}</div><div class="stat-lbl">검사·도면 ✓</div></div>
     <div class="stat"><div class="stat-num warn">${withInsp - withDraw}</div><div class="stat-lbl">검사 있음 (도면 X)</div></div>
     <div class="stat"><div class="stat-num err">${noInsp}</div><div class="stat-lbl">검사 데이터 없음</div></div>
@@ -629,6 +738,7 @@ function renderShipList(){
   
   list.innerHTML = '';
   _shipItems.forEach((it, i) => {
+    if(!_periodVisible(it)) return;   // [v0.53] 정기검사 검색 필터
     const s = it.shipment;
     const part = it.part;
     
@@ -663,7 +773,7 @@ function renderShipList(){
             ${(part && (it.matchHow === '괄호제거' || it.matchHow === '접미사')) ? `<span style="margin-left:6px;font-size:10px;background:#422006;color:#fcd34d;padding:2px 7px;border-radius:5px;font-weight:700">⚠ 자동매칭 → ${it.matchedNo}</span> <button onclick="openAliasMap('${(s.part_no||'').replace(/'/g,"\\'")}', ${i})" style="margin-left:4px;border:none;background:#475569;color:#e2e8f0;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer">수정</button>` : ''}
           </div>
           <div id="alias-map-${i}" style="display:none;margin-top:6px;padding:8px;background:#1e293b;border:1px solid #475569;border-radius:8px"></div>
-          <div class="ship-meta">
+          <div class="ship-meta" ${isPeriodic()?'style="display:none"':''}>
             <span>수량: <strong>${(s.qty||0).toLocaleString()}</strong></span>
             ${s.lot_no ? `<span>LOT: <strong>${s.lot_no}</strong></span>` : ''}
             ${s.box_count ? `<span>${s.box_count}박스 ×${s.box_size||'-'}</span>` : ''}
@@ -878,18 +988,22 @@ async function addAliasManual(){
 
 function toggleItem(i, v){
   _shipItems[i].checked = v;
+  savePeriodicSel();   // [v0.53]
   updateSelCount();
 }
+// [v0.53] 정기검사 모드에선 검색으로 보이는 품목에만 적용
 function checkAll(v){
   _shipItems.forEach(it => {
-    if(it.hasInspection) it.checked = v;
+    if(it.hasInspection && _periodVisible(it)) it.checked = v;
   });
+  savePeriodicSel();
   renderShipList();
 }
 function checkOnlyValid(){
   _shipItems.forEach(it => {
-    it.checked = it.hasInspection && it.hasDrawing;
+    if(_periodVisible(it)) it.checked = it.hasInspection && it.hasDrawing;
   });
+  savePeriodicSel();
   renderShipList();
 }
 function updateSelCount(){
@@ -1625,6 +1739,8 @@ async function generateXlsx(){
   // [v0.47] 출하일 칸이 비어 있으면 선택한 출하 건의 출하일로 (성적서 날짜·파일명에 쓰임)
   let shipDate = document.getElementById('dateSel').value;
   if (!shipDate) shipDate = (selected[0] && selected[0].shipment && selected[0].shipment.reg_date) || '';
+  // [v0.53] 정기검사는 '성적서 일자'를 DATE·검사일·파일명에 사용
+  if (isPeriodic()) shipDate = document.getElementById('periodDate').value || todayStr();
   if (!shipDate) { alert('출하일을 선택하세요'); return; }
   const qaResp = document.getElementById('qaResp').value.trim();
   const inspector = document.getElementById('inspector').value.trim();   // [v0.9] 검사자 input
@@ -1639,7 +1755,7 @@ async function generateXlsx(){
   
   try{
     log('===== 엑셀 생성 시작 (프레스 + 가공 머지) =====', 'head');
-    log(`출하일 ${shipDate}, 부품 ${selected.length}개`);
+    log(`${isPeriodic() ? '정기검사 성적서 일자' : '출하일'} ${shipDate}, 부품 ${selected.length}개`);
     
     if(!_templateBuf){
       _templateBuf = b64ToArrayBuffer(document.getElementById('templateData').textContent.trim());
@@ -1681,7 +1797,8 @@ async function generateXlsx(){
       const insp = item.insp;
       
       setProgress((i/selected.length)*90, `${i+1}/${selected.length}: ${s.part_no}`);
-      log(`[${i+1}/${selected.length}] ${s.part_no} (LOT ${s.lot_no||'-'}, ${(s.qty||0).toLocaleString()}개)`);
+      log(isPeriodic() ? `[${i+1}/${selected.length}] ${s.part_no} (프레스검사 ${insp ? insp.inspection_date : '-'})`
+                       : `[${i+1}/${selected.length}] ${s.part_no} (LOT ${s.lot_no||'-'}, ${(s.qty||0).toLocaleString()}개)`);
       
       if(!insp){
         log(`  ⚠️ 검사 데이터 없음 - 스킵`, 'warn');
