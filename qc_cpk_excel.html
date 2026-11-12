@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.3</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.4</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -62,6 +62,8 @@
     .vc{background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px 2px;text-align:center;line-height:1.25}
     .vc .d{font-size:9px;color:#64748b}.vc .v{font-size:11px;font-weight:700}.vc .o{font-size:9px;color:#93c5fd}
     .vc.fill{background:#422006;border-color:#a16207}.vc.out .v{color:#f87171}.vc.ext{border-color:#e2e8f0}
+    .vc{cursor:pointer}.vc:hover{border-color:#2dd4bf}
+    .vc.edit{background:#3b0764;border-color:#a855f7}.vc.edit .v{color:#e9d5ff}
     .progress{height:8px;background:#0f172a;border-radius:4px;overflow:hidden;margin:8px 0 4px}
     .progress-fill{height:100%;background:linear-gradient(135deg,#0d9488,#2dd4bf);transition:width .3s;width:0}
   </style>
@@ -69,7 +71,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.3</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.4</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -526,7 +528,8 @@ function buildSheet(wb, name, r, opts){
     mergeBox(ws, `B${rr}:C${rr}`, b, lab);
     for(let k = 0; k < 10; k++){
       const col = String.fromCharCode(68+k), v = r.values[i*10 + k];
-      mergeBox(ws, `${col}${rr}:${col}${rr}`, v === undefined ? null : v, { numFmt: nf });
+      const edited = (i*10 + k) in (r.edits||{});
+      mergeBox(ws, `${col}${rr}:${col}${rr}`, v === undefined ? null : v, edited ? { numFmt: nf, fill:'FFE9D5FF' } : { numFmt: nf });
     }
   });
 
@@ -553,6 +556,13 @@ function buildSheet(wb, name, r, opts){
   const concl = st.cpk === null ? '판정 불가 (측정값 산포 없음 또는 규격 확인 필요)'
               : (st.cpk >= 1.33 ? 'Cpk 가 1.33 이상으로 양호' : 'Cpk 가 1.33 미만으로 공정개선 필요');
   mergeBox(ws, 'D46:M46', concl, { font:{ bold:true, size:10 } });
+  // [v0.4] 수정값 표시 (자체관리용) — 수정한 칸 번호와 원래 값
+  const edIdx = Object.keys(r.edits||{}).map(Number).sort((a,b) => a-b);
+  if(edIdx.length){
+    ws.mergeCells('B47:M47'); ws.getRow(47).height = 30;
+    cellSet(ws, 'B47', `※ 자체관리용 · 측정값 수정 ${edIdx.length}개 (보라색 칸): ` + edIdx.map(i => `${i+1}번 ${r.orig[i].toFixed(dec)}→${r.values[i].toFixed(dec)}`).join(', '),
+      { font:{ size:8, color:{ argb:'FF6B21A8' } }, align:{ horizontal:'left' } });
+  }
   ws.pageSetup.printArea = 'A1:N47';
   return ws;
 }
@@ -565,8 +575,8 @@ function buildList(wb, results, opts){
     views:[{ showGridLines:false }]
   });
   cellSet(ws, 'A1', '공정능력 List', { font:{ bold:true, size:12 }, align:{ horizontal:'left' } });
-  const hd = ['품     번\nParts Number','품     명\nParts Name','평 가 일 자\nDate','평가항목\nEvaluation Item','규      격\nSpecification','계 측 기 명\nMeasuring Inst.','규격상한\nUpp.Tol','규격하한\nLow.Tol','공차유형\nTol.Type',' 측정단위\nUnit','평 가 자\nEvaluator','작업설비\nWork Line','최 소 값\nMin-Value','최 대 값\nMax-Value','평     균\nAverage','표준편차\nStandard Deviation','Cp','Cpk'];
-  const widths = [14,30,12,20,15,11,9,9,9,7,9,9,9,9,9,11,7,7];
+  const hd = ['품     번\nParts Number','품     명\nParts Name','평 가 일 자\nDate','평가항목\nEvaluation Item','규      격\nSpecification','계 측 기 명\nMeasuring Inst.','규격상한\nUpp.Tol','규격하한\nLow.Tol','공차유형\nTol.Type',' 측정단위\nUnit','평 가 자\nEvaluator','작업설비\nWork Line','최 소 값\nMin-Value','최 대 값\nMax-Value','평     균\nAverage','표준편차\nStandard Deviation','Cp','Cpk','비고'];
+  const widths = [14,30,12,20,15,11,9,9,9,7,9,9,9,9,9,11,7,7,14];
   ws.columns = widths.map(w => ({ width:w }));
   ws.getRow(3).height = 42;
   hd.forEach((h, i) => { const c = ws.getCell(3, i+1); cellSet(ws, c.address, h, { font:{ bold:true, size:9 }, fill:'FFF1F5F9' }); c.border = box; });
@@ -574,11 +584,12 @@ function buildList(wb, results, opts){
     const st = r.st;
     const row = [r.part.part_number, r.part.part_name||'', r.dateText, r.label, r.spec.spec_text||'', r.spec.inspection_method||'',
                  r.sp.usl ?? '-', r.sp.lsl ?? '-', TYPE_NAME[r.sp.type], r.unit, opts.evaluator, opts.workLine,
-                 st.min, st.max, st.mean, st.sd, st.cp ?? '-', st.cpk ?? '-'];
+                 st.min, st.max, st.mean, st.sd, st.cp ?? '-', st.cpk ?? '-',
+                 Object.keys(r.edits||{}).length ? `수정 ${Object.keys(r.edits).length}개 (자체관리)` : ''];
     row.forEach((v, i) => {
       const c = ws.getCell(4 + j, i+1);
       cellSet(ws, c.address, v, { align:{ horizontal: (i===1||i===3) ? 'left' : 'center' },
-        numFmt: i>=12 && i<=14 ? '0.0000' : (i===15 ? '0.000000' : (i>=16 ? '0.00' : undefined)) });
+        numFmt: i>=12 && i<=14 ? '0.0000' : (i===15 ? '0.000000' : (i===16||i===17 ? '0.00' : undefined)) });
       c.border = box;
     });
   });
@@ -613,9 +624,30 @@ async function computeOne(part, item, baseDate){
 
 function applyShift(r){
   const f = Math.pow(10, r.dec);
-  r.values = r.orig.map(v => Math.round((v + r.shift) * f) / f);
+  r.edits = r.edits || {};
+  r.values = r.orig.map((v, i) => (i in r.edits) ? r.edits[i] : Math.round((v + r.shift) * f) / f);
   r.st = stats(r.values, r.sp);
 }
+
+// [v0.4] 값 직접 수정 (자체관리용) — 수정한 칸은 엑셀에 보라색으로 표시되고 원래 값이 하단 주석에 남음
+function editVal(k, i){
+  const r = _res.get(k); if(!r) return;
+  const f = Math.pow(10, r.dec);
+  const cur = r.values[i];
+  const base = Math.round((r.orig[i] + r.shift) * f) / f;
+  const inp = prompt(`${i+1}번 값 수정 (현재 ${cur.toFixed(r.dec)}, 원래 ${base.toFixed(r.dec)})\n빈칸으로 두면 원래 값으로 되돌립니다.`, cur.toFixed(r.dec));
+  if(inp === null) return;
+  const t = inp.trim();
+  if(t === ''){ delete r.edits[i]; }
+  else{
+    const v = Number(t);
+    if(!isFinite(v)){ alert('숫자를 입력하세요'); return; }
+    const vv = Math.round(v * f) / f;
+    if(vv === base) delete r.edits[i]; else r.edits[i] = vv;
+  }
+  applyShift(r); renderPreview();
+}
+function clearEdits(k){ const r = _res.get(k); if(!r) return; r.edits = {}; applyShift(r); renderPreview(); }
 
 // 규격 중앙: 양측 = (상한+하한)/2, 이하공차(Max) = 상한/2 (하한 0 기준), 이상공차(Min) = 중앙 없음
 function specCenter(sp){
@@ -635,7 +667,7 @@ function adjust(key, mode){
   }
   else if(mode === 'up') r.shift = Math.round((r.shift + unit) * f) / f;
   else if(mode === 'down') r.shift = Math.round((r.shift - unit) * f) / f;
-  else if(mode === 'reset') r.shift = 0;
+  else if(mode === 'reset'){ r.shift = 0; r.edits = {}; }
   applyShift(r);
   renderPreview();
 }
@@ -654,11 +686,11 @@ function renderPreview(){
     const st = r.st, bad = st.cpk !== null && st.cpk < 1.33;
     return `<tr><td class="l">${esc(r.part.part_number)}</td>
       <td class="l">${r.spec.item_no}. ${esc(r.label)}<div class="small">${esc(r.spec.spec_text||'')}</div></td>
-      <td>${r.nReal}개/${r.nDays}일${r.nFill?`<div><span class="fil">보충 ${r.nFill}</span></div>`:''}</td>
+      <td>${r.nReal}개/${r.nDays}일${r.nFill?`<div><span class="fil">보충 ${r.nFill}</span></div>`:''}${Object.keys(r.edits||{}).length?`<div><span class="adj" style="background:#581c87;color:#e9d5ff">수정 ${Object.keys(r.edits).length}</span></div>`:''}</td>
       <td>${fx(st.mean, r.dec+1)}${r.shift?`<span class="adj">${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}</span>`:''}</td>
       <td>${fx(st.cp,2)}</td>
       <td class="${st.cpk===null?'':(bad?'bad':'good')}">${fx(st.cpk,2)}</td>
-      <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${r.shift?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`
+      <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${(r.shift || Object.keys(r.edits||{}).length)?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`
       + (_openVals.has(j.item.key) ? `<tr><td colspan="7" style="text-align:left;background:#111827">${valsHtml(r)}</td></tr>` : '');
   }).join('')}</table></div>`;
 }
@@ -675,13 +707,16 @@ function valsHtml(r){
   const out = v => (sp.usl !== null && v > sp.usl + 1e-9) || (sp.lsl !== null && v < sp.lsl - 1e-9);
   const cells = r.values.map((v, i) => {
     const m = r.meta[i];
-    const cls = ['vc', m.fill ? 'fill' : '', out(v) ? 'out' : '', (v === mn || v === mx) ? 'ext' : ''].join(' ');
-    return `<div class="${cls}" title="${m.fill ? '보충값' : '실측 ' + m.d}"><div class="d">${i+1}${m.fill ? ' 보충' : ' · ' + m.d.slice(5).replace('-','/')}</div>`
-         + `<div class="v">${v.toFixed(dec)}</div>${r.shift ? `<div class="o">원 ${r.orig[i].toFixed(dec)}</div>` : ''}</div>`;
+    const ed = (i in (r.edits||{}));
+    const cls = ['vc', m.fill ? 'fill' : '', ed ? 'edit' : '', out(v) ? 'out' : '', (v === mn || v === mx) ? 'ext' : ''].join(' ');
+    return `<div class="${cls}" title="눌러서 수정 · ${m.fill ? '보충값' : '실측 ' + m.d}" onclick="editVal('${r.key.replace(/'/g,"\\'")}', ${i})"><div class="d">${i+1}${ed ? ' 수정' : (m.fill ? ' 보충' : ' · ' + m.d.slice(5).replace('-','/'))}</div>`
+         + `<div class="v">${v.toFixed(dec)}</div>${(r.shift || ed) ? `<div class="o">원 ${r.orig[i].toFixed(dec)}</div>` : ''}</div>`;
   }).join('');
   const nOut = r.values.filter(out).length;
+  const nEd = Object.keys(r.edits||{}).length;
   return `<div class="small" style="color:#cbd5e1;margin:2px 0 4px">실측 ${real.length}개만: 최소 ${fx(rs.min,dec)} · 최대 ${fx(rs.max,dec)} · 평균 ${fx(rs.mean,dec+1)} · σ ${fx(rs.sd,4)} · Cp ${fx(rs.cp,2)} · Cpk ${fx(rs.cpk,2)}`
        + ` &nbsp;|&nbsp; 규격 ${esc(r.spec.spec_text||'')} (하한 ${sp.lsl ?? '-'} / 상한 ${sp.usl ?? '-'})${nOut ? ` · <b class="bad">규격 밖 ${nOut}개</b>` : ''}</div>`
+       + `<div class="small" style="margin:2px 0">칸을 누르면 값을 수정할 수 있습니다 (보라색 = 수정값, 엑셀에도 표시됨)${nEd ? ` · <b style="color:#d8b4fe">수정 ${nEd}개</b> <button class="ab" onclick="clearEdits('${r.key.replace(/'/g,"\\'")}')">수정 모두 취소</button>` : ''}</div>`
        + `<div class="vals">${cells}</div>`;
 }
 
@@ -727,7 +762,7 @@ async function generate(){
       if(r.empty){ log(`⚠ ${part.part_number} ${r.label}: 실측값 없음 → 제외`, 'warn'); return; }
       const st = r.st;
       const msg = `${part.part_number} ${r.label}: 실측 ${r.nReal}개 (${r.nDays}일, ${r.dateText})` + (r.nFill ? ` + 보충 ${r.nFill}개` : '') +
-                  (r.shift ? ` · 평행이동 ${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}` : '') + ` → Cpk ${st.cpk === null ? '-' : st.cpk.toFixed(2)}`;
+                  (r.shift ? ` · 평행이동 ${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}` : '') + (Object.keys(r.edits||{}).length ? ` · 수정 ${Object.keys(r.edits).length}개` : '') + ` → Cpk ${st.cpk === null ? '-' : st.cpk.toFixed(2)}`;
       log((r.nFill || r.shift ? '△ ' : '✅ ') + msg, r.nFill || r.shift ? 'warn' : 'ok');
       if(r.sp.type === '?') log(`   ⚠ 규격(${r.spec.spec_text||'-'})을 해석하지 못해 Cp/Cpk 계산 불가`, 'err');
       if(st.sd === 0) log('   ⚠ 측정값이 모두 같아 표준편차 0 → Cp/Cpk 계산 불가', 'err');
