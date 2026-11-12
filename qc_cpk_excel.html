@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.4</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.5</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -71,7 +71,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.4</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.5</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -89,7 +89,7 @@
     <div class="card-title">📦 품목 · 검사항목 선택</div>
     <div class="info-box">
       <b>특별특성 항목만</b> 표시합니다 ('I' 단독은 제외). 품번을 체크하면 그 품번의 특별특성 항목이 모두 선택됩니다.<br>
-      실측값은 기준일부터 <b>과거로 하루씩</b> 모아 30개가 차면 멈춥니다. 전체 기간을 모아도 30개 미만이면 <b>실측값 범위 안에서</b> 나머지를 채웁니다.
+      실측값은 기준일부터 <b>과거로 하루씩</b> 모아 '실측 사용 개수'(기본 5개)가 차면 멈추고, 나머지는 <b>실측값 범위 안에서</b> 채워 30개를 만듭니다.
     </div>
     <div class="fg" style="margin-bottom:8px"><input type="text" id="search" placeholder="품번·품명 검색 (예: 1862, ENCODER)" oninput="renderParts()"></div>
     <div class="toolbar">
@@ -108,6 +108,9 @@
       <div class="fg"><label>기준일 (이 날짜 이전 실측만 사용)</label><input type="date" id="baseDate"></div>
       <div class="fg"><label>평가자</label><input type="text" id="evaluator" value="김 상 기"></div>
       <div class="fg"><label>작업설비</label><input type="text" id="workLine" value="Press"></div>
+    </div>
+    <div class="row-3">
+      <div class="fg"><label>실측 사용 개수 (1~30, 나머지는 보충)</label><input type="number" id="nReal" value="5" min="1" max="30" step="1"></div>
     </div>
     <button type="button" class="btn btn-primary" onclick="preview()" id="pvBtn" style="margin-top:4px">🔍 Cpk 미리보기 (계산)</button>
     <div id="pvBox"></div>
@@ -130,6 +133,11 @@
 const QC_URL = 'https://omngtyewdaqpphnzeate.supabase.co';
 const QC_KEY = 'sb_publishable_9j2YkkL-7ul1TrhH-NjVdQ_vWDG2-1D';
 const N_SAMPLE = 30;          // 공정능력 표본 수 (출력 양식 3줄 × 10칸)
+// [v0.5] 실측을 몇 개까지 모을지 (기본 5개 = 기존 엑셀 방식). 나머지는 실측 범위 안에서 보충해 30개.
+function nRealTarget(){
+  const v = parseInt(document.getElementById('nReal').value, 10);
+  return Math.min(N_SAMPLE, Math.max(1, isFinite(v) ? v : 5));
+}
 const LS_SEL = 'QC_CPK_SEL';  // 선택한 항목 기억 (브라우저별)
 
 let _parts = [];              // qc_part
@@ -333,10 +341,10 @@ async function collectValues(ids, baseDate){
   const usedDays = [];
   for(const d of days){
     const dayVals = byDay[d].sort((a,b) => a.insp - b.insp || a.id - b.id).flatMap(x => x.vals);
-    const need = N_SAMPLE - picked.length;
+    const need = nRealTarget() - picked.length;
     dayVals.slice(0, need).forEach(v => picked.push({ d, v }));
     usedDays.push(d);
-    if(picked.length >= N_SAMPLE) break;
+    if(picked.length >= nRealTarget()) break;
   }
   picked.sort((a,b) => a.d.localeCompare(b.d));
   return { values: picked.map(p => p.v), dates: picked.map(p => p.d), days: usedDays.sort(), totalDays: days.length };
@@ -558,10 +566,12 @@ function buildSheet(wb, name, r, opts){
   mergeBox(ws, 'D46:M46', concl, { font:{ bold:true, size:10 } });
   // [v0.4] 수정값 표시 (자체관리용) — 수정한 칸 번호와 원래 값
   const edIdx = Object.keys(r.edits||{}).map(Number).sort((a,b) => a-b);
-  if(edIdx.length){
+  const notes = [];
+  if(r.nFill) notes.push(`실측 ${r.nReal}개 + 실측 범위 내 보충 ${r.nFill}개`);
+  if(edIdx.length) notes.push(`측정값 수정 ${edIdx.length}개 (보라색 칸): ` + edIdx.map(i => `${i+1}번 ${r.orig[i].toFixed(dec)}→${r.values[i].toFixed(dec)}`).join(', '));
+  if(notes.length){
     ws.mergeCells('B47:M47'); ws.getRow(47).height = 30;
-    cellSet(ws, 'B47', `※ 자체관리용 · 측정값 수정 ${edIdx.length}개 (보라색 칸): ` + edIdx.map(i => `${i+1}번 ${r.orig[i].toFixed(dec)}→${r.values[i].toFixed(dec)}`).join(', '),
-      { font:{ size:8, color:{ argb:'FF6B21A8' } }, align:{ horizontal:'left' } });
+    cellSet(ws, 'B47', '※ 자체관리용 · ' + notes.join(' / '), { font:{ size:8, color:{ argb:'FF6B21A8' } }, align:{ horizontal:'left' } });
   }
   ws.pageSetup.printArea = 'A1:N47';
   return ws;
@@ -585,7 +595,7 @@ function buildList(wb, results, opts){
     const row = [r.part.part_number, r.part.part_name||'', r.dateText, r.label, r.spec.spec_text||'', r.spec.inspection_method||'',
                  r.sp.usl ?? '-', r.sp.lsl ?? '-', TYPE_NAME[r.sp.type], r.unit, opts.evaluator, opts.workLine,
                  st.min, st.max, st.mean, st.sd, st.cp ?? '-', st.cpk ?? '-',
-                 Object.keys(r.edits||{}).length ? `수정 ${Object.keys(r.edits).length}개 (자체관리)` : ''];
+                 [r.nFill ? `실측 ${r.nReal}+보충 ${r.nFill}` : '', Object.keys(r.edits||{}).length ? `수정 ${Object.keys(r.edits).length}` : ''].filter(Boolean).join(' · ')];
     row.forEach((v, i) => {
       const c = ws.getCell(4 + j, i+1);
       cellSet(ws, c.address, v, { align:{ horizontal: (i===1||i===3) ? 'left' : 'center' },
@@ -723,7 +733,8 @@ function valsHtml(r){
 // 선택 항목 중 아직 계산 안 한 것만 계산 (조정값 유지). 기준일이 바뀌면 전부 다시 계산.
 async function ensureComputed(){
   const baseDate = document.getElementById('baseDate').value || todayStr();
-  if(baseDate !== _resBase){ _res.clear(); _resBase = baseDate; }
+  const resKey = baseDate + '|' + nRealTarget();   // 기준일·실측 개수가 바뀌면 다시 계산
+  if(resKey !== _resBase){ _res.clear(); _resBase = resKey; }
   const jobs = selectedJobs();
   const todo = jobs.filter(j => !_res.has(j.item.key));
   for(let i = 0; i < todo.length; i++){
@@ -788,7 +799,7 @@ async function generate(){
     setProgress(100, '완료');
     log(`✅ ${fname} (${(blob.size/1024).toFixed(0)}KB, 항목 ${results.length}개)`, 'ok');
     const filled = results.filter(r => r.nFill);
-    if(filled.length) log(`△ 실측 30개 미만으로 보충한 항목 ${filled.length}개 (위 노란 줄)`, 'warn');
+    if(filled.length) log(`△ 보충값이 들어간 항목 ${filled.length}개 (위 노란 줄)`, 'warn');
   }catch(e){
     log('❌ 오류: ' + e.message, 'err'); console.error(e); setProgress(0, '실패');
   }finally{ btn.disabled = false; }
