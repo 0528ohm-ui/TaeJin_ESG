@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.7</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.8</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -71,7 +71,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.7</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.8</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -550,7 +550,7 @@ function buildSheet(wb, name, r, opts){
   // [v0.4] 수정값 표시 (자체관리용) — 수정한 칸 번호와 원래 값
   const edIdx = Object.keys(r.edits||{}).map(Number).sort((a,b) => a-b);
   const notes = [];
-  if(r.nFill) notes.push(`실측 ${r.nReal}개 + 실측 범위 내 보충 ${r.nFill}개`);
+  // [v0.8] 보충값은 원래 양식처럼 표시하지 않음 (수정값만 표시)
   if(edIdx.length) notes.push(`측정값 수정 ${edIdx.length}개 (보라색 칸): ` + edIdx.map(i => `${i+1}번 ${r.orig[i].toFixed(dec)}→${r.values[i].toFixed(dec)}`).join(', '));
   if(notes.length){
     ws.mergeCells('B47:M47'); ws.getRow(47).height = 30;
@@ -578,7 +578,7 @@ function buildList(wb, results, opts){
     const row = [r.part.part_number, r.part.part_name||'', r.dateText, r.label, r.spec.spec_text||'', r.spec.inspection_method||'',
                  r.sp.usl ?? '-', r.sp.lsl ?? '-', TYPE_NAME[r.sp.type], r.unit, opts.evaluator, opts.workLine,
                  st.min, st.max, st.mean, st.sd, st.cp ?? '-', st.cpk ?? '-',
-                 [r.nFill ? `실측 ${r.nReal}+보충 ${r.nFill}` : '', Object.keys(r.edits||{}).length ? `수정 ${Object.keys(r.edits).length}` : ''].filter(Boolean).join(' · ')];
+                 Object.keys(r.edits||{}).length ? `수정 ${Object.keys(r.edits).length}` : ''];
     row.forEach((v, i) => {
       const c = ws.getCell(4 + j, i+1);
       cellSet(ws, c.address, v, { align:{ horizontal: (i===1||i===3) ? 'left' : 'center' },
