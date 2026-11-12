@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.6</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.7</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -71,7 +71,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.6</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.7</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -362,29 +362,6 @@ function decimalsOf(arr){
   return d;
 }
 
-// 부족분 채우기: 실측 최소~최대 범위 안, 실측 평균 쪽으로 몰리는 삼각분포. 실측 자릿수로 반올림.
-//   채운 값은 실측 사이사이 무작위 위치에 끼워 넣음 (Run Chart가 한쪽에 몰리지 않게).
-function fillToN(real, dates){
-  const out = real.slice();
-  const meta = real.map((v, i) => ({ d: dates ? dates[i] : '', fill: false }));   // [v0.3] 값별 날짜·보충 여부
-  const nFill = N_SAMPLE - real.length;
-  if(nFill <= 0 || !real.length) return { values: out.slice(0, N_SAMPLE), meta: meta.slice(0, N_SAMPLE), nFill: 0 };
-  const mn = Math.min(...real), mx = Math.max(...real);
-  const mode = real.reduce((a,b) => a+b, 0) / real.length;
-  const dec = decimalsOf(real), f = Math.pow(10, dec);
-  const tri = () => {
-    if(mx === mn) return mn;
-    const u = Math.random(), c = (mode - mn) / (mx - mn);
-    const x = u < c ? mn + Math.sqrt(u * (mx - mn) * (mode - mn)) : mx - Math.sqrt((1 - u) * (mx - mn) * (mx - mode));
-    return Math.min(mx, Math.max(mn, Math.round(x * f) / f));
-  };
-  for(let i = 0; i < nFill; i++){
-    const pos = Math.floor(Math.random() * (out.length + 1));
-    out.splice(pos, 0, tri());
-    meta.splice(pos, 0, { d: '', fill: true });
-  }
-  return { values: out, meta, nFill };
-}
 
 // ===== 3. 통계 =====
 function stats(values, sp){
@@ -625,33 +602,55 @@ function selectedJobs(){
   return jobs;
 }
 
+// [v0.7] 값 구성 = 실측(원값) n개를 1번부터 날짜순으로 + 그 뒤에 보충값.
+//   보충값은 '현재 원값'(평행이동·수정 반영)의 최소~최대 범위에서, 원값 평균 쪽으로 몰리는 삼각분포로 만든다.
+//   항목마다 난수(fillU)를 한 번만 뽑아 고정 → 원값을 고치면 보충값이 그 범위에 맞춰 다시 계산되지만 들쭉날쭉하지 않음.
 async function computeOne(part, item, baseDate){
   const s = item.cur, label = itemLabel(s), sp = parseSpec(s);
   const col = await collectValues(item.ids, baseDate);
   if(!col.values.length) return { key:item.key, part, spec:s, label, empty:true };
-  const { values, meta, nFill } = fillToN(col.values, col.dates);
+  const nReal = col.values.length, nFill = Math.max(0, N_SAMPLE - nReal);
   const d0 = col.days[0], d1 = col.days[col.days.length-1];
-  const r = { key:item.key, part, spec:s, label, sp, orig: values, meta, nReal: col.values.length, nFill,
-              nDays: col.days.length, dec: decimalsOf(col.values), shift: 0,
+  const r = { key:item.key, part, spec:s, label, sp, real: col.values.slice(0, N_SAMPLE), realDates: col.dates.slice(0, N_SAMPLE),
+              fillU: Array.from({length:nFill}, () => Math.random()), nReal: Math.min(nReal, N_SAMPLE), nFill,
+              nDays: col.days.length, dec: decimalsOf(col.values), shift: 0, edits: {},
               dateText: d0 === d1 ? fmtDate(d0) : `${fmtDate(d0)} ~ ${fmtDate(d1)}`, unit: unitOf(label) };
+  // 원래 값(엑셀 주석·'원' 표시용) = 수정·이동 전 원값 + 그 원값으로 만든 보충값
+  r.orig = r.real.concat(makeFills(r.real, r.fillU, r.dec));
   applyShift(r);
   return r;
 }
 
+function makeFills(reals, us, dec){
+  if(!us.length || !reals.length) return [];
+  const f = Math.pow(10, dec);
+  const mn = Math.min(...reals), mx = Math.max(...reals);
+  const mode = reals.reduce((a,b) => a+b, 0) / reals.length;
+  return us.map(u => {
+    if(mx === mn) return mn;
+    const c = (mode - mn) / (mx - mn);
+    const x = u < c ? mn + Math.sqrt(u * (mx - mn) * (mode - mn)) : mx - Math.sqrt((1 - u) * (mx - mn) * (mx - mode));
+    return Math.min(mx, Math.max(mn, Math.round(x * f) / f));
+  });
+}
+
+// 원값 = (수정했으면 수정값, 아니면 실측) + 평행이동. 수정값은 '이동 전' 기준으로 저장해 이동해도 같이 움직임.
 function applyShift(r){
   const f = Math.pow(10, r.dec);
   r.edits = r.edits || {};
-  r.values = r.orig.map((v, i) => (i in r.edits) ? r.edits[i] : Math.round((v + r.shift) * f) / f);
+  const reals = r.real.map((v, i) => Math.round((((i in r.edits) ? r.edits[i] : v) + r.shift) * f) / f);
+  r.values = reals.concat(makeFills(reals, r.fillU, r.dec));
+  r.meta = reals.map((v, i) => ({ d: r.realDates[i], fill: false })).concat(r.fillU.map(() => ({ d: '', fill: true })));
   r.st = stats(r.values, r.sp);
 }
 
-// [v0.4] 값 직접 수정 (자체관리용) — 수정한 칸은 엑셀에 보라색으로 표시되고 원래 값이 하단 주석에 남음
+// [v0.4→v0.7] 원값만 수정 가능 (자체관리용) — 보충값은 원값에 맞춰 자동 재계산. 수정한 칸은 엑셀에 보라색 + 하단 주석.
 function editVal(k, i){
-  const r = _res.get(k); if(!r) return;
+  const r = _res.get(k); if(!r || i >= r.nReal) return;
   const f = Math.pow(10, r.dec);
   const cur = r.values[i];
-  const base = Math.round((r.orig[i] + r.shift) * f) / f;
-  const inp = prompt(`${i+1}번 값 수정 (현재 ${cur.toFixed(r.dec)}, 원래 ${base.toFixed(r.dec)})\n빈칸으로 두면 원래 값으로 되돌립니다.`, cur.toFixed(r.dec));
+  const base = Math.round((r.real[i] + r.shift) * f) / f;
+  const inp = prompt(`원값 ${i+1}번 수정 (현재 ${cur.toFixed(r.dec)}, 실측 ${base.toFixed(r.dec)})\n빈칸으로 두면 실측값으로 되돌립니다. 보충값은 자동으로 다시 맞춰집니다.`, cur.toFixed(r.dec));
   if(inp === null) return;
   const t = inp.trim();
   if(t === ''){ delete r.edits[i]; }
@@ -659,7 +658,7 @@ function editVal(k, i){
     const v = Number(t);
     if(!isFinite(v)){ alert('숫자를 입력하세요'); return; }
     const vv = Math.round(v * f) / f;
-    if(vv === base) delete r.edits[i]; else r.edits[i] = vv;
+    if(vv === base) delete r.edits[i]; else r.edits[i] = Math.round((vv - r.shift) * f) / f;
   }
   applyShift(r); renderPreview();
 }
@@ -675,8 +674,9 @@ function specCenter(sp){
 function adjust(key, mode){
   const r = _res.get(key); if(!r || r.empty) return;
   const unit = Math.pow(10, -r.dec), f = Math.pow(10, r.dec);
-  const origMean = r.orig.reduce((a,b) => a+b, 0) / r.orig.length;
   if(mode === 'center'){
+    const keep = r.shift; r.shift = 0; applyShift(r);
+    const origMean = r.st.mean; r.shift = keep;
     const c = specCenter(r.sp);
     if(c === null){ alert('이상공차(Min) 항목은 중앙이 없어 중심조절을 할 수 없습니다'); return; }
     r.shift = Math.round((c - origMean) * f) / f;
@@ -704,7 +704,7 @@ function renderPreview(){
       <td class="l">${r.spec.item_no}. ${esc(r.label)}<div class="small">${esc(r.spec.spec_text||'')}</div></td>
       <td>${r.nReal}개/${r.nDays}일${r.nFill?`<div><span class="fil">보충 ${r.nFill}</span></div>`:''}${Object.keys(r.edits||{}).length?`<div><span class="adj" style="background:#581c87;color:#e9d5ff">수정 ${Object.keys(r.edits).length}</span></div>`:''}</td>
       <td>${fx(st.mean, r.dec+1)}${r.shift?`<span class="adj">${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}</span>`:''}</td>
-      <td>${fx(st.cp,2)}</td>
+      <td>${st.sd === 0 ? '<span class="small" title="값이 모두 같음">σ=0</span>' : fx(st.cp,2)}</td>
       <td class="${st.cpk===null?'':(bad?'bad':'good')}">${fx(st.cpk,2)}</td>
       <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${(r.shift || Object.keys(r.edits||{}).length)?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`
       + (_openVals.has(j.item.key) ? `<tr><td colspan="7" style="text-align:left;background:#111827">${valsHtml(r)}</td></tr>` : '');
@@ -716,23 +716,25 @@ function renderPreview(){
 let _openVals = new Set();
 function toggleVals(k){ _openVals.has(k) ? _openVals.delete(k) : _openVals.add(k); renderPreview(); }
 function valsHtml(r){
-  const real = r.orig.filter((v, i) => !r.meta[i].fill);
-  const rs = stats(real, r.sp);
-  const sp = r.sp, dec = r.dec;
+  const rs = stats(r.values.slice(0, r.nReal), r.sp);
+  const sp = r.sp, dec = r.dec, kq = r.key.replace(/'/g,"\\'");
   const mn = Math.min(...r.values), mx = Math.max(...r.values);
   const out = v => (sp.usl !== null && v > sp.usl + 1e-9) || (sp.lsl !== null && v < sp.lsl - 1e-9);
   const cells = r.values.map((v, i) => {
-    const m = r.meta[i];
-    const ed = (i in (r.edits||{}));
+    const m = r.meta[i], ed = !m.fill && (i in r.edits);
     const cls = ['vc', m.fill ? 'fill' : '', ed ? 'edit' : '', out(v) ? 'out' : '', (v === mn || v === mx) ? 'ext' : ''].join(' ');
-    return `<div class="${cls}" title="눌러서 수정 · ${m.fill ? '보충값' : '실측 ' + m.d}" onclick="editVal('${r.key.replace(/'/g,"\\'")}', ${i})"><div class="d">${i+1}${ed ? ' 수정' : (m.fill ? ' 보충' : ' · ' + m.d.slice(5).replace('-','/'))}</div>`
-         + `<div class="v">${v.toFixed(dec)}</div>${(r.shift || ed) ? `<div class="o">원 ${r.orig[i].toFixed(dec)}</div>` : ''}</div>`;
+    const click = m.fill ? '' : ` onclick="editVal('${kq}', ${i})"`;
+    return `<div class="${cls}" style="${m.fill ? 'cursor:default' : ''}" title="${m.fill ? '보충값 (원값에 맞춰 자동 계산)' : '원값 · 실측 ' + m.d + ' · 눌러서 수정'}"${click}>`
+         + `<div class="d">${i+1}${ed ? ' 수정' : (m.fill ? ' 보충' : ' · ' + m.d.slice(5).replace('-','/'))}</div>`
+         + `<div class="v">${v.toFixed(dec)}</div>${(!m.fill && (r.shift || ed)) ? `<div class="o">실측 ${r.real[i].toFixed(dec)}</div>` : ''}</div>`;
   }).join('');
   const nOut = r.values.filter(out).length;
-  const nEd = Object.keys(r.edits||{}).length;
-  return `<div class="small" style="color:#cbd5e1;margin:2px 0 4px">실측 ${real.length}개만: 최소 ${fx(rs.min,dec)} · 최대 ${fx(rs.max,dec)} · 평균 ${fx(rs.mean,dec+1)} · σ ${fx(rs.sd,4)} · Cp ${fx(rs.cp,2)} · Cpk ${fx(rs.cpk,2)}`
+  const nEd = Object.keys(r.edits).length;
+  const same = r.nReal > 0 && rs.sd === 0;
+  return `<div class="small" style="color:#cbd5e1;margin:2px 0 4px">원값 ${r.nReal}개: 최소 ${fx(rs.min,dec)} · 최대 ${fx(rs.max,dec)} · 평균 ${fx(rs.mean,dec+1)} · σ ${fx(rs.sd,4)}`
        + ` &nbsp;|&nbsp; 규격 ${esc(r.spec.spec_text||'')} (하한 ${sp.lsl ?? '-'} / 상한 ${sp.usl ?? '-'})${nOut ? ` · <b class="bad">규격 밖 ${nOut}개</b>` : ''}</div>`
-       + `<div class="small" style="margin:2px 0">칸을 누르면 값을 수정할 수 있습니다 (보라색 = 수정값, 엑셀에도 표시됨)${nEd ? ` · <b style="color:#d8b4fe">수정 ${nEd}개</b> <button class="ab" onclick="clearEdits('${r.key.replace(/'/g,"\\'")}')">수정 모두 취소</button>` : ''}</div>`
+       + (same ? `<div class="small bad" style="margin:2px 0">원값이 모두 같아 보충값도 같은 값 → 표준편차 0이라 Cp/Cpk 계산 불가</div>` : '')
+       + `<div class="small" style="margin:2px 0">1~${r.nReal}번(진한 칸) = 원값, 누르면 수정 · 노란 칸 = 보충값(원값 범위에 맞춰 자동)${nEd ? ` · <b style="color:#d8b4fe">수정 ${nEd}개</b> <button class="ab" onclick="clearEdits('${kq}')">수정 모두 취소</button>` : ''}</div>`
        + `<div class="vals">${cells}</div>`;
 }
 
