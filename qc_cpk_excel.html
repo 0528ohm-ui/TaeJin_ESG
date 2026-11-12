@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v1.0</title>
+  <title>공정능력 성적서 엑셀 다운로드 v1.1</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -69,6 +69,9 @@
     .fg textarea{width:100%;padding:10px 12px;font-size:12px;font-family:inherit;background:#0f172a;border:1.5px solid #475569;border-radius:8px;color:#e2e8f0;resize:vertical}
     .pres{font-size:11px;line-height:1.7;margin-top:6px}
     .pres .ok{color:#86efac}.pres .ng{color:#fca5a5}.pres .wn{color:#fcd34d}
+    .prow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 0;border-top:1px dashed #1e293b}
+    .prow .no{min-width:110px;font-weight:700;color:#e2e8f0}
+    .prow input{padding:4px 6px;font-size:11px;background:#0f172a;border:1px solid #475569;border-radius:4px;color:#e2e8f0;width:170px;font-family:inherit}
     .progress{height:8px;background:#0f172a;border-radius:4px;overflow:hidden;margin:8px 0 4px}
     .progress-fill{height:100%;background:linear-gradient(135deg,#0d9488,#2dd4bf);transition:width .3s;width:0}
   </style>
@@ -76,7 +79,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v1.0</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v1.1</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -105,6 +108,7 @@
         <button onclick="applyPaste()">✅ 붙여넣은 품번 체크</button>
       </div>
       <div id="pasteRes" class="pres"></div>
+      <datalist id="partDl"></datalist>
     </details>
     <div class="fg" style="margin-bottom:8px"><input type="text" id="search" placeholder="품번·품명 검색 (예: 1862, ENCODER)" oninput="renderParts()"></div>
     <div class="toolbar">
@@ -183,28 +187,82 @@ function findPart(raw){
   return null;
 }
 
+// [v1.1] 붙여넣기 결과를 품번별로 보여주고, 틀리거나 못 찾은 건 여기서 매핑 등록·수정·삭제.
+//   매핑은 qc_part_alias(출하검사 성적서 페이지와 같은 표)에 저장 → 두 페이지가 같이 씀.
+let _pasteList = [];
 function applyPaste(){
   const raw = document.getElementById('pasteTxt').value;
-  const list = [...new Set(raw.split(/[\r\n\t,;]+/).map(x => x.trim()).filter(Boolean))];
-  if(!list.length){ alert('품번을 붙여넣으세요'); return; }
+  _pasteList = [...new Set(raw.split(/[\r\n\t,;]+/).map(x => x.trim()).filter(Boolean))];
+  if(!_pasteList.length){ alert('품번을 붙여넣으세요'); return; }
   if(document.getElementById('pasteClear').checked) _sel.clear();
-  const ok = [], noSc = [], ng = [];
-  list.forEach(no => {
+  runPaste();
+}
+function runPaste(){
+  const rows = _pasteList.map(no => {
     const f = findPart(no);
-    if(!f){ ng.push(no); return; }
+    if(!f) return { no, st:'ng' };
     const items = itemsOf(f.part.id);
-    if(!items.length){ noSc.push(`${no} → ${f.part.part_number}`); return; }
     items.forEach(it => _sel.add(it.key));
-    ok.push(`${no}${no !== f.part.part_number ? ' → ' + f.part.part_number : ''} (${items.length})`);
+    return { no, st: items.length ? 'ok' : 'nosc', part: f.part, how: f.how, n: items.length };
   });
   saveSel();
   _onlySel = true; document.getElementById('onlySelBtn').textContent = '전체 보기';
   document.getElementById('search').value = '';
   renderParts();
+  document.getElementById('partDl').innerHTML = _parts.map(p => `<option value="${esc(p.part_number)}">${esc(p.part_name||'')}</option>`).join('');
+  const cnt = k => rows.filter(r => r.st === k).length;
   document.getElementById('pasteRes').innerHTML =
-    `<div class="ok">✅ 체크 ${ok.length}개 품번: ${esc(ok.join(', '))}</div>`
-    + (noSc.length ? `<div class="wn">⚠ 품번은 찾았지만 특별특성 항목 없음 ${noSc.length}개: ${esc(noSc.join(', '))}</div>` : '')
-    + (ng.length ? `<div class="ng">❌ 못 찾음 ${ng.length}개: ${esc(ng.join(', '))} — 출하검사 성적서 페이지 '부품번호 매핑 관리'에서 등록하면 다음부터 자동으로 잡힘</div>` : '');
+    `<div><span class="ok">✅ 체크 ${cnt('ok')}</span> · <span class="wn">⚠ 특별특성 없음 ${cnt('nosc')}</span> · <span class="ng">❌ 못 찾음 ${cnt('ng')}</span>
+     <span class="small"> — 매핑은 출하검사 성적서 페이지와 같은 매핑표에 저장됩니다</span></div>`
+    + rows.map((r, i) => {
+      const q = r.no.replace(/'/g, "\\'");
+      const isAlias = r.no in _alias;
+      const sug = r.st === 'ng' ? suggestPart(r.no) : '';
+      const label = r.st === 'ng' ? `<span class="ng">못 찾음</span>`
+        : `<span class="${r.st === 'ok' ? 'ok' : 'wn'}">${r.part.part_number === r.no ? '' : '→ ' + esc(r.part.part_number)} ${r.st === 'ok' ? `(${r.n}항목)` : '(특별특성 없음)'}</span>`
+          + (isAlias ? ' <span class="small">[매핑]</span>' : '');
+      return `<div class="prow"><span class="no">${esc(r.no)}</span>${label}
+        <span id="pm${i}" style="display:${r.st === 'ng' ? 'inline-flex' : 'none'};gap:4px;align-items:center">
+          <input list="partDl" id="pi${i}" placeholder="qc_part 품번 선택" value="${esc(sug)}">
+          <button class="ab" onclick="saveMap('${q}', ${i})">매핑 저장</button>
+        </span>
+        ${r.st !== 'ng' ? `<button class="ab" onclick="document.getElementById('pm${i}').style.display='inline-flex'">매핑 ${isAlias ? '수정' : '추가'}</button>` : ''}
+        ${isAlias ? `<button class="ab" onclick="deleteMap('${q}')">매핑 삭제</button>` : ''}
+        ${sug ? '<span class="small">(추천: -1 외철 / -2 내철 규칙 — 확인 후 저장)</span>' : ''}</div>`;
+    }).join('');
+}
+// 못 찾은 'XXXX-YYY-1/-2' → DB에 'XXXX-YYY 외철/내철'이 있으면 추천 (보통 -1 외철, -2 내철 · 364/365/367/368은 반대)
+function suggestPart(no){
+  const m = String(no).match(/^(.*)-([12])$/); if(!m) return '';
+  const rev = /-(364|365|367|368)$/.test(m[1]);
+  const kind = (m[2] === '1') !== rev ? '외철' : '내철';
+  const c = `${m[1]} ${kind}`;
+  return _parts.some(p => p.part_number === c) ? c : '';
+}
+async function aliasReq(method, query, body){
+  const r = await fetch(`${QC_URL}/rest/v1/qc_part_alias${query}`, {
+    method, headers:{'apikey':QC_KEY,'Authorization':'Bearer '+QC_KEY,'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined });
+  if(!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0,120));
+}
+async function saveMap(no, i){
+  const target = (document.getElementById('pi' + i).value || '').trim();
+  if(!_parts.some(p => p.part_number === target)){ alert('목록에 있는 qc_part 품번을 고르세요'); return; }
+  if(!confirm(`매핑 저장 (출하검사 성적서 페이지에도 적용)\n${no} → ${target}`)) return;
+  try{
+    if(no in _alias) await aliasReq('PATCH', `?alias=eq.${encodeURIComponent(no)}`, { part_number: target });
+    else await aliasReq('POST', '', { alias: no, part_number: target });
+    _alias[no] = target;
+    runPaste();
+  }catch(e){ alert('매핑 저장 실패: ' + e.message); }
+}
+async function deleteMap(no){
+  if(!confirm(`매핑 삭제 (출하검사 성적서 페이지에도 적용)\n${no} → ${_alias[no]}`)) return;
+  try{
+    await aliasReq('DELETE', `?alias=eq.${encodeURIComponent(no)}`);
+    delete _alias[no];
+    runPaste();
+  }catch(e){ alert('매핑 삭제 실패: ' + e.message); }
 }
 
 async function sbReq(url){
