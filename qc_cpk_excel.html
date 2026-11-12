@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.8</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.9</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -48,7 +48,8 @@
     .empty-list{text-align:center;padding:30px 12px;color:#64748b;font-size:12px;border:1px dashed #334155;border-radius:8px}
     .log{font-family:"Courier New",monospace;font-size:11px;color:#94a3b8;background:#0f172a;padding:10px;border-radius:6px;max-height:300px;overflow-y:auto;line-height:1.7}
     .log .ok{color:#86efac}.log .err{color:#fca5a5}.log .head{color:#2dd4bf;font-weight:700}.log .warn{color:#fcd34d}
-    table.pv{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+    table.pv{width:100%;min-width:640px;border-collapse:collapse;font-size:11px;margin-top:10px;table-layout:fixed}
+    table.pv td{overflow-wrap:anywhere}
     table.pv th,table.pv td{border:1px solid #334155;padding:5px 4px;text-align:center}
     table.pv th{background:#0f172a;color:#94a3b8;font-weight:600}
     table.pv td.l{text-align:left}
@@ -57,6 +58,7 @@
     .fil{font-size:10px;background:#713f12;color:#fde68a;padding:1px 5px;border-radius:4px}
     .ab{padding:3px 7px;font-size:11px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:4px;cursor:pointer;margin:1px;font-family:inherit}
     .ab:hover{border-color:#2dd4bf;color:#2dd4bf}
+    .ab:disabled{opacity:.3;cursor:default;border-color:#475569;color:#e2e8f0}
     .vals{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;padding:6px 2px}
     @media (max-width:600px){.vals{grid-template-columns:repeat(5,1fr)}}
     .vc{background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px 2px;text-align:center;line-height:1.25}
@@ -71,7 +73,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.8</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.9</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -695,7 +697,7 @@ function renderPreview(){
   if(!jobs.length){ box.innerHTML = ''; return; }
   const low = jobs.map(j => _res.get(j.item.key)).filter(r => !r.empty && r.st.cpk !== null && r.st.cpk < cpkStd()).length;
   box.innerHTML = `<div class="small" style="margin-top:10px">Cpk ${cpkStd()} 미만 <b class="${low?'bad':'good'}">${low}건</b> · 평행이동은 산포를 바꾸지 않아 Cpk는 Cp까지만 올라갑니다.</div>
-  <div style="overflow-x:auto"><table class="pv"><tr><th>품번</th><th>항목</th><th>실측</th><th>평균</th><th>Cp</th><th>Cpk</th><th>조정</th></tr>
+  <div style="overflow-x:auto"><table class="pv"><colgroup><col style="width:11%"><col><col style="width:9%"><col style="width:14%"><col style="width:7%"><col style="width:7%"><col style="width:258px"></colgroup><tr><th>품번</th><th>항목</th><th>실측</th><th>평균</th><th>Cp</th><th>Cpk</th><th>조정</th></tr>
   ${jobs.map(j => {
     const r = _res.get(j.item.key), k = j.item.key.replace(/'/g,"\\'");
     if(r.empty) return `<tr><td class="l">${esc(r.part.part_number)}</td><td class="l">${r.spec.item_no}. ${esc(r.label)}</td><td colspan="5" class="bad">실측값 없음 → 제외</td></tr>`;
@@ -706,7 +708,7 @@ function renderPreview(){
       <td>${fx(st.mean, r.dec+1)}${r.shift?`<span class="adj">${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}</span>`:''}</td>
       <td>${st.sd === 0 ? '<span class="small" title="값이 모두 같음">σ=0</span>' : fx(st.cp,2)}</td>
       <td class="${st.cpk===null?'':(bad?'bad':'good')}">${fx(st.cpk,2)}</td>
-      <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${(r.shift || Object.keys(r.edits||{}).length)?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`
+      <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button><button class="ab" onclick="adjust('${k}','reset')" ${(r.shift || Object.keys(r.edits||{}).length) ? '' : 'disabled'}>되돌리기</button></td></tr>`
       + (_openVals.has(j.item.key) ? `<tr><td colspan="7" style="text-align:left;background:#111827">${valsHtml(r)}</td></tr>` : '');
   }).join('')}</table></div>`;
 }
