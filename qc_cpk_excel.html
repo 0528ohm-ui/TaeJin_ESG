@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.5</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.6</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -71,7 +71,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.5</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.6</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -111,6 +111,7 @@
     </div>
     <div class="row-3">
       <div class="fg"><label>실측 사용 개수 (1~30, 나머지는 보충)</label><input type="number" id="nReal" value="5" min="1" max="30" step="1"></div>
+      <div class="fg"><label>Cpk 합격 기준 (이상이면 양호)</label><input type="number" id="cpkStd" value="1.65" min="0.5" max="3" step="0.01" oninput="renderPreview()"></div>
     </div>
     <button type="button" class="btn btn-primary" onclick="preview()" id="pvBtn" style="margin-top:4px">🔍 Cpk 미리보기 (계산)</button>
     <div id="pvBox"></div>
@@ -134,6 +135,11 @@ const QC_URL = 'https://omngtyewdaqpphnzeate.supabase.co';
 const QC_KEY = 'sb_publishable_9j2YkkL-7ul1TrhH-NjVdQ_vWDG2-1D';
 const N_SAMPLE = 30;          // 공정능력 표본 수 (출력 양식 3줄 × 10칸)
 // [v0.5] 실측을 몇 개까지 모을지 (기본 5개 = 기존 엑셀 방식). 나머지는 실측 범위 안에서 보충해 30개.
+// [v0.6] Cpk 합격 기준 (기본 1.65, 종전 1.33)
+function cpkStd(){
+  const v = parseFloat(document.getElementById('cpkStd').value);
+  return isFinite(v) && v > 0 ? v : 1.65;
+}
 function nRealTarget(){
   const v = parseInt(document.getElementById('nReal').value, 10);
   return Math.min(N_SAMPLE, Math.max(1, isFinite(v) ? v : 5));
@@ -562,7 +568,7 @@ function buildSheet(wb, name, r, opts){
   ws.getRow(46).height = 26;
   mergeBox(ws, 'B46:C46', '결론', lab);
   const concl = st.cpk === null ? '판정 불가 (측정값 산포 없음 또는 규격 확인 필요)'
-              : (st.cpk >= 1.33 ? 'Cpk 가 1.33 이상으로 양호' : 'Cpk 가 1.33 미만으로 공정개선 필요');
+              : (st.cpk >= cpkStd() ? `Cpk 가 ${cpkStd()} 이상으로 양호` : `Cpk 가 ${cpkStd()} 미만으로 공정개선 필요`);
   mergeBox(ws, 'D46:M46', concl, { font:{ bold:true, size:10 } });
   // [v0.4] 수정값 표시 (자체관리용) — 수정한 칸 번호와 원래 값
   const edIdx = Object.keys(r.edits||{}).map(Number).sort((a,b) => a-b);
@@ -687,13 +693,13 @@ function renderPreview(){
   const box = document.getElementById('pvBox');
   const jobs = selectedJobs().filter(j => _res.has(j.item.key));
   if(!jobs.length){ box.innerHTML = ''; return; }
-  const low = jobs.map(j => _res.get(j.item.key)).filter(r => !r.empty && r.st.cpk !== null && r.st.cpk < 1.33).length;
-  box.innerHTML = `<div class="small" style="margin-top:10px">Cpk 1.33 미만 <b class="${low?'bad':'good'}">${low}건</b> · 평행이동은 산포를 바꾸지 않아 Cpk는 Cp까지만 올라갑니다.</div>
+  const low = jobs.map(j => _res.get(j.item.key)).filter(r => !r.empty && r.st.cpk !== null && r.st.cpk < cpkStd()).length;
+  box.innerHTML = `<div class="small" style="margin-top:10px">Cpk ${cpkStd()} 미만 <b class="${low?'bad':'good'}">${low}건</b> · 평행이동은 산포를 바꾸지 않아 Cpk는 Cp까지만 올라갑니다.</div>
   <div style="overflow-x:auto"><table class="pv"><tr><th>품번</th><th>항목</th><th>실측</th><th>평균</th><th>Cp</th><th>Cpk</th><th>조정</th></tr>
   ${jobs.map(j => {
     const r = _res.get(j.item.key), k = j.item.key.replace(/'/g,"\\'");
     if(r.empty) return `<tr><td class="l">${esc(r.part.part_number)}</td><td class="l">${r.spec.item_no}. ${esc(r.label)}</td><td colspan="5" class="bad">실측값 없음 → 제외</td></tr>`;
-    const st = r.st, bad = st.cpk !== null && st.cpk < 1.33;
+    const st = r.st, bad = st.cpk !== null && st.cpk < cpkStd();
     return `<tr><td class="l">${esc(r.part.part_number)}</td>
       <td class="l">${r.spec.item_no}. ${esc(r.label)}<div class="small">${esc(r.spec.spec_text||'')}</div></td>
       <td>${r.nReal}개/${r.nDays}일${r.nFill?`<div><span class="fil">보충 ${r.nFill}</span></div>`:''}${Object.keys(r.edits||{}).length?`<div><span class="adj" style="background:#581c87;color:#e9d5ff">수정 ${Object.keys(r.edits).length}</span></div>`:''}</td>
