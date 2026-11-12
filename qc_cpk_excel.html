@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.1</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.2</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -48,6 +48,15 @@
     .empty-list{text-align:center;padding:30px 12px;color:#64748b;font-size:12px;border:1px dashed #334155;border-radius:8px}
     .log{font-family:"Courier New",monospace;font-size:11px;color:#94a3b8;background:#0f172a;padding:10px;border-radius:6px;max-height:300px;overflow-y:auto;line-height:1.7}
     .log .ok{color:#86efac}.log .err{color:#fca5a5}.log .head{color:#2dd4bf;font-weight:700}.log .warn{color:#fcd34d}
+    table.pv{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+    table.pv th,table.pv td{border:1px solid #334155;padding:5px 4px;text-align:center}
+    table.pv th{background:#0f172a;color:#94a3b8;font-weight:600}
+    table.pv td.l{text-align:left}
+    .bad{color:#f87171;font-weight:800}.good{color:#86efac;font-weight:700}
+    .adj{font-size:10px;background:#1e3a8a;color:#bfdbfe;padding:1px 5px;border-radius:4px;margin-left:3px}
+    .fil{font-size:10px;background:#713f12;color:#fde68a;padding:1px 5px;border-radius:4px}
+    .ab{padding:3px 7px;font-size:11px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:4px;cursor:pointer;margin:1px;font-family:inherit}
+    .ab:hover{border-color:#2dd4bf;color:#2dd4bf}
     .progress{height:8px;background:#0f172a;border-radius:4px;overflow:hidden;margin:8px 0 4px}
     .progress-fill{height:100%;background:linear-gradient(135deg,#0d9488,#2dd4bf);transition:width .3s;width:0}
   </style>
@@ -55,7 +64,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.1</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.2</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -72,13 +81,14 @@
   <div class="card" id="selCard" style="display:none">
     <div class="card-title">📦 품목 · 검사항목 선택</div>
     <div class="info-box">
-      품번을 누르면 검사항목이 펼쳐집니다. 특별특성(SC 등) 항목은 품번 체크 시 자동 선택.<br>
+      <b>특별특성 항목만</b> 표시합니다 ('I' 단독은 제외). 품번을 체크하면 그 품번의 특별특성 항목이 모두 선택됩니다.<br>
       실측값은 기준일부터 <b>과거로 하루씩</b> 모아 30개가 차면 멈춥니다. 전체 기간을 모아도 30개 미만이면 <b>실측값 범위 안에서</b> 나머지를 채웁니다.
     </div>
     <div class="fg" style="margin-bottom:8px"><input type="text" id="search" placeholder="품번·품명 검색 (예: 1862, ENCODER)" oninput="renderParts()"></div>
     <div class="toolbar">
       <button onclick="toggleOnlySel()" id="onlySelBtn">선택한 것만 보기</button>
       <button onclick="clearAll()">전체 해제</button>
+      <button onclick="toggleShowAll()" id="showAllBtn">특별특성 아닌 항목도 보기</button>
       <span class="count" id="selCount">0개 항목 선택</span>
     </div>
     <div id="partList"></div>
@@ -92,7 +102,9 @@
       <div class="fg"><label>평가자</label><input type="text" id="evaluator" value="김 상 기"></div>
       <div class="fg"><label>작업설비</label><input type="text" id="workLine" value="Press"></div>
     </div>
-    <button type="button" class="btn btn-success" onclick="generate()" id="genBtn" style="margin-top:4px">📥 공정능력 엑셀 다운로드</button>
+    <button type="button" class="btn btn-primary" onclick="preview()" id="pvBtn" style="margin-top:4px">🔍 Cpk 미리보기 (계산)</button>
+    <div id="pvBox"></div>
+    <button type="button" class="btn btn-success" onclick="generate()" id="genBtn" style="margin-top:10px">📥 공정능력 엑셀 다운로드</button>
     <div id="runProgress" style="display:none;margin-top:12px">
       <div class="progress"><div class="progress-fill" id="progFill"></div></div>
       <div id="progLabel" class="small" style="text-align:center;margin-top:6px"></div>
@@ -178,6 +190,23 @@ async function loadMaster(){
   }catch(e){ setStatus('❌ '+e.message, '#fca5a5'); }
 }
 
+// ===== 공정능력 대상 = 특별특성 항목 ('I' 단독 제외) =====
+//   DB special_char 예: 'M,SC', 'SC.I', 'M1,F', '◇', 'HIC', 'M / 1.5구간 87.17이상관리'(코드 + 메모)
+//   '/' 앞부분만 코드로 보고, 쉼표·마침표·공백으로 나눈 코드 중 'I' 아닌 것이 하나라도 있으면 대상.
+//   '14. 조도: 4개소 측정후 Max. 기재' 처럼 메모만 들어간 값은 코드 형식이 아니라 대상 아님.
+function scCodes(sc){
+  const head = String(sc||'').split('/')[0].toUpperCase();
+  return head.split(/[,.\s]+/).filter(Boolean);
+}
+function isCpkTarget(spec){
+  const codes = scCodes(spec.special_char);
+  if(!codes.length || !codes.every(c => /^([A-Z]{1,3}\d?|◇)$/.test(c))) return false;
+  return codes.some(c => c !== 'I');
+}
+function scShort(sc){ return scCodes(sc).join(','); }
+let _showAll = false;
+function toggleShowAll(){ _showAll = !_showAll; document.getElementById('showAllBtn').textContent = _showAll ? '특별특성 항목만 보기' : '특별특성 아닌 항목도 보기'; renderParts(); }
+
 // 같은 항목의 옛 버전 spec은 하나로 묶어 '현재 spec'만 표시 (valid_to 없는 것 우선, 없으면 가장 최근 id)
 function itemsOf(partId){
   const map = new Map();
@@ -189,7 +218,8 @@ function itemsOf(partId){
     const curOpen = !g.cur.valid_to, sOpen = !s.valid_to;
     if((sOpen && !curOpen) || (sOpen === curOpen && s.id > g.cur.id)) g.cur = s;
   });
-  return [...map.values()];
+  const all = [...map.values()];
+  return _showAll ? all : all.filter(g => isCpkTarget(g.cur));
 }
 
 function renderParts(){
@@ -218,22 +248,20 @@ function renderParts(){
       <div class="items">${items.map(it => {
         const s = it.cur;
         return `<label class="item"><input type="checkbox" ${_sel.has(it.key)?'checked':''} onchange="toggleItem('${it.key.replace(/'/g,"\\'")}', this.checked)">
-          <span class="nm">${s.item_no}. ${esc(itemLabel(s))} ${s.special_char?`<span class="sc">${esc(s.special_char)}</span>`:''}</span>
+          <span class="nm">${s.item_no}. ${esc(itemLabel(s))} ${scShort(s.special_char)?`<span class="sc">${esc(scShort(s.special_char))}</span>`:''}</span>
           <span class="sp">${esc(s.spec_text||'')} · ${esc(s.inspection_method||'')}</span></label>`;
       }).join('')}</div>
     </div>`;
   }).join('');
   updateCount();
+  if(typeof renderPreview === 'function') renderPreview();   // 선택이 바뀌면 미리보기 표도 맞춤
 }
 function togglePartOpen(id){ _open.has(id) ? _open.delete(id) : _open.add(id); renderParts(); }
-// 품번 체크: 특별특성 항목이 있으면 그것만, 없으면 전체 항목 선택 / 해제는 전부
+// 품번 체크: 화면에 보이는 항목(기본 = 특별특성 항목) 전부 선택 / 해제
 function togglePart(id, v){
   const items = itemsOf(id);
-  if(v){
-    const sc = items.filter(it => it.cur.special_char && String(it.cur.special_char).trim());
-    (sc.length ? sc : items).forEach(it => _sel.add(it.key));
-    _open.add(id);
-  } else items.forEach(it => _sel.delete(it.key));
+  if(v){ items.forEach(it => _sel.add(it.key)); _open.add(id); }
+  else items.forEach(it => _sel.delete(it.key));
   saveSel(); renderParts();
 }
 function toggleItem(k, v){ v ? _sel.add(k) : _sel.delete(k); saveSel(); renderParts(); }
@@ -551,41 +579,130 @@ function buildList(wb, results, opts){
 }
 
 // ===== 6. 생성 =====
+// ===== 6. 미리보기 · Cpk 조정 =====
+//   _res: 항목키 → 계산 결과. orig = 모은 실측+보충 30개(고정), shift = 평행이동량.
+//   values = orig + shift (측정 자릿수로 반올림). 중심조절·▲▼는 shift만 바꾸므로 [되돌리기]로 원복 가능.
+let _res = new Map();
+let _resBase = '';   // 계산할 때 쓴 기준일 (바뀌면 다시 계산)
+
+function selectedJobs(){
+  const jobs = [];
+  _parts.forEach(p => itemsOf(p.id).forEach(it => { if(_sel.has(it.key)) jobs.push({ part:p, item:it }); }));
+  return jobs;
+}
+
+async function computeOne(part, item, baseDate){
+  const s = item.cur, label = itemLabel(s), sp = parseSpec(s);
+  const col = await collectValues(item.ids, baseDate);
+  if(!col.values.length) return { key:item.key, part, spec:s, label, empty:true };
+  const { values, nFill } = fillToN(col.values);
+  const d0 = col.days[0], d1 = col.days[col.days.length-1];
+  const r = { key:item.key, part, spec:s, label, sp, orig: values, nReal: col.values.length, nFill,
+              nDays: col.days.length, dec: decimalsOf(col.values), shift: 0,
+              dateText: d0 === d1 ? fmtDate(d0) : `${fmtDate(d0)} ~ ${fmtDate(d1)}`, unit: unitOf(label) };
+  applyShift(r);
+  return r;
+}
+
+function applyShift(r){
+  const f = Math.pow(10, r.dec);
+  r.values = r.orig.map(v => Math.round((v + r.shift) * f) / f);
+  r.st = stats(r.values, r.sp);
+}
+
+// 규격 중앙: 양측 = (상한+하한)/2, 이하공차(Max) = 상한/2 (하한 0 기준), 이상공차(Min) = 중앙 없음
+function specCenter(sp){
+  if(sp.type === 'A') return (sp.usl + sp.lsl) / 2;
+  if(sp.type === 'B') return sp.usl / 2;
+  return null;
+}
+
+function adjust(key, mode){
+  const r = _res.get(key); if(!r || r.empty) return;
+  const unit = Math.pow(10, -r.dec), f = Math.pow(10, r.dec);
+  const origMean = r.orig.reduce((a,b) => a+b, 0) / r.orig.length;
+  if(mode === 'center'){
+    const c = specCenter(r.sp);
+    if(c === null){ alert('이상공차(Min) 항목은 중앙이 없어 중심조절을 할 수 없습니다'); return; }
+    r.shift = Math.round((c - origMean) * f) / f;
+  }
+  else if(mode === 'up') r.shift = Math.round((r.shift + unit) * f) / f;
+  else if(mode === 'down') r.shift = Math.round((r.shift - unit) * f) / f;
+  else if(mode === 'reset') r.shift = 0;
+  applyShift(r);
+  renderPreview();
+}
+
+const fx = (v, d) => (v === null || v === undefined || !isFinite(v)) ? '-' : v.toFixed(d);
+function renderPreview(){
+  const box = document.getElementById('pvBox');
+  const jobs = selectedJobs().filter(j => _res.has(j.item.key));
+  if(!jobs.length){ box.innerHTML = ''; return; }
+  const low = jobs.map(j => _res.get(j.item.key)).filter(r => !r.empty && r.st.cpk !== null && r.st.cpk < 1.33).length;
+  box.innerHTML = `<div class="small" style="margin-top:10px">Cpk 1.33 미만 <b class="${low?'bad':'good'}">${low}건</b> · 평행이동은 산포를 바꾸지 않아 Cpk는 Cp까지만 올라갑니다.</div>
+  <div style="overflow-x:auto"><table class="pv"><tr><th>품번</th><th>항목</th><th>실측</th><th>평균</th><th>Cp</th><th>Cpk</th><th>조정</th></tr>
+  ${jobs.map(j => {
+    const r = _res.get(j.item.key), k = j.item.key.replace(/'/g,"\\'");
+    if(r.empty) return `<tr><td class="l">${esc(r.part.part_number)}</td><td class="l">${r.spec.item_no}. ${esc(r.label)}</td><td colspan="5" class="bad">실측값 없음 → 제외</td></tr>`;
+    const st = r.st, bad = st.cpk !== null && st.cpk < 1.33;
+    return `<tr><td class="l">${esc(r.part.part_number)}</td>
+      <td class="l">${r.spec.item_no}. ${esc(r.label)}<div class="small">${esc(r.spec.spec_text||'')}</div></td>
+      <td>${r.nReal}개/${r.nDays}일${r.nFill?`<div><span class="fil">보충 ${r.nFill}</span></div>`:''}</td>
+      <td>${fx(st.mean, r.dec+1)}${r.shift?`<span class="adj">${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}</span>`:''}</td>
+      <td>${fx(st.cp,2)}</td>
+      <td class="${st.cpk===null?'':(bad?'bad':'good')}">${fx(st.cpk,2)}</td>
+      <td style="white-space:nowrap"><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${r.shift?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`;
+  }).join('')}</table></div>`;
+}
+
+// 선택 항목 중 아직 계산 안 한 것만 계산 (조정값 유지). 기준일이 바뀌면 전부 다시 계산.
+async function ensureComputed(){
+  const baseDate = document.getElementById('baseDate').value || todayStr();
+  if(baseDate !== _resBase){ _res.clear(); _resBase = baseDate; }
+  const jobs = selectedJobs();
+  const todo = jobs.filter(j => !_res.has(j.item.key));
+  for(let i = 0; i < todo.length; i++){
+    const { part, item } = todo[i];
+    setProgress(i / todo.length * 90, `계산 ${i+1}/${todo.length}: ${part.part_number} ${itemLabel(item.cur)}`);
+    _res.set(item.key, await computeOne(part, item, baseDate));
+  }
+  return jobs;
+}
+
+async function preview(){
+  if(!_sel.size){ alert('검사항목을 1개 이상 선택하세요'); return; }
+  const btn = document.getElementById('pvBtn'); btn.disabled = true;
+  document.getElementById('runProgress').style.display = 'block';
+  try{ await ensureComputed(); setProgress(100, '계산 완료'); renderPreview(); }
+  catch(e){ alert('계산 오류: ' + e.message); console.error(e); }
+  finally{ btn.disabled = false; }
+}
+
+// ===== 7. 엑셀 생성 =====
 async function generate(){
   const baseDate = document.getElementById('baseDate').value || todayStr();
   const opts = { evaluator: document.getElementById('evaluator').value.trim(), workLine: document.getElementById('workLine').value.trim() };
-  // 선택 항목 → 품번 순서대로
-  const jobs = [];
-  _parts.forEach(p => itemsOf(p.id).forEach(it => { if(_sel.has(it.key)) jobs.push({ part:p, item:it }); }));
-  if(!jobs.length){ alert('검사항목을 1개 이상 선택하세요'); return; }
+  if(!_sel.size){ alert('검사항목을 1개 이상 선택하세요'); return; }
 
   const btn = document.getElementById('genBtn'); btn.disabled = true;
   document.getElementById('runProgress').style.display = 'block';
   document.getElementById('logBox').innerHTML = '';
-  log(`===== 공정능력 생성 (기준일 ${baseDate}, ${jobs.length}개 항목) =====`, 'head');
   try{
+    const jobs = await ensureComputed();
+    renderPreview();
+    log(`===== 공정능력 생성 (기준일 ${baseDate}, ${jobs.length}개 항목) =====`, 'head');
     const results = [];
-    for(let i = 0; i < jobs.length; i++){
-      const { part, item } = jobs[i];
-      const s = item.cur, label = itemLabel(s);
-      setProgress(i / jobs.length * 90, `${i+1}/${jobs.length}: ${part.part_number} ${label}`);
-      const sp = parseSpec(s);
-      const col = await collectValues(item.ids, baseDate);
-      const nReal = col.values.length;
-      if(!nReal){ log(`⚠ ${part.part_number} ${label}: 실측값 없음 → 제외`, 'warn'); continue; }
-      const { values, nFill } = fillToN(col.values);
-      const st = stats(values, sp);
-      const dec = decimalsOf(col.values);
-      const d0 = col.days[0], d1 = col.days[col.days.length-1];
-      const dateText = d0 === d1 ? fmtDate(d0) : `${fmtDate(d0)} ~ ${fmtDate(d1)}`;
-      const msg = `${part.part_number} ${label}: 실측 ${nReal}개 (${col.days.length}일, ${dateText})` + (nFill ? ` + 보충 ${nFill}개` : '') +
-                  ` → Cpk ${st.cpk === null ? '-' : st.cpk.toFixed(2)}`;
-      log((nFill ? '△ ' : '✅ ') + msg, nFill ? 'warn' : 'ok');
-      if(sp.type === '?') log(`   ⚠ 규격(${s.spec_text||'-'})을 해석하지 못해 Cp/Cpk 계산 불가`, 'err');
+    jobs.forEach(({ part, item }) => {
+      const r = _res.get(item.key);
+      if(r.empty){ log(`⚠ ${part.part_number} ${r.label}: 실측값 없음 → 제외`, 'warn'); return; }
+      const st = r.st;
+      const msg = `${part.part_number} ${r.label}: 실측 ${r.nReal}개 (${r.nDays}일, ${r.dateText})` + (r.nFill ? ` + 보충 ${r.nFill}개` : '') +
+                  (r.shift ? ` · 평행이동 ${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}` : '') + ` → Cpk ${st.cpk === null ? '-' : st.cpk.toFixed(2)}`;
+      log((r.nFill || r.shift ? '△ ' : '✅ ') + msg, r.nFill || r.shift ? 'warn' : 'ok');
+      if(r.sp.type === '?') log(`   ⚠ 규격(${r.spec.spec_text||'-'})을 해석하지 못해 Cp/Cpk 계산 불가`, 'err');
       if(st.sd === 0) log('   ⚠ 측정값이 모두 같아 표준편차 0 → Cp/Cpk 계산 불가', 'err');
-      results.push({ part, spec:s, label, sp, values, nReal, nFill, st, dec, dateText, unit: unitOf(label),
-                     runPng: drawRunChart(values, sp, st), histPng: drawHistogram(values, sp, st) });
-    }
+      results.push(Object.assign({}, r, { runPng: drawRunChart(r.values, r.sp, st), histPng: drawHistogram(r.values, r.sp, st) }));
+    });
     if(!results.length){ log('❌ 만들 수 있는 항목이 없습니다', 'err'); return; }
 
     setProgress(92, '엑셀 작성 중...');
