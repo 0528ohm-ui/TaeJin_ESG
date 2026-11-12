@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.9</title>
+  <title>공정능력 성적서 엑셀 다운로드 v1.0</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -66,6 +66,9 @@
     .vc.fill{background:#422006;border-color:#a16207}.vc.out .v{color:#f87171}.vc.ext{border-color:#e2e8f0}
     .vc{cursor:pointer}.vc:hover{border-color:#2dd4bf}
     .vc.edit{background:#3b0764;border-color:#a855f7}.vc.edit .v{color:#e9d5ff}
+    .fg textarea{width:100%;padding:10px 12px;font-size:12px;font-family:inherit;background:#0f172a;border:1.5px solid #475569;border-radius:8px;color:#e2e8f0;resize:vertical}
+    .pres{font-size:11px;line-height:1.7;margin-top:6px}
+    .pres .ok{color:#86efac}.pres .ng{color:#fca5a5}.pres .wn{color:#fcd34d}
     .progress{height:8px;background:#0f172a;border-radius:4px;overflow:hidden;margin:8px 0 4px}
     .progress-fill{height:100%;background:linear-gradient(135deg,#0d9488,#2dd4bf);transition:width .3s;width:0}
   </style>
@@ -73,7 +76,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.9</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v1.0</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -93,6 +96,16 @@
       <b>특별특성 항목만</b> 표시합니다 ('I' 단독은 제외). 품번을 체크하면 그 품번의 특별특성 항목이 모두 선택됩니다.<br>
       실측값은 기준일부터 <b>과거로 하루씩</b> 모아 '실측 사용 개수'(기본 5개)가 차면 멈추고, 나머지는 <b>실측값 범위 안에서</b> 채워 30개를 만듭니다.
     </div>
+    <!-- [v1.0] 엑셀 품번 칸 복사 → 붙여넣기 → 한 번에 체크 -->
+    <details id="pasteBox" style="margin-bottom:10px">
+      <summary style="cursor:pointer;font-size:12px;color:#2dd4bf;font-weight:700">📋 품번 목록 붙여넣기로 한 번에 선택</summary>
+      <div class="fg" style="margin:8px 0 6px"><textarea id="pasteTxt" rows="6" placeholder="엑셀에서 품번 칸을 복사해 붙여넣으세요 (한 줄에 하나, 쉼표·탭 구분도 가능)"></textarea></div>
+      <div class="toolbar" style="margin-bottom:0">
+        <label class="small" style="display:flex;align-items:center;gap:4px;color:#94a3b8"><input type="checkbox" id="pasteClear" checked> 기존 선택 지우고</label>
+        <button onclick="applyPaste()">✅ 붙여넣은 품번 체크</button>
+      </div>
+      <div id="pasteRes" class="pres"></div>
+    </details>
     <div class="fg" style="margin-bottom:8px"><input type="text" id="search" placeholder="품번·품명 검색 (예: 1862, ENCODER)" oninput="renderParts()"></div>
     <div class="toolbar">
       <button onclick="toggleOnlySel()" id="onlySelBtn">선택한 것만 보기</button>
@@ -153,6 +166,46 @@ let _specsByPart = {};        // part_id → 수치 항목 spec 배열 (같은 �
 let _sel = new Set();         // 선택 키 'part_id|item_no|item_name'
 let _open = new Set();        // 펼친 품번
 let _onlySel = false;
+let _alias = {};              // [v1.0] qc_part_alias: 엑셀/출하 품번 → qc_part 품번
+
+// [v1.0] 붙여넣은 품번 → qc_part 찾기 (출하성적서 페이지와 같은 순서)
+//   1) 매핑표(qc_part_alias)  2) 정확 일치  3) 괄호 제거  4) 뒤에 -01~-99 붙여 찾기
+function findPart(raw){
+  const byNo = {}; _parts.forEach(p => byNo[String(p.part_number).trim()] = p);
+  const t = String(raw).trim();
+  if(_alias[t] && byNo[_alias[t]]) return { part: byNo[_alias[t]], how: '매핑' };
+  if(byNo[t]) return { part: byNo[t], how: '정확' };
+  const np = t.replace(/\([^)]*\)/g, '').trim();
+  if(np !== t && byNo[np]) return { part: byNo[np], how: '괄호제거' };
+  if(!/-\d{2}$/.test(np)){
+    for(let n = 1; n <= 99; n++){ const c = np + '-' + String(n).padStart(2,'0'); if(byNo[c]) return { part: byNo[c], how: '접미사' }; }
+  }
+  return null;
+}
+
+function applyPaste(){
+  const raw = document.getElementById('pasteTxt').value;
+  const list = [...new Set(raw.split(/[\r\n\t,;]+/).map(x => x.trim()).filter(Boolean))];
+  if(!list.length){ alert('품번을 붙여넣으세요'); return; }
+  if(document.getElementById('pasteClear').checked) _sel.clear();
+  const ok = [], noSc = [], ng = [];
+  list.forEach(no => {
+    const f = findPart(no);
+    if(!f){ ng.push(no); return; }
+    const items = itemsOf(f.part.id);
+    if(!items.length){ noSc.push(`${no} → ${f.part.part_number}`); return; }
+    items.forEach(it => _sel.add(it.key));
+    ok.push(`${no}${no !== f.part.part_number ? ' → ' + f.part.part_number : ''} (${items.length})`);
+  });
+  saveSel();
+  _onlySel = true; document.getElementById('onlySelBtn').textContent = '전체 보기';
+  document.getElementById('search').value = '';
+  renderParts();
+  document.getElementById('pasteRes').innerHTML =
+    `<div class="ok">✅ 체크 ${ok.length}개 품번: ${esc(ok.join(', '))}</div>`
+    + (noSc.length ? `<div class="wn">⚠ 품번은 찾았지만 특별특성 항목 없음 ${noSc.length}개: ${esc(noSc.join(', '))}</div>` : '')
+    + (ng.length ? `<div class="ng">❌ 못 찾음 ${ng.length}개: ${esc(ng.join(', '))} — 출하검사 성적서 페이지 '부품번호 매핑 관리'에서 등록하면 다음부터 자동으로 잡힘</div>` : '');
+}
 
 async function sbReq(url){
   const r = await fetch(QC_URL+url, {headers:{'apikey':QC_KEY,'Authorization':'Bearer '+QC_KEY}});
@@ -194,10 +247,13 @@ window.addEventListener('DOMContentLoaded', () => {
 async function loadMaster(){
   setStatus('⏳ 품목·검사항목 조회 중...');
   try{
-    const [parts, specs] = await Promise.all([
+    const [parts, specs, aliases] = await Promise.all([
       sbReqAll('/rest/v1/qc_part?select=id,part_number,part_name,material,model,customer,is_active&order=part_number'),
-      sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,measure_zone,inspection_method,special_char,spec_text,lsl,usl,is_visual,valid_from,valid_to&order=part_id.asc,item_no.asc,id.asc')
+      sbReqAll('/rest/v1/qc_part_spec?select=id,part_id,item_no,item_name,measure_zone,inspection_method,special_char,spec_text,lsl,usl,is_visual,valid_from,valid_to&order=part_id.asc,item_no.asc,id.asc'),
+      sbReqAll('/rest/v1/qc_part_alias?select=alias,part_number').catch(() => [])   // [v1.0] 출하번호 → qc_part 매핑 (출하성적서 페이지와 공용)
     ]);
+    _alias = {};
+    (aliases || []).forEach(a => { _alias[String(a.alias).trim()] = String(a.part_number).trim(); });
     _parts = parts.filter(p => p.is_active !== false && p.customer !== 'TEST');
     _specsByPart = {};
     specs.filter(s => s.is_visual !== true).forEach(s => {
