@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>공정능력 성적서 엑셀 다운로드 v0.2</title>
+  <title>공정능력 성적서 엑셀 다운로드 v0.3</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -57,6 +57,11 @@
     .fil{font-size:10px;background:#713f12;color:#fde68a;padding:1px 5px;border-radius:4px}
     .ab{padding:3px 7px;font-size:11px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;border-radius:4px;cursor:pointer;margin:1px;font-family:inherit}
     .ab:hover{border-color:#2dd4bf;color:#2dd4bf}
+    .vals{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;padding:6px 2px}
+    @media (max-width:600px){.vals{grid-template-columns:repeat(5,1fr)}}
+    .vc{background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px 2px;text-align:center;line-height:1.25}
+    .vc .d{font-size:9px;color:#64748b}.vc .v{font-size:11px;font-weight:700}.vc .o{font-size:9px;color:#93c5fd}
+    .vc.fill{background:#422006;border-color:#a16207}.vc.out .v{color:#f87171}.vc.ext{border-color:#e2e8f0}
     .progress{height:8px;background:#0f172a;border-radius:4px;overflow:hidden;margin:8px 0 4px}
     .progress-fill{height:100%;background:linear-gradient(135deg,#0d9488,#2dd4bf);transition:width .3s;width:0}
   </style>
@@ -64,7 +69,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.2</span></h1>
+  <h1>📈 공정능력 성적서 엑셀 다운로드 <span class="ver">v0.3</span></h1>
   <p>공정검사 실측값(일 단위, 최근 날짜부터) 30개 → Cp/Cpk + Run Chart + 히스토그램</p>
 </div>
 
@@ -332,7 +337,7 @@ async function collectValues(ids, baseDate){
     if(picked.length >= N_SAMPLE) break;
   }
   picked.sort((a,b) => a.d.localeCompare(b.d));
-  return { values: picked.map(p => p.v), days: usedDays.sort(), totalDays: days.length };
+  return { values: picked.map(p => p.v), dates: picked.map(p => p.d), days: usedDays.sort(), totalDays: days.length };
 }
 
 function decimalsOf(arr){
@@ -343,10 +348,11 @@ function decimalsOf(arr){
 
 // 부족분 채우기: 실측 최소~최대 범위 안, 실측 평균 쪽으로 몰리는 삼각분포. 실측 자릿수로 반올림.
 //   채운 값은 실측 사이사이 무작위 위치에 끼워 넣음 (Run Chart가 한쪽에 몰리지 않게).
-function fillToN(real){
+function fillToN(real, dates){
   const out = real.slice();
+  const meta = real.map((v, i) => ({ d: dates ? dates[i] : '', fill: false }));   // [v0.3] 값별 날짜·보충 여부
   const nFill = N_SAMPLE - real.length;
-  if(nFill <= 0 || !real.length) return { values: out.slice(0, N_SAMPLE), nFill: 0 };
+  if(nFill <= 0 || !real.length) return { values: out.slice(0, N_SAMPLE), meta: meta.slice(0, N_SAMPLE), nFill: 0 };
   const mn = Math.min(...real), mx = Math.max(...real);
   const mode = real.reduce((a,b) => a+b, 0) / real.length;
   const dec = decimalsOf(real), f = Math.pow(10, dec);
@@ -359,8 +365,9 @@ function fillToN(real){
   for(let i = 0; i < nFill; i++){
     const pos = Math.floor(Math.random() * (out.length + 1));
     out.splice(pos, 0, tri());
+    meta.splice(pos, 0, { d: '', fill: true });
   }
-  return { values: out, nFill };
+  return { values: out, meta, nFill };
 }
 
 // ===== 3. 통계 =====
@@ -595,9 +602,9 @@ async function computeOne(part, item, baseDate){
   const s = item.cur, label = itemLabel(s), sp = parseSpec(s);
   const col = await collectValues(item.ids, baseDate);
   if(!col.values.length) return { key:item.key, part, spec:s, label, empty:true };
-  const { values, nFill } = fillToN(col.values);
+  const { values, meta, nFill } = fillToN(col.values, col.dates);
   const d0 = col.days[0], d1 = col.days[col.days.length-1];
-  const r = { key:item.key, part, spec:s, label, sp, orig: values, nReal: col.values.length, nFill,
+  const r = { key:item.key, part, spec:s, label, sp, orig: values, meta, nReal: col.values.length, nFill,
               nDays: col.days.length, dec: decimalsOf(col.values), shift: 0,
               dateText: d0 === d1 ? fmtDate(d0) : `${fmtDate(d0)} ~ ${fmtDate(d1)}`, unit: unitOf(label) };
   applyShift(r);
@@ -651,8 +658,31 @@ function renderPreview(){
       <td>${fx(st.mean, r.dec+1)}${r.shift?`<span class="adj">${r.shift>0?'+':''}${r.shift.toFixed(r.dec)}</span>`:''}</td>
       <td>${fx(st.cp,2)}</td>
       <td class="${st.cpk===null?'':(bad?'bad':'good')}">${fx(st.cpk,2)}</td>
-      <td style="white-space:nowrap"><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${r.shift?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`;
+      <td style="white-space:nowrap"><button class="ab" onclick="toggleVals('${k}')">${_openVals.has(j.item.key)?'값 닫기':'값 보기'}</button><button class="ab" onclick="adjust('${k}','center')" title="평균을 규격 중앙으로">중심</button><button class="ab" onclick="adjust('${k}','up')">▲</button><button class="ab" onclick="adjust('${k}','down')">▼</button>${r.shift?`<button class="ab" onclick="adjust('${k}','reset')">되돌리기</button>`:''}</td></tr>`
+      + (_openVals.has(j.item.key) ? `<tr><td colspan="7" style="text-align:left;background:#111827">${valsHtml(r)}</td></tr>` : '');
   }).join('')}</table></div>`;
+}
+
+// [v0.3] 모은 값 보기 — 엑셀에 들어가는 순서(1~30) 그대로. 날짜 = 검사일, 노란칸 = 보충값,
+//   빨간 글자 = 규격 밖, 흰 테두리 = 최소/최대. 평행이동했으면 원래 값도 작게 표시.
+let _openVals = new Set();
+function toggleVals(k){ _openVals.has(k) ? _openVals.delete(k) : _openVals.add(k); renderPreview(); }
+function valsHtml(r){
+  const real = r.orig.filter((v, i) => !r.meta[i].fill);
+  const rs = stats(real, r.sp);
+  const sp = r.sp, dec = r.dec;
+  const mn = Math.min(...r.values), mx = Math.max(...r.values);
+  const out = v => (sp.usl !== null && v > sp.usl + 1e-9) || (sp.lsl !== null && v < sp.lsl - 1e-9);
+  const cells = r.values.map((v, i) => {
+    const m = r.meta[i];
+    const cls = ['vc', m.fill ? 'fill' : '', out(v) ? 'out' : '', (v === mn || v === mx) ? 'ext' : ''].join(' ');
+    return `<div class="${cls}" title="${m.fill ? '보충값' : '실측 ' + m.d}"><div class="d">${i+1}${m.fill ? ' 보충' : ' · ' + m.d.slice(5).replace('-','/')}</div>`
+         + `<div class="v">${v.toFixed(dec)}</div>${r.shift ? `<div class="o">원 ${r.orig[i].toFixed(dec)}</div>` : ''}</div>`;
+  }).join('');
+  const nOut = r.values.filter(out).length;
+  return `<div class="small" style="color:#cbd5e1;margin:2px 0 4px">실측 ${real.length}개만: 최소 ${fx(rs.min,dec)} · 최대 ${fx(rs.max,dec)} · 평균 ${fx(rs.mean,dec+1)} · σ ${fx(rs.sd,4)} · Cp ${fx(rs.cp,2)} · Cpk ${fx(rs.cpk,2)}`
+       + ` &nbsp;|&nbsp; 규격 ${esc(r.spec.spec_text||'')} (하한 ${sp.lsl ?? '-'} / 상한 ${sp.usl ?? '-'})${nOut ? ` · <b class="bad">규격 밖 ${nOut}개</b>` : ''}</div>`
+       + `<div class="vals">${cells}</div>`;
 }
 
 // 선택 항목 중 아직 계산 안 한 것만 계산 (조정값 유지). 기준일이 바뀌면 전부 다시 계산.
