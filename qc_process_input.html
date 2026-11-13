@@ -2826,7 +2826,9 @@ function stashActiveTab() {
   t.reason = document.getElementById('insp-reason').value;
   t.remark = document.getElementById('insp-remark').value;
   // 스크롤 위치는 현재 variant 단위로 저장 (IW/OW 길이 다름)
-  if (t.variants[t.activeVariant]) {
+  // [v2.47] 측정 화면이 보이고 모달이 닫혀 있을 때만 — 이력·설정 화면이나 모달 중의 스크롤이 덮어쓰지 않게
+  const onMeasure = (typeof curNav === 'undefined' || curNav === 'measure') && _lockCount === 0;
+  if (onMeasure && t.variants[t.activeVariant]) {
     t.variants[t.activeVariant].scrollY = window.scrollY;
   }
 }
@@ -2920,6 +2922,18 @@ function sedongRawPrefill(partId, inputs) {
   } catch (e) { return false; }
 }
 // 페이지 로드(로그인) 후 저장돼 있던 탭 복원
+// [v2.47] 스크롤 위치도 임시저장 — 예전엔 입력·탭 전환 때만 저장돼서, 스크롤만 내려 보던 중
+//   브라우저가 탭을 정리했다 다시 열면(새로고침) 저장 안 된 위치(대부분 맨 위)로 돌아갔다.
+//   측정 화면에서 모달이 안 열려 있을 때만 저장 (이력·설정 화면의 스크롤이 섞이지 않게).
+function canStashScroll() {
+  return curNav === 'measure' && activeTabIdx >= 0 && _lockCount === 0;
+}
+window.addEventListener('scroll', () => { if (canStashScroll()) persistDraft(); }, { passive: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && canStashScroll()) persistDraftNow();
+});
+window.addEventListener('pagehide', () => { if (canStashScroll()) persistDraftNow(); });
+
 function restoreDraft() {
   let raw;
   try { raw = localStorage.getItem(SK.DRAFT); } catch (e) { return; }
