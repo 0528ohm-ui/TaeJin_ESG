@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.47</title>
+<title>공정검사 입력 v2.48</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -691,7 +691,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.47</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.48</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1659,13 +1659,11 @@ function unlockScroll() {
   }
 }
 
-let _addTabReturnY = null;   // [v2.47] 탭 추가 모달을 연 위치 — 새 탭도 이 위치에서 보이게
 function openAddTab() {
   const card = document.getElementById('part-card');
   const slot = document.getElementById('addtab-slot');
   if (!card || !slot) return;
   cancelPending();                       // 이전에 고르다 만 상태가 남아있으면 정리
-  _addTabReturnY = window.scrollY;
   lockScroll();                          // 카드를 빼기 전에 위치 저장
   slot.appendChild(card);
   document.getElementById('addtab-modal').style.display = 'flex';
@@ -2739,8 +2737,8 @@ async function confirmAddTab() {
     const fromModal = isAddTabOpen();
     if (fromModal) closeAddTab();   // [v2.10] 모달에서 추가했으면 닫고 측정 화면으로
     cancelPending();
-    // [v2.47] 모달에서 추가한 새 탭은 맨 위가 아니라 모달을 열었던 위치(측정 화면)에서 시작
-    if (fromModal && _addTabReturnY != null) tabs[tabs.length - 1].variants.forEach(v => { v.scrollY = _addTabReturnY; });
+    // [v2.48] 새 탭은 맨 위에서 시작 (v2.47의 '모달 연 위치에서 시작'은 엉뚱한 중간이 보여서 되돌림).
+    //   기존 탭 위치는 closeAddTab 이 스크롤을 복원한 뒤 switchTab→stashActiveTab 에서 저장된다.
     switchTab(tabs.length - 1);
   } catch(e) {
     document.getElementById('main-loading').style.display = 'none';
