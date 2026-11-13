@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.46</title>
+<title>공정검사 입력 v2.47</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -84,7 +84,10 @@ html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;bac
 /* 모달 제목이 이미 "＋ 탭 추가" 이므로 카드 안의 제목은 중복 */
 .addtab-slot .card-title{display:none}
 
-body.addtab-open{overflow:hidden}
+/* [v2.47] 모달 열 때 배경 스크롤 잠금은 html 에 건다.
+   html,body{height:100%} + overflow-x:clip 구조에선 body 에 overflow:hidden 을 걸면
+   문서 높이가 화면 높이로 줄어 스크롤이 맨 위(0)로 튀고, 풀어도 안 돌아왔다. */
+html.scroll-lock{overflow:hidden}
 
 /* [v2.09] 조회 전용(viewer) */
 .role-badge{font-size:12px;font-weight:700;background:#e0e7ff;color:#3730a3;padding:3px 9px;border-radius:6px;margin-right:6px}
@@ -688,7 +691,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.46</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.47</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -1643,11 +1646,27 @@ function pcToggle() {
 //   같은 DOM 을 그대로 쓰므로 검색·그룹선택·금형선택·설비호기 자동입력이
 //   평소 흐름 그대로 동작한다 (로직 복사 없음).
 // ══════════════════════════════════
+// [v2.47] 모달용 배경 스크롤 잠금 — 여러 모달이 겹쳐도 마지막에 닫힐 때만 풀고, 열기 전 위치로 복원
+let _lockCount = 0, _lockY = 0;
+function lockScroll() {
+  if (_lockCount++ === 0) { _lockY = window.scrollY; document.documentElement.classList.add('scroll-lock'); }
+}
+function unlockScroll() {
+  if (_lockCount === 0) return;
+  if (--_lockCount === 0) {
+    document.documentElement.classList.remove('scroll-lock');
+    window.scrollTo(0, _lockY);
+  }
+}
+
+let _addTabReturnY = null;   // [v2.47] 탭 추가 모달을 연 위치 — 새 탭도 이 위치에서 보이게
 function openAddTab() {
   const card = document.getElementById('part-card');
   const slot = document.getElementById('addtab-slot');
   if (!card || !slot) return;
   cancelPending();                       // 이전에 고르다 만 상태가 남아있으면 정리
+  _addTabReturnY = window.scrollY;
+  lockScroll();                          // 카드를 빼기 전에 위치 저장
   slot.appendChild(card);
   document.getElementById('addtab-modal').style.display = 'flex';
   document.body.classList.add('addtab-open');
@@ -1659,9 +1678,11 @@ function closeAddTab() {
   const card = document.getElementById('part-card');
   const anchor = document.getElementById('part-card-anchor');
   const modal = document.getElementById('addtab-modal');
+  const wasOpen = !!modal && modal.style.display !== 'none';
   if (card && anchor) anchor.after(card);   // 제자리 복귀
   if (modal) modal.style.display = 'none';
   document.body.classList.remove('addtab-open');
+  if (wasOpen) unlockScroll();              // [v2.47] 연 위치로 복원
   cancelPending();
   placeProdCheckCard();                     // [v2.04] 카드 위치 재정렬
 }
@@ -1687,13 +1708,16 @@ function openMesMap(code) {
     '<div class="mm-empty">부품번호나 부품명을 입력하세요</div>';
   document.getElementById('mesmap-modal').style.display = 'flex';
   document.body.classList.add('addtab-open');
+  lockScroll();
   setTimeout(() => document.getElementById('mm-search').focus(), 50);
 }
 
 function closeMesMap() {
   mmCode = null;
+  const wasOpen = document.getElementById('mesmap-modal').style.display !== 'none';
   document.getElementById('mesmap-modal').style.display = 'none';
   document.body.classList.remove('addtab-open');
+  if (wasOpen) unlockScroll();
 }
 
 // 부품 검색 — 측정탭과 같은 partMatches(한/영 오타 보정) 사용, 그룹은 한 줄로 묶음
@@ -2712,8 +2736,11 @@ async function confirmAddTab() {
     });
     document.getElementById('main-loading').style.display = 'none';
     pcOverride = null;   // [v2.05] 1회용 — 다음 탭은 다시 현재 시각
-    if (isAddTabOpen()) closeAddTab();   // [v2.10] 모달에서 추가했으면 닫고 측정 화면으로
+    const fromModal = isAddTabOpen();
+    if (fromModal) closeAddTab();   // [v2.10] 모달에서 추가했으면 닫고 측정 화면으로
     cancelPending();
+    // [v2.47] 모달에서 추가한 새 탭은 맨 위가 아니라 모달을 열었던 위치(측정 화면)에서 시작
+    if (fromModal && _addTabReturnY != null) tabs[tabs.length - 1].variants.forEach(v => { v.scrollY = _addTabReturnY; });
     switchTab(tabs.length - 1);
   } catch(e) {
     document.getElementById('main-loading').style.display = 'none';
@@ -2799,7 +2826,9 @@ function stashActiveTab() {
   t.reason = document.getElementById('insp-reason').value;
   t.remark = document.getElementById('insp-remark').value;
   // 스크롤 위치는 현재 variant 단위로 저장 (IW/OW 길이 다름)
-  if (t.variants[t.activeVariant]) {
+  // [v2.47] 측정 화면이 보이고 모달이 닫혀 있을 때만 — 이력·설정 화면이나 모달 중의 스크롤이 덮어쓰지 않게
+  const onMeasure = (typeof curNav === 'undefined' || curNav === 'measure') && _lockCount === 0;
+  if (onMeasure && t.variants[t.activeVariant]) {
     t.variants[t.activeVariant].scrollY = window.scrollY;
   }
 }
@@ -2893,6 +2922,18 @@ function sedongRawPrefill(partId, inputs) {
   } catch (e) { return false; }
 }
 // 페이지 로드(로그인) 후 저장돼 있던 탭 복원
+// [v2.47] 스크롤 위치도 임시저장 — 예전엔 입력·탭 전환 때만 저장돼서, 스크롤만 내려 보던 중
+//   브라우저가 탭을 정리했다 다시 열면(새로고침) 저장 안 된 위치(대부분 맨 위)로 돌아갔다.
+//   측정 화면에서 모달이 안 열려 있을 때만 저장 (이력·설정 화면의 스크롤이 섞이지 않게).
+function canStashScroll() {
+  return curNav === 'measure' && activeTabIdx >= 0 && _lockCount === 0;
+}
+window.addEventListener('scroll', () => { if (canStashScroll()) persistDraft(); }, { passive: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && canStashScroll()) persistDraftNow();
+});
+window.addEventListener('pagehide', () => { if (canStashScroll()) persistDraftNow(); });
+
 function restoreDraft() {
   let raw;
   try { raw = localStorage.getItem(SK.DRAFT); } catch (e) { return; }
@@ -5678,8 +5719,8 @@ function openDrawing() {
 
   // ★ 모달을 먼저 열어야 wrap이 실제 레이아웃 크기를 가짐 (안 열면 rect=0 → 마커 좌상단 몰림)
   document.getElementById('drawing-modal-title').textContent = `${selectedPart.part_number} 도면`;
+  if (!document.getElementById('drawing-modal').classList.contains('open')) lockScroll();   // [v2.47] body overflow 대신
   document.getElementById('drawing-modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
 
   const markersData = specs.filter(s => s.marker_x != null && s.marker_y != null);
 
@@ -5908,8 +5949,10 @@ function setupDrawingZoom(wrap, imgEl) {
 }
 
 function closeDrawing() {
-  document.getElementById('drawing-modal').classList.remove('open');
-  document.body.style.overflow = '';
+  const m = document.getElementById('drawing-modal');
+  const wasOpen = m.classList.contains('open');
+  m.classList.remove('open');
+  if (wasOpen) unlockScroll();
   _zoomState = null;
 }
 
@@ -9221,10 +9264,13 @@ function openSpecRevise() {
   srRender();
   document.getElementById('sr-modal').style.display = 'flex';
   document.body.classList.add('addtab-open');
+  lockScroll();
 }
 function closeSpecRevise() {
+  const wasOpen = document.getElementById('sr-modal').style.display !== 'none';
   document.getElementById('sr-modal').style.display = 'none';
   document.body.classList.remove('addtab-open');
+  if (wasOpen) unlockScroll();
 }
 function srChanged(r) {
   if (r.isNew || r.retire) return false;
