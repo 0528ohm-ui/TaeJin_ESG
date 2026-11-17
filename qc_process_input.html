@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.48</title>
+<title>공정검사 입력 v2.49</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -691,7 +691,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.48</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.49</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -3948,12 +3948,29 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // 입력칸 포커스/클릭 시 마지막 방식 패널 열기
+// [v2.49] PC에서 지금 입력 중인 칸을 다시 클릭하면 클릭이 커서를 찍어 전체선택이 풀려,
+//   숫자를 치면 기존 값 뒤에 붙었다(예: 94.9494.96). 이 칸에 들어온 뒤 아직 아무것도 안 쳤으면
+//   클릭의 커서 이동을 막고 전체선택을 유지한다. (이미 고치기 시작했으면 커서 지정을 그대로 허용)
+document.addEventListener('mousedown', e => {
+  const el = e.target;
+  if (!el || el !== activeAdjEl || isTouchDevice()) return;
+  if (el.value === '' || el.value !== el._openVal) return;
+  e.preventDefault();
+  el.select();
+}, true);
+
 function openInput(el) {
   ngCardDropIfStale(el);   // [v1.68] 다른 칸으로 넘어가면 NG 카드 닫기
   // click+focus 중복 호출 방지 — 이미 이 칸 패널이 열려있으면 무시
   const npOpen = document.getElementById('numpad-panel').classList.contains('open');
   const apOpen = document.getElementById('adj-panel').classList.contains('open');
-  if (activeAdjEl === el && (npOpen || apOpen)) return;
+  if (activeAdjEl === el && (npOpen || apOpen)) {
+    return;   // [v2.49] 같은 칸 재클릭 시 전체선택 유지는 아래 mousedown 리스너가 담당
+  }
+  // [v2.49] 이 칸에 '들어오는 순간' 이미 입력한 값이 있었는지 기록 (회색 직전값은 빈칸 취급)
+  //   → 있으면 수정 중으로 보고, 엔터·탭·[다음]이 다음 빈칸이 아니라 순서상 바로 다음 칸으로 간다.
+  el._wasFilled = el.value !== '' && !el.classList.contains('prefilled');
+  el._openVal = el.value;
   // [v2.29] 기본 패널 고정 — 각도는 숫자패드, 나머지는 증감.
   //   (v0.51~ 는 마지막에 쓴 방식을 기억했는데, 한 번 숫자패드로 바꾸면 외경까지 계속 숫자패드로 떠서 폐지)
   //   각도는 1~3° 씩 차이가 나서 0.05 증감보다 직접 입력이 빠르다.
@@ -4440,7 +4457,9 @@ function ngModalBack() {
   closeNgCard();
   activeAdjEl = null;          // openInput 중복방지 가드 해제 → 패널 재오픈 보장
   scrollInputIntoView(el);
+  const wasFilled = el._wasFilled;   // [v2.49] 처음 들어올 때의 '수정 중' 여부 유지
   openInput(el);
+  el._wasFilled = wasFilled;
   el.classList.add('ng-blink');
   setTimeout(() => el.classList.remove('ng-blink'), 2400);
 }
@@ -4487,7 +4506,9 @@ function nextUntouched() {
 
 // [v1.68] 현재 칸 → 다음 미입력 칸 이동 (세 진입점 공통). 소진 시 onEnd 후 저장버튼으로
 function _advanceFrom(el, onEnd) {
-  const next = nextUnfilledInputOf(el, 1);
+  // [v2.49] 값이 있던 칸을 고친 경우 → 순서상 바로 다음 칸 (밀려 입력된 값을 위에서부터 차례로 고칠 수 있게).
+  //   마지막 칸이면 원래대로 다음 빈칸을 찾는다. 빈칸에서 시작한 입력은 종전대로 다음 빈칸.
+  const next = (el._wasFilled && nextInputOf(el, 1)) || nextUnfilledInputOf(el, 1);
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행
   } else {
