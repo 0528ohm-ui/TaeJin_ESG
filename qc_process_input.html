@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.51</title>
+<title>공정검사 입력 v2.52</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -226,6 +226,13 @@ input.ng-blink{animation:ngBlink .6s ease-in-out 4;border-color:#dc2626!importan
 .ngsave-row .sp{color:#64748b;font-size:13px}
 .ngsave-ft{display:flex;gap:10px;padding:12px 14px;background:#fef2f2}
 .ngsave-back{flex:2;padding:14px;font-size:17px;font-weight:800;color:#fff;background:#1e293b;border:none;border-radius:10px;cursor:pointer}
+/* [v2.52] 미입력 확인 창 (주황) — 키보드만으로: Enter=미입력 칸으로 / Ctrl+Enter=그대로 저장 */
+.ngsave-box.unm{border-color:#f59e0b}
+.ngsave-box.unm .ngsave-hd{background:#d97706}
+.ngsave-box.unm .ngsave-row{border-bottom-color:#fde68a}
+.ngsave-box.unm .ngsave-row b{color:#92400e}
+.ngsave-box.unm .ngsave-ft{background:#fffbeb}
+.ngsave-box.unm .ngsave-go{color:#92400e;border-color:#fcd34d}
 .ngsave-go{flex:1;padding:14px;font-size:14px;font-weight:700;color:#991b1b;background:#fff;border:2px solid #fca5a5;border-radius:10px;cursor:pointer}
 .ng-hdr{background:#dc2626;color:#fff;padding:9px 14px;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .ng-hdr .ng-badge{padding:3px 11px;border-radius:7px;font-size:16px;font-weight:900;background:#fff;color:#dc2626}
@@ -704,7 +711,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.51</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.52</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -923,6 +930,18 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="ng-foot">
         <button class="ng-btn-back" onclick="ngModalBack()">이 칸에서<br>계속 수정</button>
         <button class="ng-btn-go" id="ng-btn-go" onclick="ngModalApply()">NG 그대로<br>다음 ✓</button>
+      </div>
+    </div>
+
+    <!-- [v2.52] 저장 전 미입력 확인 창 -->
+    <div class="ngsave-ov" id="unm-ov">
+      <div class="ngsave-box unm">
+        <div class="ngsave-hd" id="unm-hd">입력 안 한 항목이 있습니다</div>
+        <div class="ngsave-list" id="unm-list"></div>
+        <div class="ngsave-ft">
+          <button class="ngsave-back" id="unm-back">↩ 미입력 칸으로 (Enter)</button>
+          <button class="ngsave-go" id="unm-go">직전값 그대로 저장<br><span style="font-size:12px">(Ctrl+Enter)</span></button>
+        </div>
       </div>
     </div>
 
@@ -5574,6 +5593,61 @@ async function checkSedongClose() {
 // ══════════════════════════════════
 // 저장
 // ══════════════════════════════════
+// [v2.52] 미입력 항목 목록 (countUnmeasured 와 같은 기준)
+function unmeasuredSpecs(variant) {
+  return variant.specs.filter(s => {
+    if (s.is_visual) return false;
+    const inp = variant.inputs[s.id];
+    if (!inp) return false;
+    if (inp.type === 'minmax') return !((inp.min !== '' && !inp.prefilledMin) || (inp.max !== '' && !inp.prefilledMax));
+    if (inp.type === 'points') return !inp.vals.some((x, i) => x !== '' && !(inp.prefilled && inp.prefilled[i]));
+    return false;
+  });
+}
+
+// [v2.52] 저장 전 미입력 확인 창 — true = 직전값 그대로 저장, false = 첫 미입력 칸으로 이동
+function unmeasuredConfirm(t, targets, total) {
+  return new Promise(resolve => {
+    const ov = document.getElementById('unm-ov');
+    document.getElementById('unm-hd').textContent = `입력 안 한 항목 ${total}개 — 안 건드린 칸은 직전값이 저장됩니다`;
+    const rows = [];
+    targets.forEach(v => unmeasuredSpecs(v).forEach(s => {
+      const vtag = t.isGroup ? `${v.part.part_variant || ''} ` : '';
+      rows.push(`<div class="ngsave-row"><b>${vtag}No.${dno(s)}</b><span>${s.item_name || ''} <span class="sp">${s.spec_text || ''}</span></span></div>`);
+    }));
+    document.getElementById('unm-list').innerHTML = rows.join('');
+    const back = document.getElementById('unm-back'), go = document.getElementById('unm-go');
+    const done = ok => {
+      ov.classList.remove('open');
+      document.removeEventListener('keydown', onKey, true);
+      back.onclick = go.onclick = null;
+      unlockScroll();
+      if (!ok) jumpToFirstUnmeasured(t, targets);
+      resolve(ok);
+    };
+    const onKey = e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); done(true); }
+      else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+      else if (e.key === 'Tab') { e.preventDefault(); back.focus(); }
+    };
+    back.onclick = () => done(false);
+    go.onclick = e => { if (e.detail === 0) return; done(true); };   // 키보드로 눌린 클릭은 무시 (저장은 Ctrl+Enter)
+    lockScroll();
+    ov.classList.add('open');
+    document.addEventListener('keydown', onKey, true);
+    back.focus();
+  });
+}
+
+// 첫 미입력 칸으로 (그룹이면 미입력이 있는 쪽으로 전환). 이후 엔터는 남은 미입력 칸만 순회(jumpToFirstUntouched)
+function jumpToFirstUnmeasured(t, targets) {
+  const cur = t.variants[t.activeVariant];
+  const v = (targets.includes(cur) && countUnmeasured(cur) > 0) ? cur : targets.find(x => countUnmeasured(x) > 0);
+  const vi = t.variants.indexOf(v);
+  if (t.isGroup && vi >= 0 && vi !== t.activeVariant) switchVariant(vi);
+  requestAnimationFrame(() => requestAnimationFrame(() => jumpToFirstUntouched()));
+}
+
 // [v2.51] 저장 전 NG 확인 창 — true = 그대로 저장, false = 돌아가서 확인(첫 NG 칸으로 이동)
 function ngSaveConfirm(t, list) {
   return new Promise(resolve => {
@@ -5659,8 +5733,10 @@ async function saveAll() {
   let totalUnmeasured = 0;
   targets.forEach(v => { totalUnmeasured += countUnmeasured(v); });
   if (totalUnmeasured > 0) {
-    const vtxt = t.isGroup ? `${targets.map(v=>v.part.part_variant||v.part.part_number).join('/')} 합계 ` : '';
-    if (!confirm(`${vtxt}측정(입력)하지 않은 항목이 ${totalUnmeasured}개 있습니다.\n안 건드린 칸은 직전값이 그대로 저장됩니다. 계속할까요?`)) return;
+    // [v2.52] 기본 확인창은 엔터 = 저장이라 비어 있는 채로 저장되기 쉬웠다.
+    //   전용 창: 엔터 = 미입력 칸으로 이동, Ctrl+Enter = 직전값 그대로 저장 (마우스 없이 둘 다 가능)
+    const ok = await unmeasuredConfirm(t, targets, totalUnmeasured);
+    if (!ok) return;
   }
 
   // [v1.01] NG 항목 있으면 다시 확인 — 항목명까지 보여줌
