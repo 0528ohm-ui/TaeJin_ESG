@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.49</title>
+<title>공정검사 입력 v2.50</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -691,7 +691,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.49</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.50</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -2518,8 +2518,10 @@ function selectPart(id) {
 function selectGroup(group) {
   document.getElementById('part-search').value = '';
   document.getElementById('part-dropdown').classList.remove('open');
+  // [v2.50] SBC 그룹(IW/OW)은 OW부터 입력 → OW 를 앞에. 그 밖의 variant 는 이름순.
+  const vRank = v => v === 'OW' ? 0 : v === 'IW' ? 1 : 2;
   const groupParts = allParts.filter(p => p.part_group === group)
-    .sort((a,b) => (a.part_variant||'').localeCompare(b.part_variant||''));
+    .sort((a,b) => vRank(a.part_variant) - vRank(b.part_variant) || (a.part_variant||'').localeCompare(b.part_variant||''));
   if (!groupParts.length) return;
   const rep = groupParts[0];
   const vlabels = groupParts.map(x => x.part_variant).filter(Boolean).join('/');
@@ -3125,7 +3127,8 @@ function renderVariantToggle(t) {
     const label = v.part.part_variant || v.part.part_number;
     const sel = i === t.activeVariant ? 'sel' : '';
     const has = variantHasInput(v) ? 'has' : '';
-    return `<button class="vrt-btn ${sel}" onclick="switchVariant(${i})">${label}<span class="vrt-badge ${has}"></span></button>`;
+    // [v2.50] 이 탭에서 이미 저장한 쪽은 ✓ 표시
+    return `<button class="vrt-btn ${sel}" onclick="switchVariant(${i})">${label}${v.saved ? ' <span style="color:#16a34a;font-weight:800">✓</span>' : `<span class="vrt-badge ${has}"></span>`}</button>`;
   }).join('');
 }
 
@@ -3168,7 +3171,7 @@ function closeTab(idx, ev, skipConfirm) {
   if (ev) ev.stopPropagation();
   const t = tabs[idx];
   // 입력값 있으면 확인 (저장 직후 자동 닫기는 skipConfirm=true로 건너뜀)
-  const hasInput = t.variants.some(variantHasInput);
+  const hasInput = t.variants.some(v => !v.saved && variantHasInput(v));   // [v2.50] 이미 저장한 쪽은 제외
   if (!skipConfirm && hasInput && !confirm(`${t.label} 탭에 입력값이 있습니다. 닫을까요?`)) return;
 
   tabs.splice(idx, 1);
@@ -5547,10 +5550,15 @@ async function saveAll() {
   // 저장 대상 variant 결정
   // - 단일 부품: variant 1개
   // - 그룹: 입력값 있는 variant만 (전부 비어있으면 현재 variant)
+  //   [v2.50] 이 탭에서 이미 저장한 variant(v.saved)는 다시 저장하지 않는다.
   let targets;
   if (t.isGroup) {
-    targets = t.variants.filter(variantHasInput);
-    if (!targets.length) targets = [t.variants[t.activeVariant]];
+    targets = t.variants.filter(v => !v.saved && variantHasInput(v));
+    if (!targets.length) {
+      const cur = t.variants[t.activeVariant];
+      if (cur.saved) { toast('이 쪽은 이미 저장했습니다'); return; }
+      targets = [cur];
+    }
   } else {
     targets = [t.variants[0]];
   }
@@ -5704,6 +5712,24 @@ async function saveAll() {
     //   sendToGoogleSheet 내부는 전부 try-catch라 실패해도 무해.
     sendToGoogleSheet(date);
 
+    // [v2.50] 그룹(IW/OW)은 아직 저장 안 한 쪽이 남아 있으면 탭을 닫지 않고 그쪽 첫 입력칸으로 이동
+    //   (보통 OW 저장 → IW 첫 칸). 검사 정보(날짜·시각·호기·사유·비고)는 탭 단위라 그대로 이어짐.
+    //   다 저장했으면 종전대로 탭 닫기.
+    if (t.isGroup) {
+      targets.forEach(v => { v.saved = true; });
+      const nextVi = t.variants.findIndex(v => !v.saved);
+      if (nextVi >= 0) {
+        switchVariant(nextVi);
+        renderVariantToggle(t);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          window.scrollTo(0, 0);
+          const first = orderedInputs()[0];
+          if (first) first.focus();   // onfocus → openInput → 패널 열고 칸을 화면 위쪽으로
+        }));
+        persistDraft();
+        return;
+      }
+    }
     // 저장 완료 후 현재 탭 닫기
     const savedIdx = activeTabIdx;
     setTimeout(() => closeTab(savedIdx, null, true), 500); // toast 잠깐 보여주고 닫기
