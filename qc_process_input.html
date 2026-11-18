@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.50</title>
+<title>공정검사 입력 v2.51</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -214,6 +214,19 @@ input.ng-blink{animation:ngBlink .6s ease-in-out 4;border-color:#dc2626!importan
 /* [v1.68] NG 경고 카드 — dim 오버레이 없이 입력패널 바로 위에 뜸(패널 조작 가능) */
 .ng-modal{display:none;position:fixed;right:18px;bottom:18px;width:340px;max-width:calc(100vw - 24px);z-index:340;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 10px 34px rgba(0,0,0,.32);border:2px solid #dc2626}
 .ng-modal.open{display:block}
+/* [v2.51] 저장 전 NG 확인 창 — 엔터는 '돌아가서 확인', 저장은 마우스로 직접 */
+.ngsave-ov{display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9500;align-items:center;justify-content:center;padding:16px}
+.ngsave-ov.open{display:flex}
+.ngsave-box{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;border:3px solid #dc2626;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.ngsave-hd{background:#dc2626;color:#fff;font-size:18px;font-weight:800;padding:12px 16px}
+.ngsave-list{overflow-y:auto;padding:8px 14px;font-size:15px}
+.ngsave-row{display:flex;gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px dashed #fecaca}
+.ngsave-row b{color:#991b1b;min-width:52px}
+.ngsave-row .v{margin-left:auto;font-weight:800;color:#dc2626;white-space:nowrap}
+.ngsave-row .sp{color:#64748b;font-size:13px}
+.ngsave-ft{display:flex;gap:10px;padding:12px 14px;background:#fef2f2}
+.ngsave-back{flex:2;padding:14px;font-size:17px;font-weight:800;color:#fff;background:#1e293b;border:none;border-radius:10px;cursor:pointer}
+.ngsave-go{flex:1;padding:14px;font-size:14px;font-weight:700;color:#991b1b;background:#fff;border:2px solid #fca5a5;border-radius:10px;cursor:pointer}
 .ng-hdr{background:#dc2626;color:#fff;padding:9px 14px;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .ng-hdr .ng-badge{padding:3px 11px;border-radius:7px;font-size:16px;font-weight:900;background:#fff;color:#dc2626}
 .ng-hdr.ok{background:#16a34a}
@@ -691,7 +704,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.50</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.51</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -910,6 +923,18 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
       <div class="ng-foot">
         <button class="ng-btn-back" onclick="ngModalBack()">이 칸에서<br>계속 수정</button>
         <button class="ng-btn-go" id="ng-btn-go" onclick="ngModalApply()">NG 그대로<br>다음 ✓</button>
+      </div>
+    </div>
+
+    <!-- [v2.51] 저장 전 NG 확인 창 -->
+    <div class="ngsave-ov" id="ngsave-ov">
+      <div class="ngsave-box">
+        <div class="ngsave-hd" id="ngsave-hd">⚠️ NG 항목이 있습니다</div>
+        <div class="ngsave-list" id="ngsave-list"></div>
+        <div class="ngsave-ft">
+          <button class="ngsave-back" id="ngsave-back">↩ 돌아가서 확인 (Enter)</button>
+          <button class="ngsave-go" id="ngsave-go">NG 그대로 저장</button>
+        </div>
       </div>
     </div>
 
@@ -3970,10 +3995,7 @@ function openInput(el) {
   if (activeAdjEl === el && (npOpen || apOpen)) {
     return;   // [v2.49] 같은 칸 재클릭 시 전체선택 유지는 아래 mousedown 리스너가 담당
   }
-  // [v2.49] 이 칸에 '들어오는 순간' 이미 입력한 값이 있었는지 기록 (회색 직전값은 빈칸 취급)
-  //   → 있으면 수정 중으로 보고, 엔터·탭·[다음]이 다음 빈칸이 아니라 순서상 바로 다음 칸으로 간다.
-  el._wasFilled = el.value !== '' && !el.classList.contains('prefilled');
-  el._openVal = el.value;
+  el._openVal = el.value;   // [v2.49] 들어온 뒤 아직 안 쳤는지 판단용 (재클릭 전체선택 유지)
   // [v2.29] 기본 패널 고정 — 각도는 숫자패드, 나머지는 증감.
   //   (v0.51~ 는 마지막에 쓴 방식을 기억했는데, 한 번 숫자패드로 바꾸면 외경까지 계속 숫자패드로 떠서 폐지)
   //   각도는 1~3° 씩 차이가 나서 0.05 증감보다 직접 입력이 빠르다.
@@ -4460,9 +4482,7 @@ function ngModalBack() {
   closeNgCard();
   activeAdjEl = null;          // openInput 중복방지 가드 해제 → 패널 재오픈 보장
   scrollInputIntoView(el);
-  const wasFilled = el._wasFilled;   // [v2.49] 처음 들어올 때의 '수정 중' 여부 유지
   openInput(el);
-  el._wasFilled = wasFilled;
   el.classList.add('ng-blink');
   setTimeout(() => el.classList.remove('ng-blink'), 2400);
 }
@@ -4508,10 +4528,32 @@ function nextUntouched() {
 }
 
 // [v1.68] 현재 칸 → 다음 미입력 칸 이동 (세 진입점 공통). 소진 시 onEnd 후 저장버튼으로
+// [v2.51] 현재 variant 에 사용자가 넣은 값 중 규격 밖(NG)이 있는지 — 회색 직전값·자동계산·외관은 제외
+function curVariantRef() {
+  const t = tabs[activeTabIdx];
+  return t ? t.variants[t.activeVariant] : null;
+}
+function variantHasNg(v) {
+  if (!v) return false;
+  return v.specs.some(s => {
+    if (s.is_visual || s.calc_type) return false;
+    if (s.lsl == null && s.usl == null) return false;
+    const inp = v.inputs[s.id];
+    if (!inp) return false;
+    const vals = inp.type === 'minmax'
+      ? [inp.prefilledMin ? '' : inp.min, inp.prefilledMax ? '' : inp.max]
+      : (inp.vals || []).map((x, i) => (inp.prefilled && inp.prefilled[i]) ? '' : x);
+    return vals.some(x => x !== '' && x != null && getValClass(parseFloat(x), s.lsl, s.usl) === 'ng');
+  });
+}
+
 function _advanceFrom(el, onEnd) {
-  // [v2.49] 값이 있던 칸을 고친 경우 → 순서상 바로 다음 칸 (밀려 입력된 값을 위에서부터 차례로 고칠 수 있게).
-  //   마지막 칸이면 원래대로 다음 빈칸을 찾는다. 빈칸에서 시작한 입력은 종전대로 다음 빈칸.
-  const next = (el._wasFilled && nextInputOf(el, 1)) || nextUnfilledInputOf(el, 1);
+  // [v2.51] 평소엔 다음 빈칸. 이 쪽(variant)에 NG 가 한 번이라도 생기면 저장할 때까지 '수정 모드' —
+  //   순서상 바로 다음 칸으로 간다. 앞 NG 를 고쳐 NG 가 없어져도 유지 → 밀렸는데 우연히 OK 인 뒤쪽 칸도 차례로 고칠 수 있게.
+  //   (v2.49 의 '값 있던 칸이면 다음 칸' 규칙은 이걸로 대체)
+  const v = curVariantRef();
+  if (v && !v.ngSeen && variantHasNg(v)) { v.ngSeen = true; toast('NG 발생 — 저장할 때까지 엔터·탭이 바로 다음 칸으로 갑니다'); }
+  const next = (v && v.ngSeen && nextInputOf(el, 1)) || nextUnfilledInputOf(el, 1);
   if (next) {
     next.focus();   // onfocus="openInput(this)" onclick="openInput(this)" 가 자동 실행
   } else {
@@ -5532,6 +5574,56 @@ async function checkSedongClose() {
 // ══════════════════════════════════
 // 저장
 // ══════════════════════════════════
+// [v2.51] 저장 전 NG 확인 창 — true = 그대로 저장, false = 돌아가서 확인(첫 NG 칸으로 이동)
+function ngSaveConfirm(t, list) {
+  return new Promise(resolve => {
+    const ov = document.getElementById('ngsave-ov');
+    const multi = t.isGroup && new Set(list.map(x => x.v)).size > 1;
+    document.getElementById('ngsave-hd').textContent = `⚠️ NG 항목 ${list.length}개 — 값을 다시 확인하세요`;
+    document.getElementById('ngsave-list').innerHTML = list.map(x => {
+      const vtag = t.isGroup ? `${x.v.part.part_variant || ''} ` : '';
+      return `<div class="ngsave-row"><b>${vtag}No.${dno(x.s)}</b><span>${x.s.item_name || ''} <span class="sp">${x.s.spec_text || ''}</span></span>`
+           + `<span class="v">${x.vals.join(', ')}</span></div>`;
+    }).join('');
+    const back = document.getElementById('ngsave-back'), go = document.getElementById('ngsave-go');
+    const done = ok => {
+      ov.classList.remove('open');
+      document.removeEventListener('keydown', onKey, true);
+      back.onclick = go.onclick = null;
+      unlockScroll();
+      if (!ok) jumpToFirstNg(t, list);
+      resolve(ok);
+    };
+    // 엔터·스페이스·Esc 는 전부 '돌아가서 확인'. 저장은 클릭으로만.
+    const onKey = e => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+      else if (e.key === 'Tab') { e.preventDefault(); back.focus(); }
+    };
+    back.onclick = () => done(false);
+    go.onclick = e => { if (e.detail === 0) return; done(true); };   // 키보드로 눌린 클릭(detail 0)은 무시
+    lockScroll();
+    ov.classList.add('open');
+    document.addEventListener('keydown', onKey, true);
+    back.focus();
+  });
+}
+
+// 첫 NG 칸으로 이동 (그룹이면 그 쪽으로 전환)
+function jumpToFirstNg(t, list) {
+  const first = list.find(x => !x.s.is_visual) || list[0];
+  if (!first) return;
+  const vi = t.variants.indexOf(first.v);
+  if (t.isGroup && vi >= 0 && vi !== t.activeVariant) switchVariant(vi);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = orderedInputs().find(e => {
+      const slot = parseAdjSlot(e); if (!slot) return false;
+      const s = specs.find(x => x.id === slot.specId); if (!s) return false;
+      return e.value !== '' && getValClass(parseFloat(e.value), s.lsl, s.usl) === 'ng';
+    });
+    if (el) { el.focus(); scrollInputIntoView(el); }
+  }));
+}
+
 async function saveAll() {
   if (!guardEditor()) return;   // [v2.09]
   const t = tabs[activeTabIdx];
@@ -5572,17 +5664,21 @@ async function saveAll() {
   }
 
   // [v1.01] NG 항목 있으면 다시 확인 — 항목명까지 보여줌
-  const ngNames = [];
+  // [v2.51] 브라우저 확인창은 엔터로 바로 '확인'이 눌려, 키보드로 쭉 치다 보면 NG 가 그대로 저장됐다.
+  //   전용 창: 엔터 = '돌아가서 확인'(첫 NG 칸으로), 저장은 'NG 그대로 저장'을 마우스로 직접 눌러야 함.
+  const ngList = [];
   targets.forEach(v => {
     v.specs.forEach(s => {
-      if (calcResult(s, v.inputs[s.id]) === 'NG') {
-        ngNames.push((s.item_name || `항목${dno(s)}`));
-      }
+      if (calcResult(s, v.inputs[s.id]) !== 'NG') return;
+      const inp = v.inputs[s.id];
+      const raw = s.is_visual ? [] : inp.type === 'minmax' ? [inp.min, inp.max] : (inp.vals || []);
+      const bad = raw.filter(x => x !== '' && x != null && getValClass(parseFloat(x), s.lsl, s.usl) === 'ng');
+      ngList.push({ v, s, vals: s.is_visual ? [inp.val || 'NG'] : bad });
     });
   });
-  if (ngNames.length > 0) {
-    const uniq = [...new Set(ngNames)];
-    if (!confirm(`⚠️ NG 항목이 ${ngNames.length}개 있습니다.\n${uniq.join(', ')}\n\n측정값을 다시 확인하세요. 그래도 저장할까요?`)) return;
+  if (ngList.length > 0) {
+    const ok = await ngSaveConfirm(t, ngList);
+    if (!ok) return;
   }
 
   const btn = document.querySelector('#save-area .btn');
