@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>출하검사 성적서 엑셀 다운로드 v0.53 (테스트용)</title>
+  <title>출하검사 성적서 엑셀 다운로드 v0.54 (테스트용)</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap">
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -72,7 +72,7 @@
 <body>
 
 <div class="hdr">
-  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.53</span></h1>
+  <h1>📊 출하검사 성적서 엑셀 다운로드 <span style="font-size:11px;font-weight:600;color:#7dd3fc;background:rgba(255,255,255,.1);padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle">v0.54</span></h1>
   <p>출하의뢰서 → 프레스 + 가공 검사 자동 머지 → 다운로드</p>
 </div>
 
@@ -348,6 +348,43 @@ function pickPressInsp(partId, prodDate){
     if(abs < bestAbs || (abs === bestAbs && best && i.inspection_date > best.inspection_date)){
       best = i; bestAbs = abs;
     }
+  }
+  return best;
+}
+
+// [v0.54] 규격 개정(valid_from/valid_to)이 있는 품번 — 성적서는 '기준일'이 속한 규격 구간의 검사로 만든다.
+//   기준일 = LOT 에 개정 전·후 날짜가 섞였으면 LOT 마지막 날짜(새 규격), 아니면 LOT 첫 날짜(종전과 같음).
+//   검사도 그 구간 [lo, hi) 안에서만 고른다 → 개정 후 LOT 인데 가장 가까운 검사가 개정 전이라 옛 규격이 나오는 일 방지.
+//   예) 1549-158 내철 11/13 개정: '20261110/1112' → 옛 규격 · '20261112/1114' → 새 규격 · '20261114' → 새 규격
+//   개정 이력이 없는 품번은 null → 종전 로직 그대로.
+function revisionRef(partId, lotNo){
+  const bounds = new Set();
+  (_specsByPartId[partId] || []).forEach(sp => {
+    if(sp.valid_from) bounds.add(String(sp.valid_from).slice(0, 10));
+    if(sp.valid_to) bounds.add(String(sp.valid_to).slice(0, 10));
+  });
+  if(!bounds.size) return null;
+  const days = lotDates(lotNo).sort();
+  if(!days.length) return null;
+  const first = days[0], last = days[days.length - 1];
+  const bs = [...bounds].sort();
+  const mixed = bs.some(b => first < b && b <= last);
+  const ref = mixed ? last : first;
+  const lo = bs.filter(b => b <= ref).pop() || null;
+  const hi = bs.find(b => b > ref) || null;
+  return { prodDate: ref.replace(/-/g, ''), lo, hi };
+}
+// 규격 구간 [lo, hi) 안의 검사 중 생산일에 가장 가까운 것 (구간에 없으면 종전 방식)
+function pickPressInspIn(partId, prodDate, lo, hi){
+  const arr = (_allInspByPartId[partId] || []).filter(i => {
+    const d = String(i.inspection_date);
+    return (!lo || d >= lo) && (!hi || d < hi);
+  });
+  if(!arr.length) return pickPressInsp(partId, prodDate);
+  let best = null, bestAbs = Infinity;
+  for(const i of arr){
+    const abs = Math.abs(dayDiff(i.inspection_date, prodDate));
+    if(abs < bestAbs || (abs === bestAbs && best && i.inspection_date > best.inspection_date)){ best = i; bestAbs = abs; }
   }
   return best;
 }
@@ -675,8 +712,10 @@ function onDateChange(){
     //   성적서 날짜=출하일(reg_date)이지만, 측정 데이터는 '생산로트(생산일)' 기준으로 참조해야 함.
     //   - 프레스: 생산일에 가장 가까운 검사 (당일 우선, 없으면 앞뒤 무관 최근접)
     //   - 가공:   생산일 ≤ 가공검사일 ≤ 출하일 범위에서 생산일에 가장 가까운(가장 이른) 것
-    const prodDate = extractProdDate(s.lot_no);   // LOT 첫 날짜 = 대표 생산일 (YYYYMMDD)
-    const insp = part ? pickPressInsp(part.id, prodDate) : null;
+    // [v0.54] 규격 개정 품번: LOT 에 개정 전·후 날짜가 섞였으면 새 규격, 아니면 그 날짜의 규격 구간 검사로.
+    const rv = part ? revisionRef(part.id, s.lot_no) : null;
+    const prodDate = rv ? rv.prodDate : extractProdDate(s.lot_no);   // LOT 첫 날짜 = 대표 생산일 (YYYYMMDD)
+    const insp = part ? (rv ? pickPressInspIn(part.id, prodDate, rv.lo, rv.hi) : pickPressInsp(part.id, prodDate)) : null;
     const machInsp = part ? pickMachInsp(part.id, prodDate, s.reg_date) : null;
     
     return {
