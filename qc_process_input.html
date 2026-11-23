@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>공정검사 입력 v2.53</title>
+<title>공정검사 입력 v2.54</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:#f0f2f5;color:#1e293b}
@@ -612,11 +612,15 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 .pt-inp:focus{border-color:#3b82f6}
 .pt-inp.ng{border-color:#fca5a5;background:#fff5f5;color:#dc2626}
 .pt-inp.ok{border-color:#86efac}
+/* [v2.54] 규격 안이지만 상·하한에 0.01 이내로 바짝 붙은 값 — 주황 (표시만, 이동·저장은 막지 않음) */
+.pt-inp.warn{border-color:#f59e0b;background:#fff7ed;color:#c2410c}
 /* [v0.55] 기본 떠있는 직전값(미측정) vs 사용자가 입력한 값 구분 — 대비 강화 */
 .pt-inp.prefilled{color:#cbd5e1;background:#f1f5f9;font-style:italic;border:1.5px dashed #cbd5e1;opacity:.85}
 .pt-inp.touched{color:#1e3a8a;font-weight:800;background:#eff6ff;border-color:#3b82f6;font-style:normal}
 .pt-inp.touched.ng{color:#dc2626;background:#fff5f5;border-color:#fca5a5}
 .pt-inp.touched.ok{border-color:#22c55e;background:#f0fdf4}
+.pt-inp.touched.warn{color:#c2410c;border-color:#f59e0b;background:#fff7ed}   /* [v2.54] 입력한 값이 한계 0.01 이내 */
+input.pt-inp.warn.adj-active{background:#fff7ed}
 .lsl-usl{font-size:14px;color:#94a3b8;text-align:right;margin-top:6px}
 .lsl-usl span{color:#1e3a5f;font-weight:600}
 
@@ -711,7 +715,7 @@ body.measure-active .sticky-group{top:var(--sub-nav-h,36px)}
 <div id="main-screen" class="screen">
   <div class="hdr">
     <div>
-      <h1>공정검사 입력 <span class="badge">v2.53</span></h1>
+      <h1>공정검사 입력 <span class="badge">v2.54</span></h1>
       <div class="sub" id="hdr-sub">테스트 환경</div>
     </div>
     <div class="user-bar">
@@ -3732,13 +3736,13 @@ function renderSpecCard(s) {
         <div class="minmax-grid">
           <div>
             <label>${inp.pairMode ? '1번 제품' : '최솟값'}</label>
-            <input class="pt-inp" type="text" inputmode="decimal" data-mobile-none="1" id="mm-min-${s.id}"
+            <input class="pt-inp ${getValClass(parseFloat(inp.min), s.lsl, s.usl)}" type="text" inputmode="decimal" data-mobile-none="1" id="mm-min-${s.id}"
               value="${inp.min}" placeholder="—"
               oninput="setMinMax(${s.id},'min',this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)">
           </div>
           <div>
             <label>${inp.pairMode ? '2번 제품' : '최댓값'}</label>
-            <input class="pt-inp" type="text" inputmode="decimal" data-mobile-none="1" id="mm-max-${s.id}"
+            <input class="pt-inp ${getValClass(parseFloat(inp.max), s.lsl, s.usl)}" type="text" inputmode="decimal" data-mobile-none="1" id="mm-max-${s.id}"
               value="${inp.max}" placeholder="—"
               oninput="setMinMax(${s.id},'max',this)" onfocus="openInput(this)" onclick="openInput(this)" onkeydown="ptInpKeyNav(event,this)">
           </div>
@@ -3802,7 +3806,13 @@ function buildLslUsl(s) {
 function getValClass(v, lsl, usl) {
   if (isNaN(v)) return '';
   if ((lsl != null && v < lsl) || (usl != null && v > usl)) return 'ng';
-  if (lsl != null || usl != null) return 'ok';
+  if (lsl != null || usl != null) {
+    // [v2.54] 상·하한까지 0.01 이하로 남으면 주의(warn). Max 항목의 하한 0(진원도·Burr 등)은 실제 한계가 아니라 제외.
+    const lo = lsl != null ? Number(lsl) : null, hi = usl != null ? Number(usl) : null;
+    const EDGE = 0.01 + 1e-9;
+    if ((lo != null && lo !== 0 && v - lo <= EDGE) || (hi != null && hi - v <= EDGE)) return 'warn';
+    return 'ok';
+  }
   return '';
 }
 
@@ -3842,6 +3852,11 @@ function setMinMax(id, key, el) {
   specInputs[id][key === 'min' ? 'prefilledMin' : 'prefilledMax'] = false;
   el.classList.remove('prefilled');
   el.classList.toggle('touched', el.value !== '');
+  // [v2.54] 최소/최대 칸도 포인트 칸처럼 판정색 (OK 초록 / 주의 주황 / NG 빨강)
+  const s = specs.find(x => x.id === id);
+  const cls = s ? getValClass(parseFloat(el.value), s.lsl, s.usl) : '';
+  el.classList.remove('ok', 'ng', 'warn');
+  if (cls) el.classList.add(cls);
   updateCardState(id);
   recalcFrom(id);   // [v1.98] 이 항목을 소스로 쓰는 계산 항목 갱신
   if (_ngPending) ngCardSync();   // [v1.68] NG 카드가 떠 있으면 표시값 실시간 갱신
@@ -3943,7 +3958,7 @@ function setPt(id, idx, el) {
   // 해당 input 클래스만 토글 (재렌더링 없음 → 소수점 입력 유지)
   const s = specs.find(x => x.id === id);
   const cls = getValClass(parseFloat(v), s.lsl, s.usl);
-  el.classList.remove('ok', 'ng');
+  el.classList.remove('ok', 'ng', 'warn');
   if (cls) el.classList.add(cls);
   updateCardState(id);
   recalcFrom(id);   // [v1.98] 이 항목을 소스로 쓰는 계산 항목 갱신
